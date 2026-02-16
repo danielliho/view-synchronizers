@@ -16,13 +16,15 @@
 #include "HJust.h"
 #include "VJust.h"
 #include "FVJust.h"
+#include "RBBlock.h"
+
 #include "../Enclave/user_types.h"
 
 
 
 // ------------------------------------
 // SGX related stuff
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_FREE) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(CHAINED_CHEAP_AND_QUICK)
 //
 #include "Enclave_u.h"
 #include "sgx_urts.h"
@@ -76,6 +78,8 @@ class Handler {
   PID myid;
   double initTimeout;            // timeout after which nodes start a new view (initial value)
   double timeout;                // timeout after which nodes start a new view
+  unsigned int timeoutMul = 1;   // factor used to multiply timeout with when timeouts occur
+  unsigned int timeoutDiv = 1;   // factor used to devide timeout with when progress is made
   unsigned int opdist;           // OP cases
   unsigned int numFaults;        // number of faults
   unsigned int qsize;            // quorum size
@@ -119,10 +123,67 @@ class Handler {
   // Used in the 'free' version - the prepare certificate received last
   PJust prepjust;
 
+  // Used in the 'ROTE' version - catching up with view in startNewViewFree
+  bool startingNewView = false;
+
+  std::map<PID,View> latestRoteCounters; // latest counters/views receveid in MsgCounterRote messages
+
+  std::set<Hash> acceptedNoncesAchilles; // set of nonces that led to a successful restart
+
   // Used in the 'OP' version - the latest prepare certificate
   OPprepare opprep;
   // and the latest proposal
   OPprp opprop;
+
+  // -----------------------------
+  // -- Rollback variables
+  // --
+  Session session = 0;
+  // Last prepare certificate sent
+  RBprepareAuth lastRBvote;
+  // Last prepare quorum certificate
+  RBprepareAuths lastRBprep;
+  // Last store 1-certificate
+  RBstoreAuth lastRBstore;
+  // Last executed view
+  View lastRBexec = 0;
+  // To keep track of the join requests that have been agreed upon
+  Joins agreedJoins;
+  // Joins that have been received but not yet agreed upon
+  Joins receivedJoins;
+  // blocks received in each view
+  std::map<SView,RBBlock> rbblocks;
+  // maps hashes to the corresponding blocks
+  std::map<Hash,RBBlock> rbhblocks;
+  // Latest sessions nodes have joined
+  Session sessions[MAX_NUM_NODES];
+  // synchronization period
+  unsigned int syncPeriod = 0;
+  // joining period
+  unsigned int joinPeriod = 0;
+  // number of nodes to rejoin per session
+  unsigned int numJoiners = 0;
+  // true if the node is rejoining and therefore not handling messages
+  bool rejoining = false;
+  // last join message sent
+  Join lastJoin;
+  // true if the node is synchronizing -- called wishToAdvance
+  bool synchronizing = false;
+  // number of times a sync for a session has been attempted
+  unsigned int syncAttempts = 0;
+  // view at which nodes have last synced
+  unsigned int lastSync = 0;
+  // --
+  // -------
+
+  // -------------------
+  // Pacemaker variables
+  FVJust lastPMstore;
+  // --------
+
+  unsigned int quant1 = 0;
+  unsigned int quant2 = 0;
+  unsigned int skip   = 0;
 
   //void newview_handler(MsgNewView &&msg, const PeerNet::conn_t &conn);
 
@@ -132,7 +193,7 @@ class Handler {
 
   void printClientInfo();
 
-  void printNowTime(std::string msg);
+  void printNowTime(std::string col, std::string msg);
 
   // returns the total number of nodes
   unsigned int getTotal();
@@ -148,6 +209,7 @@ class Handler {
 
   // ture iff 'myid' is the leader of the current view
   bool amCurrentLeader();
+  std::string amCurrentLeaderStr();
 
   // used to print debugging info
   std::string nfo();
@@ -242,6 +304,7 @@ class Handler {
   void respondToPrepareJust(Just justPrep);
   void respondToPreCommitJust(Just justPc);
 
+  Peers from_to_peers(PID id1, PID id2);
   Peers remove_from_peers(PID id);
   Peers keep_from_peers(PID id);
 
@@ -288,6 +351,8 @@ class Handler {
   void executeCData(CData<Hash,Void> cdata);
   void handleEarlierMessagesAcc();
   void startNewViewAcc();
+  void startNewViewAccOn();
+  void startNewViewOrSyncAcc();
 
   // For leaders to start preparing
   void prepareAcc();
@@ -336,6 +401,7 @@ class Handler {
 
   void executeComb(RData rdata);
   void handleEarlierMessagesComb();
+  void startNewViewCombOn(Just just);
   void startNewViewComb();
 
   // For leaders to start preparing
@@ -378,19 +444,24 @@ class Handler {
 
   void executeFree(FData data);
   void handleEarlierMessagesFree();
+  void startNewViewFreeOn(FJust just);
   void startNewViewFree();
 
   // For leaders to start preparing
   void prepareFree();
   // For leaders to start pre-committing
   void preCommitFree(View view);
+  void preCommitOnJustFree(PJust pjust);
   // For leaders to start deciding
   void decideFree(FData data);
+  // to call TEEstore and record the certificate
+  FVJust triggeringStoreFree(PJust pjust);
 
   // For backups to respond to correct MsgLdrPrepareFree messages received from leaders
   void respondToLdrPrepareFree(HAccum acc);
   // For backups to respond to MsgPrepareFree messages receveid from leaders
   void respondToPrepareFree(MsgPrepareFree msg);
+  void respondToPrepareOnJustFree(PJust pjust);
   // For backups to respond to MsgPreCommitFree messages receveid from leaders
   void respondToPreCommitFree(MsgPreCommitFree msg);
 
@@ -401,6 +472,8 @@ class Handler {
   bool callTEEverifyFree(Auths auths, std::string s);
   bool callTEEverifyFree2(Auths auths1, std::string s1, Auths auths2, std::string s2);
   Auth callTEEauthFree(std::string s);
+  Auth callTEEauthView();                          // only for the kinda ROTE version
+  //Auth callTEEauthCounter(View view, View couter); // only for the kinda ROTE version
   HAccum callTEEaccumFree(FJust just, FJust justs[MAX_NUM_SIGNATURES], Hash hash);
   HAccum callTEEaccumFreeSp(ofjust_t just, Hash hash);
   Just callTEEsignFree();
@@ -419,6 +492,31 @@ class Handler {
   void handle_bckpreparefree(MsgBckPrepareFree msg, const PeerNet::conn_t &conn);
   void handle_precommitfree(MsgPreCommitFree msg, const PeerNet::conn_t &conn);
 
+  // ------------------------------------------------------------
+  // kinda ROTE - shared with FREE
+  // ------
+
+  void triggeringCounterRote(View view);
+
+  void sendMsgCounterRote(MsgCounterRote msg, Peers recipients);
+  void sendMsgEchoRote(MsgEchoRote msg, Peers recipients);
+  void sendMsgAckRote(MsgAckRote msg, Peers recipients);
+  void sendMsgRequestCounterRote(MsgRequestCounterRote msg, Peers recipients);
+  void sendMsgReplyCounterRote(MsgReplyCounterRote msg, Peers recipients);
+
+  void handleCounterRote(MsgCounterRote msg);
+  void handleEchoRote(MsgEchoRote msg);
+  void handleAckRote(MsgAckRote msg);
+
+  void handle_counter_rote(MsgCounterRote msg, const PeerNet::conn_t &conn);
+  void handle_echo_rote(MsgEchoRote msg, const PeerNet::conn_t &conn);
+  void handle_ack_rote(MsgAckRote msg, const PeerNet::conn_t &conn);
+
+  void restartFreeRote();
+  void handleRequestCounterRote(MsgRequestCounterRote msg);
+  void handleReplyCounterRote(MsgReplyCounterRote msg);
+  void handle_request_counter_rote(MsgRequestCounterRote msg, const PeerNet::conn_t &conn);
+  void handle_reply_counter_rote(MsgReplyCounterRote msg, const PeerNet::conn_t &conn);
 
   // ------------------------------------------------------------
   // 1/2 PHASE
@@ -548,8 +646,136 @@ class Handler {
   void handle_prepare_ch_comb(MsgPrepareChComb msg, const PeerNet::conn_t &conn);
   void handle_ldrprepare_ch_comb(MsgLdrPrepareChComb msg, const PeerNet::conn_t &conn);
 
+  // ------------------------------------------------------------
+  // Pacemaker
+  // ------
+
+  Sync callTEEsync(RBstoreAuth store);
+  Join callTEEjoinRequest(View v);
+  SyncVoteAuth callTEEsyncVote(RBaccumSyncAuth acc, INonces nonces);
+  RBstoreAuth callTEEsyncEnd(SyncVoteAuths votes);
+
+  void sendMsgJoin(MsgJoin wish, Peers recipients);
+  void sendMsgSync(MsgSync sync, Peers recipients);
+  void sendMsgSyncTC(MsgSyncTC msg, Peers recipients);
+  void sendMsgSyncVote(MsgSyncVote msg, Peers recipients);
+  void sendMsgSyncVoteQc(MsgSyncVoteQc msg, Peers recipients);
+
+  void wishToAdvanceOnSync(Sync msg, PID leader);
+  void wishToAdvance();
+  void wishToJoin();
+
+  Joins getPreparedJoins(Session s, View v);
+
+  void handleJoin(MsgJoin msg);
+  void handleSync(Sync msg);
+  void handleSyncTC(MsgSyncTC msg);
+  void handleSyncVote(MsgSyncVote msg);
+  void handleSyncVoteQc(MsgSyncVoteQc msg);
+
+  void handle_join(MsgJoin msg, const PeerNet::conn_t &conn);
+  void handle_sync(MsgSync msg, const PeerNet::conn_t &conn);
+  void handle_sync_tc(MsgSyncTC msg, const PeerNet::conn_t &conn);
+  void handle_sync_vote(MsgSyncVote msg, const PeerNet::conn_t &conn);
+  void handle_sync_vote_qc(MsgSyncVoteQc msg, const PeerNet::conn_t &conn);
+
+  RBprepareAuth callTEEprepareRB(Hash hblock);
+  RBstoreAuth callTEEstoreRB(RBprepareAuths j);
+  RBnewviewAuth callTEEnewviewRB(RBstoreAuth store);
+  RBaccumNvAuth callTEEaccumNvRB(RBnewviewAuth newview, std::set<RBnewviewAuth> newviews);
+  RBaccumSyncAuth callTEEaccumSyncRB(Sync sync, std::set<Sync> syncs);
+
+  unsigned int nextSync();
+
+  void acceptJoins();
+  RBnewviewAuth highestNewViewRB(std::set<RBnewviewAuth> *newviews);
+  Sync highestSync(std::set<Sync> *syncs);
+  RBBlock createNewRBBlock(Hash hash);
+  void prepareRB();
+  void preCommitRB(View view);
+  void respondToLdrPrepareRB(Hash Hblock, RBaccumNvAuth acc);
+  void respondToLdrPreCommitRB(RBprepareAuths prep);
+  void decideRB(RBstore store);
+  void executeRB(RBstoreAuths store);
+  void startNewViewRB(RBstoreAuth store);
+  void startNewViewOrSyncRB(RBstoreAuth store);
+  void startNewViewOrJoinRB(RBstoreAuth store);
+  void handleEarlierMessagesRB();
+  void handleEarlierMessagesSync();
+
+  void sendMsgLdrPrepareRB(MsgLdrPrepareRB msg, Peers recipients);
+  void sendMsgBckPrepareRB(MsgBckPrepareRB msg, Peers recipients);
+  void sendMsgLdrPreCommitRB(MsgLdrPreCommitRB msg, Peers recipients);
+  void sendMsgBckPreCommitRB(MsgBckPreCommitRB msg, Peers recipients);
+  void sendMsgDecideRB(MsgDecideRB msg, Peers recipients);
+  void sendMsgNewViewRB(MsgNewViewRB msg, Peers recipients);
+
+  void handleNewviewRB(MsgNewViewRB msg);
+  void handleLdrPrepareRB(RBBlock block, RBprepareAuth prep, RBaccumNvAuth acc);
+  void handleBckPrepareRB(MsgBckPrepareRB msg);
+  void handleLdrPreCommitRB(RBprepareAuths cert);
+  void handleBckPreCommitRB(MsgBckPreCommitRB msg);
+  void handleDecideRB(MsgDecideRB msg);
+
+  void handle_newviewRB(MsgNewViewRB msg, const PeerNet::conn_t &conn);
+  void handle_ldrprepareRB(MsgLdrPrepareRB msg, const PeerNet::conn_t &conn);
+  void handle_bckprepareRB(MsgBckPrepareRB msg, const PeerNet::conn_t &conn);
+  void handle_ldrprecommitRB(MsgLdrPreCommitRB msg, const PeerNet::conn_t &conn);
+  void handle_bckprecommitRB(MsgBckPreCommitRB msg, const PeerNet::conn_t &conn);
+  void handle_decideRB(MsgDecideRB msg, const PeerNet::conn_t &conn);
+
+  void handle_pm_sync(MsgPmSync msg, const PeerNet::conn_t &conn);
+  void handle_pm_sync_tc(MsgPmSyncTC msg, const PeerNet::conn_t &conn);
+  void handle_pm_sync_vote(MsgPmSyncVote msg, const PeerNet::conn_t &conn);
+  void handle_pm_sync_vote_qc(MsgPmSyncVoteQc msg, const PeerNet::conn_t &conn);
+
+  void handlePmSync(PmSync msg);
+  void handlePmSyncTC(MsgPmSyncTC qc);
+  void handlePmSyncVote(PmSync msg);
+  void handlePmSyncVoteQc(MsgPmSyncVoteQc qc);
+
+  PmSync callTEEpmSync(FVJust store);
+  PmSync callTEEpmSyncVote(PmSync sync);
+  FVJust callTEEpmSyncEnd(PmSyncs votes);
+
+  void sendMsgPmSync(MsgPmSync msg, Peers recipients);
+  void sendMsgPmSyncTC(MsgPmSyncTC msg, Peers recipients);
+  void sendMsgPmSyncVote(MsgPmSyncVote msg, Peers recipients);
+  void sendMsgPmSyncVoteQc(MsgPmSyncVoteQc msg, Peers recipients);
+
+  void handleEarlierMessagesPmSync();
+  void wishToAdvanceOnPmSync(MsgPmSync msg, PID leader);
+  void wishToAdvancePm();
+  void startNewViewOrSyncFree(FJust just);
+
+  void restartFreeAchilles();
+  void sendMsgRestart(MsgRestart msg, Peers recipients);
+  void sendMsgReplyRestart(MsgReplyRestart msg, Peers recipients);
+  void handle_restart(MsgRestart msg, const PeerNet::conn_t &conn);
+  void handleRestart(MsgRestart msg);
+  void handle_reply_restart(MsgReplyRestart msg, const PeerNet::conn_t &conn);
+  void handleReplyRestart(MsgReplyRestart msg);
+
  public:
-  Handler(KeysFun kf, PID id, unsigned long int timeout, unsigned int opdist, unsigned int constFactor, unsigned int numFaults, unsigned int maxViews, Nodes nodes, KEY priv, PeerNet::Config pconf, ClientNet::Config cconf);
+  Handler(KeysFun kf,
+          PID id,
+          double timeout,
+          unsigned int timeoutMul,
+          unsigned int timeoutDiv,
+          unsigned int opdist,
+          unsigned int constFactor,
+          unsigned int numFaults,
+          unsigned int maxViews,
+          unsigned int syncPeriod,
+          unsigned int joinPeriod,
+          unsigned int numJoiners,
+          unsigned int quant1,
+          unsigned int quant2,
+          unsigned int skip,
+          Nodes nodes,
+          KEY priv,
+          PeerNet::Config pconf,
+          ClientNet::Config cconf);
 };
 
 

@@ -123,7 +123,6 @@ bool verifyText(signs_t signs, std::string text) {
   return b;
 }
 
-
 std::string hash2string(hash_t hash) {
   std::string text;
   for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) { text += hash.hash[i]; }
@@ -131,6 +130,31 @@ std::string hash2string(hash_t hash) {
   return text;
 }
 
+std::string auth2string(auth_t auth) {
+  std::string text = std::to_string(auth.id);
+  text += hash2string(auth.hash);
+  return text;
+}
+
+std::string join2string(join_t join) {
+  std::string text = std::to_string(join.session);
+  text += hash2string(join.nonce);
+  text += auth2string(join.auth);
+  return text;
+}
+
+std::string joins2string(joins_t joins) {
+  std::string text;
+  for (int i = 0; i < MAX_NUM_NODES; i++) {
+    if (joins.joins[i].nonce.set) {
+      //ocall_print(("[" + std::to_string(id) + "]joins2string:" + std::to_string(i) + ":in").c_str());
+      text += join2string(joins.joins[i]);
+    } else {
+      //ocall_print(("[" + std::to_string(id) + "]joins2string:" + std::to_string(i) + ":out").c_str());
+    }
+  }
+  return text;
+}
 
 std::string rdata2string(rdata_t rdata) {
   return (hash2string(rdata.proph)
@@ -297,10 +321,15 @@ sign_t signString(std::string text) {
   return s;
 }
 
+bool eq_hashes(unsigned char *h1, unsigned char *h2) {
+  for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+    if (h1[i] != h2[i]) { return false; }
+  }
+  return true;
+}
 
 bool eqHashes(hash_t h1, hash_t h2) {
-  for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) { if (h1.hash[i] != h2.hash[i]) { return false; } }
-  return true;
+  return eq_hashes(h1.hash,h2.hash);
 }
 
 hash_t newHash() {
@@ -310,7 +339,6 @@ hash_t newHash() {
   return hash;
 }
 
-
 hash_t noHash() {
   hash_t hash;
   for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) { hash.hash[i] = '0'; }
@@ -318,6 +346,28 @@ hash_t noHash() {
   return hash;
 }
 
+auth_t noAuth() {
+  auth_t auth;
+  auth.id = 0;
+  auth.hash = noHash();
+  return auth;
+}
+
+join_t noJoin() {
+  join_t join;
+  join.session = 0;
+  join.nonce   = noHash();
+  join.auth    = noAuth();
+  return join;
+}
+
+joins_t noJoins() {
+  joins_t joins;
+  for (int i = 0; i < MAX_NUM_NODES; i++) {
+    joins.joins[i] = noJoin();
+  }
+  return joins;
+}
 
 // The initial justification
 bool wellFormedInit(just_t just) {

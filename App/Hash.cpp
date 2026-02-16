@@ -83,5 +83,10 @@ std::string Hash::toString() {
 bool Hash::operator==(const Hash& s) const {
   //for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) { if (hash[i] != s.hash[i]) { return false; } }
   //return true;
-  return (hash == s.hash);
+  return (this->hash == s.hash && this->set == s.set);
+}
+
+bool Hash::operator<(const Hash& s) const {
+  return (this->set < s.set
+          || (this->set == s.set && this->hash < s.hash));
 }

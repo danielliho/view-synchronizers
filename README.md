@@ -46,7 +46,7 @@ Then, to instance Salticidae, type:
 
 ### Python
 
-We use python version 3.8.10.  You will need python3-pip to install
+We use python version 3.13.3.  You will need python3-pip to install
 the required modules.
 
 The Python script relies on the following modules:
@@ -81,9 +81,9 @@ so that you can run Docker as a non-root user.
 
 You then need to create the container by typing the following command at the root of the project:
 
-`docker build -t damysus .`
+`docker build -f Dockerfile2 -t damysus2 .`
 
-This will create a container called `damysus`.
+This will create a container called `damysus2`.
 
 We use `jq` to extract the IP addresses of Docker containers, so make
 sure to install that too.
@@ -114,6 +114,9 @@ In addition, you can use the following options to change some of the parameters:
     - `--p4`: Damysus
     - `--p5`: chained base protocol, i.e., chained HotStuff
     - `--p6`: chained Damysus
+    - `--p7`: hash & signature-free Damysus
+    - `--p8`: OneShot
+    - `--p9`: Athena
 - `--netlat n` to change the network latency to `n`ms
 - `--clients1 n` to change the number of clients to `n` for the non-chained protocols
 - `--clients2 n` to change the number of clients to `n` for the chained protocols
@@ -132,129 +135,8 @@ In addition, you can use the following options to change some of the parameters:
 
 For example, if you run:
 
-`python3 experiments.py --docker --p1 --p2 --repeats 2 --faults 1`
+`python3 experiments.py --docker --p9 --repeats 2 --faults 1,2`
 
 then you will run the replicas within Docker containers (`--docker`),
-test the base protocol (`--p1`) and Damysus-C (`--p2`), repeat the
-experiments twice (`--repeats 2`), and test for f=1 (`--faults 1`).
-
-If your run:
-
-`python3 experiments.py --docker --pall --repeats 10 --faults 1,2,4`
-
-then you will run the replicas within Docker containers (`--docker`),
-test all protocols (`--pall`), repeat the experiments 10 times
-(`--repeats 10`), and test for f=1, f=2, and f=4 (`--faults 1,2,4`)
-
-### Recommended experiments
-
-We recommend that you try the following experiments. Note that 100
-repetitions will take quite a long time. You can start with a smaller
-value between 2 and 10 to get an idea of the results you will obtain.
-
-- Run all protocols with a 0ms network latency, 0B payloads, for
-  f=1,2,4,10, with 100 repetitions per experiment (consider
-  using less repetitions)
-
-`python3 experiments.py --docker --pall --netlat 0 --payload 0 --faults 1,2,4,10 --repeats 100`
-
-- Run all protocols with a 100ms network latency, 256B payloads, for
-  f=1,2,4,10, with 100 repetitions per experiment (consider
-  using less repetitions)
-
-`python3 experiments.py --docker --pall --netlat 100 --payload 256 --faults 1,2,4,10 --repeats 100`
-
-
-### Cluster
-
-As mentioned above, you can use the `--cluster` option to start distributed experiments. You will need to do this:
-- Generate an `id_rsa.damysus` key using for example:
-  ```
-    ssh-keygen -t rsa -b 4096 -f id_rsa.damysus
-  ```
-- Copy this key to all the nodes in your cluster as follows:
-  ```
-    ssh-copy-id -i id_rsa.damysus.pub USER@TARGET
-  ```
-  where `TARGET` is one of your hostnames, and `USER` your username for that host
-- List the nodes that are in your cluster in a `nodes` file as
-  follows (add as many entries are you like---the cluster here
-  contains 2 nodes):
-  ```
-    {
-      "nodes": [
-        { "node" : "node1",
-          "user" : "vince",
-          "host" : "192.168.0.1",
-          "dir"  : "/home/vince/damysus-test",
-          "key"  : "id_rsa.damysus"
-        },
-        { "node" : "node2",
-          "user" : "vince",
-          "host" : "192.168.0.2",
-          "dir"  : "/home/vince/damysus-test",
-          "key"  : "id_rsa.damysus"
-        }
-      ]
-    }
-  ```
-  where `"node"` specifies the name of the node (pick whatever you want), `"user"` is your
-  username for that node, `"host"` is the hostname of that node,
-  `"dir"` is a working directory on that node that will be used to
-  store temporary files, and `"key"` is the name of the key that will
-  be used to access the node remotely without password.
-  Note that you can have more replicas than nodes, which will result
-  on multiple replicas being deployed on the same node.
-- You need to make sure that `python`, `docker`, `git` and `jq`
-  are installed on all the machines in your cluster, as well as on the
-  machine that you will use to start the experiments
-- You will need to generate the `damysus` Docker image on all your
-  nodes. You can do that automatically by running:
-  ```
-    python3 experiments.py --prepare
-  ```
-- You can now try an experiment as follows:
-  ```
-    python3 experiments.py --cluster --p1 --repeats 1 --faults 1
-  ```
-
-
-### AWS
-
-The AWS experiments are more adhoc. They require images to already
-exist in the regions. Change `regions` to select the regions you want
-to use.  Then run something like this (as before with the  `--aws`
-option):
-  ```
-    python3 experiments.py --aws --p1 --repeats 1 --faults 1
-  ```
-
-In case something goes wrong, you can stop all instances as follows:
-  ```
-    python3 experiments.py --stop
-  ```
-
-To debug on AWS, try something like this:
-  ```
-    python3 experiments.py --launch 1
-    python3 experiments.py --copy XXX
-  ```
-to launch an instance at some address XXX, which will be printed by
-the first command; then copy all files to the instance. After that you
-can ssh the address, and do whatever you want there.
-
-
-
-# Acknowledgments
-
-Jiangshan Yu was partially supported by the Australian Research Council
-(ARC) under project DE210100019.
-
-
-# Contact
-
-Feel free to contact any of the authors if you have questions:
-[Jeremie Decouchant](https://www.tudelft.nl/ewi/over-de-faculteit/afdelingen/software-technology/distributed-systems/people/jeremie-decouchant),
-David Kozhaya,
-[Vincent Rahli](https://www.cs.bham.ac.uk/~rahliv/),
-and [Jiangshan Yu](https://research.monash.edu/en/persons/jiangshan-yu).
+test Athena (`--p9`) only, repeat the experiment twice (` --repeats
+2`) for both f+u=1 and f+u=2 (`--faults 2`).

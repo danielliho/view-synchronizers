@@ -25,11 +25,49 @@
 #include "OPstoreCert.h"
 #include "OPvote.h"
 #include "OPaccum.h"
+#include "Join.h"
+#include "Joins.h"
+#include "VJoins.h"
+#include "Sync.h"
+#include "SyncVote.h"
+#include "SyncVoteAuth.h"
+#include "SyncVoteAuths.h"
+#include "Wish.h"
+#include "Wishes.h"
+#include "RBBlock.h"
+#include "RBprepare.h"
+#include "RBprepareAuth.h"
+#include "RBprepareAuths.h"
+#include "RBaccumNvAuth.h"
+#include "RBaccumSyncAuth.h"
+#include "RBstore.h"
+#include "RBstoreAuth.h"
+#include "RBstoreAuths.h"
+#include "RBnewviewAuth.h"
+#include "PmSync.h"
+#include "PmSyncs.h"
 
 
 #include "salticidae/msg.h"
 #include "salticidae/stream.h"
 
+
+// Move somewhere else
+// sesssion + view
+struct SView {
+  Session session;
+  View view;
+  SView() { session = 0; view = 0; }
+  SView(const Session &session, const View &view)
+    : session(session),view(view) {}
+  bool operator<(const SView& s) const {
+    return (session < s.session
+            || (session == s.session && view < s.view));
+  }
+  bool operator==(const SView& s) const {
+    return (session == s.session && view == s.view);
+  }
+};
 
 
 /////////////////////////////////////////////////////
@@ -207,7 +245,6 @@ struct MsgCommit {
 };
 
 
-
 /////////////////////////////////////////////////////
 // Basic version - Quick
 
@@ -283,7 +320,6 @@ struct MsgPreCommitAcc {
   unsigned int sizeMsg() { return (sizeof(CData<Hash,Void>) + sizeof(Signs)); }
   //void serialize(salticidae::DataStream &s) const { s << cdata << signs; }
 };
-
 
 
 /////////////////////////////////////////////////////
@@ -362,8 +398,6 @@ struct MsgPreCommitComb {
   unsigned int sizeMsg() { return (sizeof(RData) + sizeof(Signs)); }
   //void serialize(salticidae::DataStream &s) const { s << data << signs; }
 };
-
-
 
 
 /////////////////////////////////////////////////////
@@ -459,15 +493,94 @@ struct MsgPreCommitFree {
   Auths auths;
   MsgPreCommitFree(const View &view, const Auths &auths) : view(view),auths(auths) { serialized << view << auths; }
   MsgPreCommitFree(salticidae::DataStream &&s) { s >> view >> auths; }
-  bool operator<(const MsgPreCommitFree& s) const {
-    if (auths < s.auths) { return true; }
-    return false;
-  }
+  bool operator<(const MsgPreCommitFree& s) const { return (auths < s.auths); }
   std::string prettyPrint() {
     return "PRECOMMIT-FREE[" + std::to_string(view) + "," + auths.prettyPrint() + "]";
   }
   unsigned int sizeMsg() { return (sizeof(View) + sizeof(Auths)); }
   //void serialize(salticidae::DataStream &s) const { s << view << auths; }
+};
+
+
+struct MsgCounterRote {
+  static const uint8_t opcode = HDR_COUNTER_ROTE;
+  salticidae::DataStream serialized;
+  View view;
+  Auth auth;
+  MsgCounterRote(const View &view, const Auth &auth) : view(view),auth(auth) { serialized << view << auth; }
+  MsgCounterRote(salticidae::DataStream &&s) { s >> view >> auth; }
+  bool operator<(const MsgCounterRote& s) const { return (auth < s.auth); }
+  std::string prettyPrint() {
+    return "COUNTER-ROTE[" + std::to_string(view) + "," + auth.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(View) + sizeof(Auth)); }
+};
+
+struct MsgEchoRote {
+  static const uint8_t opcode = HDR_ECHO_ROTE;
+  salticidae::DataStream serialized;
+  View view;
+  PID  sender;
+  Auth auth;
+  MsgEchoRote(const View &view, const PID &sender, const Auth &auth) : view(view),sender(sender),auth(auth) { serialized << view << sender << auth; }
+  MsgEchoRote(salticidae::DataStream &&s) { s >> view >> sender >> auth; }
+  bool operator<(const MsgEchoRote& s) const {
+    return (view < s.view
+            || (view == s.view && sender < s.sender)
+            || (view == s.view && sender == s.sender && auth < s.auth));
+  }
+  std::string prettyPrint() {
+    return "ECHO-ROTE[" + std::to_string(view) + "," + std::to_string(sender) + "," + auth.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(View) + sizeof(PID) + sizeof(Auth)); }
+};
+
+struct MsgAckRote {
+  static const uint8_t opcode = HDR_ACK_ROTE;
+  salticidae::DataStream serialized;
+  View view;
+  PID  sender;
+  Auth auth;
+  MsgAckRote(const View &view, const PID &sender, const Auth &auth) : view(view),sender(sender),auth(auth) { serialized << view << sender << auth; }
+  MsgAckRote(salticidae::DataStream &&s) { s >> view >> sender >> auth; }
+  bool operator<(const MsgAckRote& s) const {
+    return (view < s.view
+            || (view == s.view && sender < s.sender)
+            || (view == s.view && sender == s.sender && auth < s.auth));
+  }
+  std::string prettyPrint() {
+    return "ACK-ROTE[" + std::to_string(view) + "," + std::to_string(sender) + "," + auth.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(View) + sizeof(PID) + sizeof(Auth)); }
+};
+
+struct MsgRequestCounterRote {
+  static const uint8_t opcode = HDR_REQ_COUNTER_ROTE;
+  salticidae::DataStream serialized;
+  View view;
+  Auth auth;
+  MsgRequestCounterRote(const View &view, const Auth &auth) : view(view),auth(auth) { serialized << view << auth; }
+  MsgRequestCounterRote(salticidae::DataStream &&s) { s >> view >> auth; }
+  bool operator<(const MsgRequestCounterRote& s) const { return (auth < s.auth); }
+  std::string prettyPrint() {
+    return "REQUEST-COUNTER-ROTE[" + std::to_string(view) + "," + auth.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(View) + sizeof(Auth)); }
+};
+
+struct MsgReplyCounterRote {
+  static const uint8_t opcode = HDR_REP_COUNTER_ROTE;
+  salticidae::DataStream serialized;
+  View view;
+  View counter;
+  Auth auth;
+  MsgReplyCounterRote(const View &view, const View &counter, const Auth &auth) : view(view),counter(counter),auth(auth) { serialized << view << counter << auth; }
+  MsgReplyCounterRote(salticidae::DataStream &&s) { s >> view >> counter >> auth; }
+  bool operator<(const MsgReplyCounterRote& s) const { return (auth < s.auth); }
+  std::string prettyPrint() {
+    return "REPLY-COUNTER-ROTE[" + std::to_string(view) + "," + std::to_string(counter) + "," + auth.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(View) + sizeof(View) + sizeof(Auth)); }
 };
 
 
@@ -1045,5 +1158,298 @@ struct MsgPrepareChComb {
   //void serialize(salticidae::DataStream &s) const { s << data << sign; }
 };
 
+
+
+/////////////////////////////////////////////////////
+// Rollback-resilient Damysus (based off Free)
+
+
+// Sent by all nodes to the new leader
+struct MsgNewViewRB {
+  static const uint8_t opcode = HDR_NEWVIEW_RB;
+  salticidae::DataStream serialized;
+  RBnewviewAuth newview;
+  MsgNewViewRB(const RBnewviewAuth &newview) : newview(newview) { serialized << newview; }
+  MsgNewViewRB(salticidae::DataStream &&s) { s >> newview; }
+  bool operator<(const MsgNewViewRB& s) const {
+    return (newview < s.newview);
+  }
+  std::string prettyPrint() {
+    return "NEWVIEW-RB[" + newview.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(RBnewviewAuth)); }
+  //void serialize(salticidae::DataStream &s) const { s << data << auth; }
+};
+
+// Send by the leader to the backups
+struct MsgLdrPrepareRB {
+  static const uint8_t opcode = HDR_LDR_PREPARE_RB;
+  salticidae::DataStream serialized;
+  RBBlock block;
+  RBprepareAuth prep;
+  RBaccumNvAuth acc;
+  MsgLdrPrepareRB(const RBBlock &block, const RBprepareAuth &prep, RBaccumNvAuth &acc)
+    : block(block),prep(prep),acc(acc) { serialized << block << prep << acc; }
+  MsgLdrPrepareRB(salticidae::DataStream &&s) { s >> block >> prep >> acc; }
+  // FIX:
+  bool operator<(const MsgLdrPrepareRB& s) const {
+    if (prep < s.prep) { return true; }
+    return false;
+  }
+  std::string prettyPrint() {
+    return "LDR-PREPARE-RB[" + block.prettyPrint() + "," + prep.prettyPrint() + "," + acc.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(RBBlock) + sizeof(RBprepareAuth) + sizeof(RBaccumNvAuth)); }
+  //void serialize(salticidae::DataStream &s) const { s << acc << block; }
+};
+
+// Send by the backups to the leader
+struct MsgBckPrepareRB {
+  static const uint8_t opcode = HDR_BCK_PREPARE_RB;
+  salticidae::DataStream serialized;
+  RBprepareAuth prep;
+  MsgBckPrepareRB(const RBprepareAuth &prep) : prep(prep) { serialized << prep; }
+  MsgBckPrepareRB(salticidae::DataStream &&s) { s >> prep; }
+  bool operator<(const MsgBckPrepareRB& s) const {
+    return (prep < s.prep);
+  }
+  std::string prettyPrint() {
+    return "BCK-PREPARE-RB[" + prep.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(RBprepareAuth)); }
+  //void serialize(salticidae::DataStream &s) const { s << view << auth; }
+};
+
+// Send by the leader to the backups
+struct MsgLdrPreCommitRB {
+  static const uint8_t opcode = HDR_LDR_PRECOMMIT_RB;
+  salticidae::DataStream serialized;
+  RBprepareAuths cert;
+  MsgLdrPreCommitRB(const RBprepareAuths &cert) : cert(cert) { serialized << cert; }
+  MsgLdrPreCommitRB(salticidae::DataStream &&s) { s >> cert; }
+  bool operator<(const MsgLdrPreCommitRB& s) const { return (cert < s.cert); }
+  std::string prettyPrint() { return "LDR-PRECOMMIT-RB[" + cert.prettyPrint() + "]"; }
+  unsigned int sizeMsg() { return (sizeof(RBprepareAuths)); }
+  //void serialize(salticidae::DataStream &s) const { s << cert; }
+};
+
+// Send by the backups to the leader
+struct MsgBckPreCommitRB {
+  static const uint8_t opcode = HDR_BCK_PRECOMMIT_RB;
+  salticidae::DataStream serialized;
+  RBstoreAuth store;
+  MsgBckPreCommitRB(const RBstoreAuth &store) : store(store) { serialized << store; }
+  MsgBckPreCommitRB(salticidae::DataStream &&s) { s >> store; }
+  bool operator<(const MsgBckPreCommitRB& s) const {
+    return (store < s.store);
+  }
+  std::string prettyPrint() {
+    return "BCK-PRECOMMIT-RB[" + store.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(RBstoreAuth)); }
+  //void serialize(salticidae::DataStream &s) const { s << view << auths; }
+};
+
+struct MsgDecideRB {
+  static const uint8_t opcode = HDR_DECIDE_RB;
+  salticidae::DataStream serialized;
+  RBstoreAuths store;
+  MsgDecideRB(const RBstoreAuths &store) : store(store) { serialized << store; }
+  MsgDecideRB(salticidae::DataStream &&s) { s >> store; }
+  bool operator<(const MsgDecideRB& s) const {
+    return (store < s.store);
+  }
+  std::string prettyPrint() {
+    return "DECIDE-RB[" + store.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(RBstoreAuths)); }
+  //void serialize(salticidae::DataStream &s) const { s << view << auths; }
+};
+
+
+/////////////////////////////////////////////////////
+// Rollback-resilient Pacemaker
+
+
+// Join request
+struct MsgJoin {
+  static const uint8_t opcode = HDR_JOIN;
+  salticidae::DataStream serialized;
+  Join join;
+  MsgJoin(const Join &join) : join(join) { serialized << join; }
+  MsgJoin(salticidae::DataStream &&s) { s >> join; }
+  bool operator<(const MsgJoin& s) const {
+    return (join < s.join);
+  }
+  std::string prettyPrint() {
+    return "JOIN[" + join.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(Join)); }
+};
+
+// Synchronization request
+struct MsgSync {
+  static const uint8_t opcode = HDR_SYNC;
+  salticidae::DataStream serialized;
+  Sync sync;
+  MsgSync(const Sync &sync) : sync(sync) { serialized << sync; }
+  MsgSync(salticidae::DataStream &&s) { s >> sync; }
+  bool operator<(const MsgSync& s) const {
+    return (sync < s.sync);
+  }
+  std::string prettyPrint() {
+    return "SYNC[" + sync.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(Sync)); }
+};
+
+// Synchronization messages sent by the leaders
+struct MsgSyncTC {
+  static const uint8_t opcode = HDR_SYNC_TC;
+  salticidae::DataStream serialized;
+  RBaccumSyncAuth acc;
+  PID id;
+  MsgSyncTC(RBaccumSyncAuth acc, PID id) : acc(acc),id(id) { serialized << acc << id; }
+  MsgSyncTC(salticidae::DataStream &&s) { s >> acc >> id; }
+  bool operator<(const MsgSyncTC& s) const {
+    return ((acc < s.acc) || (acc == s.acc && id < s.id));
+  }
+  std::string prettyPrint() {
+    return "SYNC_TC[" + acc.prettyPrint() + "," + std::to_string(id) + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(RBaccumSyncAuth) + sizeof(PID)); }
+};
+
+// Votes (sent by all nodes) on synchronization messges (sent by the leaders)
+struct MsgSyncVote {
+  static const uint8_t opcode = HDR_SYNC_VOTE;
+  salticidae::DataStream serialized;
+  SyncVoteAuth vote;
+  //MsgSyncVote() : vote(SyncVoteAuth()) { serialized << SyncVoteAuth(); }
+  MsgSyncVote(const SyncVoteAuth &vote) : vote(vote) { serialized << vote; }
+  MsgSyncVote(salticidae::DataStream &&s) { s >> vote; }
+  bool operator<(const MsgSyncVote& s) const { return (vote < s.vote); }
+  std::string prettyPrint() { return "SYNC_VOTE[" + vote.prettyPrint() + "]"; }
+  unsigned int sizeMsg() { return (sizeof(SyncVoteAuth)); }
+};
+
+struct MsgSyncVoteQc {
+  static const uint8_t opcode = HDR_SYNC_VOTE_QC;
+  salticidae::DataStream serialized;
+  SyncVoteAuths vote;
+  PID id; // TODO: leader id -- should be a signature?
+  MsgSyncVoteQc() : vote(SyncVoteAuths()),id(0) { serialized << SyncVoteAuths() << 0; }
+  MsgSyncVoteQc(const SyncVoteAuths &vote, const PID id) : vote(vote),id(id) { serialized << vote << id; }
+  MsgSyncVoteQc(salticidae::DataStream &&s) { s >> vote >> id; }
+  bool operator<(const MsgSyncVoteQc& s) const { return (vote < s.vote || (vote == s.vote && id < s.id)); }
+  bool operator==(const MsgSyncVoteQc& s) const { return (vote == s.vote && id == s.id); }
+  std::string prettyPrint() {
+    return "SYNC_VOTE_QC[" + vote.prettyPrint() + "," + std::to_string(id) + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(SyncVoteAuths) + sizeof(PID)); }
+};
+
+
+
+/////////////////////////////////////////////////////
+// Pacemaker (Pm)
+
+
+// Synchronization request
+struct MsgPmSync {
+  static const uint8_t opcode = HDR_PM_SYNC;
+  salticidae::DataStream serialized;
+  PmSync sync;
+  MsgPmSync(const PmSync &sync) : sync(sync) { serialized << sync; }
+  MsgPmSync(salticidae::DataStream &&s) { s >> sync; }
+  bool operator<(const MsgPmSync& s) const {
+    return (sync < s.sync);
+  }
+  std::string prettyPrint() {
+    return "PM_SYNC[" + sync.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(PmSync)); }
+};
+
+// Synchronization messages sent by the leaders
+struct MsgPmSyncTC {
+  static const uint8_t opcode = HDR_PM_SYNC_TC;
+  salticidae::DataStream serialized;
+  PmSync sync;
+  PID id; // TODO: this should be a signature...
+  MsgPmSyncTC(PmSync sync, PID id) : sync(sync),id(id) { serialized << sync << id; }
+  MsgPmSyncTC(salticidae::DataStream &&s) { s >> sync >> id; }
+  bool operator<(const MsgPmSyncTC& s) const {
+    return (sync < s.sync
+            || (sync == s.sync && id < s.id));
+  }
+  std::string prettyPrint() {
+    return "PM_SYNC_TC[" + sync.prettyPrint() + "," + std::to_string(id) + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(Sync) + sizeof(PID)); }
+};
+
+// Votes (sent by all nodes) on synchronization messges (sent by the leaders)
+struct MsgPmSyncVote {
+  static const uint8_t opcode = HDR_PM_SYNC_VOTE;
+  salticidae::DataStream serialized;
+  PmSync vote;
+  MsgPmSyncVote(const PmSync &vote) : vote(vote) { serialized << vote; }
+  MsgPmSyncVote(salticidae::DataStream &&s) { s >> vote; }
+  bool operator<(const MsgPmSyncVote& s) const { return (vote < s.vote); }
+  std::string prettyPrint() { return "PM_SYNC_VOTE[" + vote.prettyPrint() + "]"; }
+  unsigned int sizeMsg() { return (sizeof(PmSync)); }
+};
+
+struct MsgPmSyncVoteQc {
+  static const uint8_t opcode = HDR_SYNC_VOTE_QC;
+  salticidae::DataStream serialized;
+  PmSyncs vote;
+  PID id; // TODO: leader id -- should be a signature?
+  MsgPmSyncVoteQc() : vote(PmSyncs()),id(0) { serialized << PmSyncs() << 0; }
+  MsgPmSyncVoteQc(const PmSyncs &vote, const PID id) : vote(vote),id(id) { serialized << vote << id; }
+  MsgPmSyncVoteQc(salticidae::DataStream &&s) { s >> vote >> id; }
+  bool operator<(const MsgPmSyncVoteQc& s) const { return (vote < s.vote || (vote == s.vote && id < s.id)); }
+  bool operator==(const MsgPmSyncVoteQc& s) const { return (vote == s.vote && id == s.id); }
+  std::string prettyPrint() {
+    return "PM_SYNC_VOTE_QC[" + vote.prettyPrint() + "," + std::to_string(id) + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(PmSyncs) + sizeof(PID)); }
+};
+
+// Restart message sent in Achilles
+struct MsgRestart {
+  static const uint8_t opcode = HDR_RESTART;
+  salticidae::DataStream serialized;
+  Hash nonce;
+  Auth auth;
+  MsgRestart(const Hash &nonce, const Auth &auth) : nonce(nonce),auth(auth) { serialized << nonce << auth; }
+  MsgRestart(salticidae::DataStream &&s) { s >> nonce >> auth; }
+  bool operator<(const MsgRestart& s) const {
+    return (auth < s.auth);
+  }
+  std::string prettyPrint() {
+    return "RESTART[" + nonce.prettyPrint() + "," + auth.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(Hash) + sizeof(Auth)); }
+};
+
+// Reply to restart messages sent in Achilles
+struct MsgReplyRestart {
+  static const uint8_t opcode = HDR_REPLY_RESTART;
+  salticidae::DataStream serialized;
+  View view;
+  Hash nonce;
+  Auth auth;
+  MsgReplyRestart(const View &view, const Hash &nonce, const Auth &auth) : view(view),nonce(nonce),auth(auth) { serialized << view << nonce << auth; }
+  MsgReplyRestart(salticidae::DataStream &&s) { s >> view >> nonce >> auth; }
+  bool operator<(const MsgReplyRestart& s) const {
+    return (auth < s.auth);
+  }
+  std::string prettyPrint() {
+    return "REPLY-RESTART[" + std::to_string(view) + "," + nonce.prettyPrint() + "," + auth.prettyPrint() + "]";
+  }
+  unsigned int sizeMsg() { return (sizeof(View) + sizeof(Hash) + sizeof(Auth)); }
+};
 
 #endif

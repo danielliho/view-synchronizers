@@ -6,21 +6,27 @@
 
 
 // debug switches
-#define DEBUG   false
+#define DEBUG   false //true //false
 #define DEBUG0  true
 #define DEBUG1X false
-#define DEBUG1Y false //true
-#define DEBUG1Z false //true
-#define DEBUG1  false
+#define DEBUG1Y false
+#define DEBUG1Z false
+#define DEBUG1W false //true //false
+#define DEBUG1V false //true //false
+#define DEBUG1U false //true //false
+#define DEBUG1  false //true //false
 #define DEBUG2  false
+#define DEBUG3  false
+#define DEBUG4  false //true //false
+#define DEBUG5  false
 // to print timing info
-#define DEBUGT  false
+#define DEBUGT  false //true //false
 // adds ocalls to profile crypto in enclaves
 #define DEBUGOT false
 // to print 'EXECUTE' messages
 #define DEBUGE  true
 // to print client messages
-#define DEBUGC  false
+#define DEBUGC  false //true //false
 
 
 #define NO_SOCKET          -1
@@ -32,7 +38,6 @@
 
 //#define SOCK_KIND SOCK_STREAM // TCP
 //#define SOCK_KIND SOCK_DGRAM  // UDP
-
 
 // ----------------------------------------
 // Colors

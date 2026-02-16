@@ -14,8 +14,8 @@ class FVJust {
  private:
   bool set = false;
   FData data;
-  Auth auth1; // This authenticates data
-  Auth auth2; // this authenticates only the 2nd view in data (+ PH2_B)
+  Auth auth1; // this authenticates only the 2nd view in data (+ PH2_B) -- store certificate
+  Auth auth2; // this authenticates data                                -- newview certificate
 
  public:
   FVJust();

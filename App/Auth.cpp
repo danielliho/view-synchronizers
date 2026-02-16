@@ -25,14 +25,14 @@ Auth::Auth() {}
 
 
 Auth::Auth(bool b) {
-  this->id=id;
-  this->hash=Hash(b);
+  this->id   = 0;
+  this->hash = Hash(b);
 }
 
 
 Auth::Auth(PID id, Hash hash) {
-  this->id=id;
-  this->hash=hash;
+  this->id   = id;
+  this->hash = hash;
 }
 
 

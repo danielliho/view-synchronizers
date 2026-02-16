@@ -3,6 +3,7 @@
 
 #include <set>
 #include <map>
+#include <list>
 
 
 #include "Just.h"
@@ -11,6 +12,7 @@
 #include "Void.h"
 #include "Cert.h"
 #include "Message.h"
+#include "RBproposal.h"
 
 
 class Log {
@@ -36,6 +38,9 @@ class Log {
   std::map<View,std::set<MsgPreCommitFree>> precommitsFree;
   std::map<View,std::tuple<HAccum>> ldrpreparesFree;
 
+  std::map<View,Auths> echosRote;
+  std::map<View,Auths> acksRote;
+
   std::map<View,std::set<OPprepare>> newviewsOPa;
   std::map<View,std::set<OPnvblocks>> newviewsOPb;
   std::map<View,std::set<OPstore>> storesOP;
@@ -54,6 +59,24 @@ class Log {
   std::map<View,std::set<MsgNewViewChComb>> newviewsChComb;
   std::map<View,std::set<MsgPrepareChComb>> preparesChComb;
   std::map<View,std::set<MsgLdrPrepareChComb>> ldrpreparesChComb;
+
+  std::map<Session,std::set<Sync>> syncs;                  // leader -- all received syncs
+  std::map<Session,std::set<MsgSyncTC>> synctcs;           // all received sync-tcs
+  std::map<SyncVote,Auths> syncvotes;                      // leader -- all received votes
+  std::map<Session,std::tuple<MsgSyncVoteQc>> syncvoteqcs; // received sync-vote-qcs
+
+  std::map<View,std::set<PmSync>> pmsyncs;                 // leader -- all received syncs
+  std::map<View,std::set<MsgPmSyncTC>> pmsynctcs;             // all received sync-tcs
+  std::map<View,PmSyncs> pmsyncvotes;                         // leader -- all received votes
+  std::map<View,std::tuple<MsgPmSyncVoteQc>> pmsyncvoteqcs;   // received sync-vote-qcs
+
+  std::map<View,std::set<RBnewviewAuth>>    newviewsRB;
+  std::map<View,std::tuple<RBprepareAuths>> preparesRB;  // a tuple of size 0 or 1
+  std::map<View,std::tuple<RBstoreAuths>>   storesRB;    // a tuple of size 0 or 1
+  std::map<View,std::tuple<RBproposal>>     proposalsRB; // a tuple of size 0 or 1
+
+  std::map<View,std::set<MsgReplyCounterRote>> repliesCounterRote;
+  std::map<Hash,std::set<MsgReplyRestart>> repliesRestart;
 
  public:
   Log();
@@ -80,6 +103,21 @@ class Log {
   unsigned int storeBckPrepFree(MsgBckPrepareFree msg);
   unsigned int storePcFree(MsgPreCommitFree msg);
   unsigned int storeLdrPrepFree(HAccum msg);
+
+  unsigned int storeEchoRote(MsgEchoRote msg, unsigned int limit);
+  unsigned int storeAckRote(MsgAckRote msg, unsigned int limit);
+
+  std::set<RBnewviewAuth> getNewViewRB(View view, unsigned int n);
+  unsigned int storeNvRB(RBnewviewAuth msg);
+  unsigned int storePropRB(RBproposal msg);
+  unsigned int storePrepRB(RBprepareAuth msg);
+  unsigned int storePrepsRB(RBprepareAuths msg);
+  unsigned int storePcRB(RBstoreAuth msg);
+  unsigned int storePcsRB(RBstoreAuths msg);
+  // TODO: should be session + view
+  RBprepareAuths getPrepareRB(View view);
+  RBstoreAuths getPcRB(View view);
+  RBproposal getPropRB(View view);
 
   unsigned int storeNvOp(OPprepare prep);  // from a MsgNewViewOPA
   unsigned int storeNvOp(OPnvblock newnv); // from a MsgNewViewOPB
@@ -141,6 +179,7 @@ class Log {
   HAccum getLdrPrepareFree(View view);
   MsgPreCommitFree firstPrecommitFree(View view);
   Auths getPrecommitFree(View view, unsigned int n);
+  bool inPrecommitFree(View view, PID id);
 
   std::set<MsgNewViewCh> getNewViewCh(View view, unsigned int n);
   Signs getPrepareCh(View view, unsigned int n);
@@ -158,8 +197,51 @@ class Log {
 
   Just findHighestNvChComb(View view);
 
+//  unsigned int maxSync();
+  unsigned int storeSync(Sync msg);
+  unsigned int storeSyncTC(MsgSyncTC msg);
+  unsigned int storeSyncVote(MsgSyncVote msg);
+  unsigned int storeSyncVoteQc(MsgSyncVoteQc msg);
+
+  std::set<Sync> getSync(Session session);
+  bool getSyncTcFrom(Session session, PID id);
+  bool newSyncTc(MsgSyncTC msg);
+  std::set<MsgSyncTC> getSyncTcs(Session session);
+  Auths getSyncVote(SyncVote vote, unsigned int n);
+  MsgSyncVoteQc getSyncVoteQc(Session session);
+
+  unsigned int storePmSync(PmSync sync);
+  unsigned int storePmSyncTC(MsgPmSyncTC msg);
+  unsigned int storePmSyncVote(PmSync vote);
+  unsigned int storePmSyncVoteQc(MsgPmSyncVoteQc msg);
+
+  std::set<PmSync> getPmSync(View view);
+  Auths getPmSyncVote(PmSync vote, unsigned int n);
+  bool newPmSyncTc(MsgPmSyncTC msg);
+  MsgPmSyncVoteQc getPmSyncVoteQc(View view);
+  std::set<MsgPmSyncTC> getPmSyncTcs(View view);
+
+/*
+  unsigned int storeJoinWish(MsgJoinWish msg);
+  std::list<MsgJoinWish> getJoinWish(unsigned int n);
+
+  bool storeOwnJoinVote(MsgJoinVote msg);
+  bool storedOwnJoinVote(View v);
+  MsgJoinVote getOwnJoinVote(View v);
+*/
+
+  bool inReplyCounterRote(View v, MsgReplyCounterRote m);
+  unsigned int storeReplyCounterRote(View v, MsgReplyCounterRote msg);
+  MsgReplyCounterRote getHighestReplyCounterRote(View v);
+
+  bool inReplyRestart(Hash nonce, MsgReplyRestart m);
+  unsigned int storeReplyRestart(Hash nonce, MsgReplyRestart msg);
+  MsgReplyRestart getHighestReplyRestart(Hash nonce);
+  bool gotReplyRestartFrom(Hash nonce, PID id);
+
   // generates a string to pretty print logs
   std::string prettyPrint();
+  std::string printSyncVotes();
 };
 
 

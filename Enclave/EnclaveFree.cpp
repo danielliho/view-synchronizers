@@ -10,7 +10,6 @@
 //#include "EnclaveShare.h"
 #include "../App/types.h"
 
-
 View FREEprepv = 0;      // preph's view
 View FREEview  = 0;      // current view
 bool FREEphase = PH2A;   // current phase
@@ -22,6 +21,9 @@ const char FREEsecret[] = {
   "3tr6ywY7KkMBZhBs69NvMpvtXeehRANCAAS+G04ABpuwCvaS0v5fi9vuNOEitPon\n"
   "4nIDK/IJOsGXv85Jw5wayZI19lSB6ox05rLB+CxmEXrDyiOhX8Sz7c0L\n"
 };
+
+// Pacemaker variables:
+bool FREEsynchronizing = false;
 
 
 sgx_status_t FREE_initialize_variables(PID *me, unsigned int *q) {
@@ -37,15 +39,15 @@ sgx_status_t FREE_initialize_variables(PID *me, unsigned int *q) {
 }
 
 
-// increments the (view,phase) pair
-void FREE_increment() {
-  if (FREEphase == PH2A) {
-    FREEphase = PH2B;
-  } else {
-    FREEphase = PH2A;
-    FREEview++;
-  }
-}
+// // increments the (view,phase) pair
+// void FREE_increment() {
+//   if (FREEphase == PH2A) {
+//     FREEphase = PH2B;
+//   } else {
+//     FREEphase = PH2A;
+//     FREEview++;
+//   }
+// }
 
 
 auth_t free_authenticate(unsigned int i, std::string text) {
@@ -72,9 +74,25 @@ sgx_status_t FREE_TEEauth(payload_t *p, auth_t *res) {
   return status;
 }
 
+// Only for the kinda ROTE version
+sgx_status_t ROTE_TEEauthView(auth_t *res) {
+  sgx_status_t status = SGX_SUCCESS;
+  std::string text = std::to_string(FREEview);
+  *res = free_authenticate(0,text);
+  return status;
+}
 
+/*
+// Only for the kinda ROTE version
+sgx_status_t ROTE_TEEauthCounter(View view, View counter, auth_t *res) {
+  sgx_status_t status = SGX_SUCCESS;
+  std::string text = std::to_string(view) + std::to_string(counter);
+  *res = free_authenticate(0,text);
+  return status;
+}
+*/
 
-bool free_sameHashes(unsigned char *h1, unsigned char *h2) {
+bool free_eq_hashes(unsigned char *h1, unsigned char *h2) {
   for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
     if (h1[i] != h2[i]) { return false; }
   }
@@ -87,7 +105,7 @@ bool free_verify(std::string text, auth_t a) {
   unsigned char hash[SHA256_DIGEST_LENGTH];
   std::string s = std::to_string(a.id) + FREEsecret + text;
   if (!SHA256 ((const unsigned char *)s.c_str(), s.size(), hash)) { }
-  bool b = free_sameHashes(a.hash.hash,hash);
+  bool b = free_eq_hashes(a.hash.hash,hash);
   if (DEBUGOT) ocall_recCVtime();
 
   return b;
@@ -140,23 +158,26 @@ std::string free_H2S(hash_t hash) {
 }
 
 
-sgx_status_t FREE_TEEprepare(hash_t *hash, hjust_t *res) {
-  sgx_status_t status = SGX_SUCCESS;
+// // Not used anymore
+// sgx_status_t FREE_TEEprepare(hash_t *hash, hjust_t *res) {
+//   sgx_status_t status = SGX_SUCCESS;
 
-  if (FREEphase == PH2B) {
-    std::string sh = free_hash2str(*hash);
-    std::string text = sh + std::to_string(FREEview);
-    //ocall_print(("ENCLAVE:preparing-hash(" + std::to_string(sh.size()) + "):-" + sh + "-").c_str());
-    //ocall_print(("ENCLAVE:preparing-hash:-" + free_H2S(*hash) + "-").c_str());
-    //ocall_print(("ENCLAVE:preparing-view:" + std::to_string(FREEview)).c_str());
-    res->auth = free_authenticate(1,text);
-    res->set=true;
-    res->hash=*hash;
-    res->view=FREEview;
-    FREE_increment();
-  } else { res->set = false; }
-  return status;
-}
+//   if (FREEphase == PH2B) {
+//     std::string sh = free_hash2str(*hash);
+//     std::string text = sh + std::to_string(FREEview);
+//     //ocall_print(("ENCLAVE:preparing-hash(" + std::to_string(sh.size()) + "):-" + sh + "-").c_str());
+//     //ocall_print(("ENCLAVE:preparing-hash:-" + free_H2S(*hash) + "-").c_str());
+//     //ocall_print(("ENCLAVE:preparing-view:" + std::to_string(FREEview)).c_str());
+//     res->auth = free_authenticate(1,text);
+//     res->set=true;
+//     res->hash=*hash;
+//     res->view=FREEview;
+//     FREEphase = PH2A;
+//     FREEview++;
+//     //FREE_increment();
+//   } else { res->set = false; }
+//   return status;
+// }
 
 
 bool free_verifyOrInit(pjust_t *just) {
@@ -168,7 +189,15 @@ bool free_verifyOrInit(pjust_t *just) {
   std::string text2 = std::to_string(PH2A) + std::to_string(just->view);
   bool b1 = free_verify(text1,just->auth);
   bool b2 = free_verifyAuths(text2,just->auths);
-  //ocall_print(("ENCLAVE:free_verifyOrInit:" + std::to_string(b1) + ":" + std::to_string(b2)).c_str());
+  if (!b1 || !b2) {
+    ocall_print(("ENCLAVE:free_verifyOrInit:" + std::to_string(FREEview)
+                 + ":" + std::to_string(FREEphase)
+                 + ":" + std::to_string(FREEprepv)
+                 + ":" + std::to_string(just->view)
+                 + ":" + std::to_string((just->hash).set)
+                 + ":" + std::to_string(b1)
+                 + ":" + std::to_string(b2)).c_str());
+  }
   //ocall_print(("ENCLAVE:free_verifyOrInit:" + text2).c_str());
   return b1 && b2;
 }
@@ -177,7 +206,8 @@ bool free_verifyOrInit(pjust_t *just) {
 sgx_status_t FREE_TEEstore(pjust_t *just, fvjust_t *res) {
   sgx_status_t status = SGX_SUCCESS;
 
-  if (free_verifyOrInit(just) && just->view >= FREEprepv) {
+  bool verif = free_verifyOrInit(just);
+  if (verif && just->view >= FREEprepv) {
     //ocall_print(("ENCLAVE:storing" + std::to_string(FREEid)).c_str());
     if (FREEphase == PH2B) { FREEview++; FREEphase = PH2A; }
     FREEprepv = just->view;
@@ -187,10 +217,17 @@ sgx_status_t FREE_TEEstore(pjust_t *just, fvjust_t *res) {
     res->data.justv=just->view;
     res->data.view=FREEview;
     res->set=true;
-    FREE_increment();
+    // FREEphase must be PH2A by now
+    FREEphase = PH2B;
+    //FREE_increment();
     //ocall_print(("ENCLAVE:stored with auth (" + std::to_string(res->auth2.id) + ")" + std::to_string(FREEid)).c_str());
     //ocall_print(("ENCLAVE:stored" + std::to_string(FREEid)).c_str());
-  } else { res->set=false; }
+  } else {
+    ocall_print(("FREE_TEEstore error - just->view=" + std::to_string(just->view)
+                 + ";FREEprepv=" + std::to_string(FREEprepv)
+                 + ";verif=" + std::to_string(verif)).c_str());
+    res->set=false;
+  }
 
   return status;
 }
@@ -281,6 +318,82 @@ sgx_status_t FREE_TEEaccumSp(ofjust_t *just, hash_t *prp, haccum_t *res) {
     std::string textp = sh + std::to_string(FREEview);
     res->authp = free_authenticate(7,textp);
   } else { res->set = false; }
+
+  return status;
+}
+
+// ----------------------------------------------------
+// -- Pacemaker functions
+
+sgx_status_t TEEpmSync(fvjust_t *just, pm_sync_t *res) {
+  sgx_status_t status = SGX_SUCCESS;
+
+  if (just->data.view == FREEprepv + 1) {
+
+    FREEsynchronizing = true;
+
+    res->view = just->data.view;
+    res->hash = just->data.justh;
+
+    std::string s = (std::to_string(res->view)
+                     + free_hash2str(res->hash));
+    res->auth = free_authenticate(8,s);
+
+  } else {
+    ocall_print(("TEEpmSync error - just.view=" + std::to_string(just->data.view)
+                 + ";FREEprepv=" + std::to_string(FREEprepv)).c_str());
+  }
+
+  return status;
+}
+
+sgx_status_t TEEpmSyncVote(pm_sync_t *sync, pm_sync_t *res) {
+  sgx_status_t status = SGX_SUCCESS;
+
+  if (sync->view >= FREEprepv) {
+
+    res->view = sync->view;
+    res->hash = sync->hash;
+
+    std::string s = (std::to_string(res->view) + free_hash2str(res->hash));
+
+    res->auth = free_authenticate(9,s);
+  }
+
+  return status;
+}
+
+sgx_status_t TEEpmSyncEnd(pm_syncs_t *votes, fvjust_t *res) {
+  sgx_status_t status = SGX_SUCCESS;
+
+  std::string s = std::to_string(votes->view) + free_hash2str(votes->hash);
+
+  if (free_verifyAuths(s,votes->auths)) {
+    if (votes->view >= FREEview) {
+      FREEview          = votes->view + 1;
+      FREEprepv         = votes->view;
+      FREEsynchronizing = false;
+
+      res->set        = true;
+      res->data.justh = votes->hash;
+      res->data.justv = FREEprepv;
+      res->data.view  = FREEview;
+
+      std::string s1 = std::to_string(PH2A) + std::to_string(res->data.view);
+      std::string s2 = std::to_string(res->data.justv) + free_hash2str(res->data.justh) + std::to_string(res->data.view);
+
+      res->auth1 = free_authenticate(10,s1);
+      res->auth2 = free_authenticate(11,s2);
+    } else {
+      ocall_print(("ENCLAVE-ERROR:" + std::to_string(votes->view) + "-" + std::to_string(FREEview)).c_str());
+      res->auth1.hash.set = false;
+      res->auth2.hash.set = false;
+    }
+  } else {
+    ocall_print(("ENCLAVE:couldn't verify:" + std::to_string(FREEid)).c_str());
+    res->auth1.hash.set = false;
+    res->auth2.hash.set = false;
+  }
 
   return status;
 }

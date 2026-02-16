@@ -30,22 +30,22 @@ typedef struct _hash_t
 typedef struct _rdata_t
 {
   hash_t proph;
-  View propv;
+  View   propv;
   hash_t justh;
-  View justv;
+  View   justv;
   Phase1 phase;
 } rdata_t;
 
 typedef struct _fdata_t
 {
   hash_t justh;
-  View justv;
-  View view;
+  View   justv;
+  View   view;
 } fdata_t;
 
 typedef struct _auth_t
 {
-  PID id;
+  PID    id;
   hash_t hash;
 } auth_t;
 
@@ -267,5 +267,212 @@ typedef struct _opaccum_t
   auth_t auth;
 } opaccum_t;
 
+typedef struct _sync_t
+{
+  Session session;
+  View    view;
+  hash_t  hash;
+  auth_t  auth;
+} sync_t;
+
+typedef struct _syncs_t
+{
+  sync_t syncs[MAX_NUM_SIGNATURES-1];
+} syncs_t;
+
+typedef struct _join_t
+{
+  Session session;
+  hash_t nonce;
+  auth_t auth;
+} join_t;
+
+typedef struct _joins_t
+{
+  join_t joins[MAX_NUM_NODES];
+} joins_t;
+
+typedef struct _views_t
+{
+  View views[MAX_NUM_NODES];
+} views_t;
+
+/*
+typedef struct _join_wish_qc_t
+{
+  View view;
+  unsigned int size;
+  join_wish_t wishes[MAX_NUM_SIGNATURES];
+} join_wish_qc_t;
+*/
+
+/*
+typedef struct _vjoins_t
+{
+  View from;
+  View to;
+  joins_t joins;
+  views_t views;
+} vjoins_t;
+*/
+
+typedef struct _inonce_t
+{
+  PID    id;
+  hash_t nonce;
+} inonce_t;
+
+typedef struct _inonces_t
+{
+  inonce_t inonces[MAX_NUM_NODES];
+} inonces_t;
+
+typedef struct _sync_vote_t
+{
+  Session   session;
+  View      view;
+  hash_t    hash;
+  inonces_t joins;
+} sync_vote_t;
+
+// "simple" sync vote, i.e., without nonces
+typedef struct _sp_sync_vote_t
+{
+  Session   session;
+  View      view;
+  hash_t    hash;
+} sp_sync_vote_t;
+
+typedef struct _sync_vote_auth_t
+{
+  sync_vote_t vote;
+  auth_t      auth;
+} sync_vote_auth_t;
+
+// "simple" sync vote, i.e., without nonces
+typedef struct _sp_sync_vote_auth_t
+{
+  sp_sync_vote_t vote;
+  auth_t         auth;
+} sp_sync_vote_auth_t;
+
+typedef struct _sync_vote_auths_t
+{
+  sync_vote_t vote;
+  auths_t     auths;
+} sync_vote_auths_t;
+
+// "simple" sync vote, i.e., without nonces
+typedef struct _sp_sync_vote_auths_t
+{
+  sp_sync_vote_t vote;
+  auths_t        auths;
+} sp_sync_vote_auths_t;
+
+/*
+typedef struct _join_vote_qc_t
+{
+  vjoins_t vjoins;
+  auths_t auths;
+} join_vote_qc_t;
+*/
+
+typedef struct _rbprepare_t
+{
+  Session session;
+  View    view;
+  hash_t  hash;
+} rbprepare_t;
+
+typedef struct _rbprepare_auth_t
+{
+  rbprepare_t prep;
+  auth_t      auth;
+} rbprepare_auth_t;
+
+typedef struct _rbprepare_auths_t
+{
+  rbprepare_t prep;
+  auths_t     auths;
+} rbprepare_auths_t;
+
+typedef struct _rbaccum_nv_t
+{
+  Session session;
+  View    view;
+  View    prepv;
+  hash_t  hash;
+} rbaccum_nv_t;
+
+typedef struct _rbaccum_nv_auth_t
+{
+  rbaccum_nv_t acc;
+  auth_t      auth;
+} rbaccum_nv_auth_t;
+
+typedef struct _rbaccum_sync_t
+{
+  Session session;
+  View    view;
+  hash_t  hash;
+} rbaccum_sync_t;
+
+typedef struct _rbaccum_sync_auth_t
+{
+  rbaccum_sync_t acc;
+  auth_t         auth;
+} rbaccum_sync_auth_t;
+
+typedef struct _rbnewview_t
+{
+  Session session;
+  View    view;
+  View    prepv;
+  hash_t  hash;
+} rbnewview_t;
+
+typedef struct _rbnewview_auth_t
+{
+  rbnewview_t newview;
+  auth_t      auth;
+} rbnewview_auth_t;
+
+typedef struct _rbnewviews_t
+{
+  rbnewview_auth_t newviews[MAX_NUM_SIGNATURES-1];
+} rbnewviews_t;
+
+typedef struct _rbstore_t
+{
+  Session session;
+  View    view;
+  hash_t  hash;
+} rbstore_t;
+
+typedef struct _rbstore_auth_t
+{
+  rbstore_t store;
+  auth_t    auth;
+} rbstore_auth_t;
+
+typedef struct _rbstore_auths_t
+{
+  rbstore_t store;
+  auths_t   auths;
+} rbstore_auths_t;
+
+typedef struct _pm_sync_t
+{
+  View   view;
+  hash_t hash;
+  auth_t auth;
+} pm_sync_t;
+
+typedef struct _pm_syncs_t
+{
+  View    view;
+  hash_t  hash;
+  auths_t auths;
+} pm_syncs_t;
 
 #endif

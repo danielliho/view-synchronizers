@@ -79,7 +79,8 @@ COPY Enclave        /app/Enclave
 #COPY salticidae     /app/salticidae
 
 RUN cd /app \
-    && git clone https://github.com/Determinant/salticidae.git \
+#    && git clone https://github.com/Determinant/salticidae.git \
+    && git clone https://github.com/vrahli/salticidae.git \
     && cd salticidae \
     && cmake . -DCMAKE_INSTALL_PREFIX=. \
     && make \

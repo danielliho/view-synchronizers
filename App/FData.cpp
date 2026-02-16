@@ -54,7 +54,7 @@ std::string FData::toString() {
 
 
 bool FData::operator==(const FData& s) const {
-  if (DEBUG1) {
+  if (DEBUG2) {
     std::cout << KYEL
               << "[1]" << (this->justh == s.justh)
               << "[2]" << (this->justv == s.justv)

@@ -159,7 +159,6 @@ bool msgNewViewFreeFrom(std::set<MsgNewViewFree> msgs, PID signer) {
 }
 
 bool msgPrepareFreeFrom(PJust msg, PID signer) {
-  std::set<PID> k = msg.getAuths().getSigners();
   if (signer == msg.getAuth().getId()) { return true; }
   for (int i = 0; i < msg.getAuths().getSize(); i++) {
     if (signer == msg.getAuths().get(i).getId()) { return true; }
@@ -660,16 +659,16 @@ unsigned int Log::storePrepFree(PJust msg) {
 
   std::map<View,std::tuple<PJust>>::iterator it1 = this->preparesFree.find(v);
   if (it1 != this->preparesFree.end()) { // there is already an entry for this view
-    if (DEBUG1) { std::cout << KGRN << "updating prep for view (" << v << ")" << KNRM << std::endl; }
+    if (DEBUG5) { std::cout << KGRN << "updating prep for view (" << v << ")" << KNRM << std::endl; }
     // We update the entry with the new info
     PJust prep = std::get<0>(it1->second);
     PJust just(msg.getHash(),msg.getView(),msg.getAuth(),prep.getAuths());
     it1->second = std::make_tuple(just);
     return prep.sizeAuth();
   } else { // there is no entry for this view
-    if (DEBUG1) { std::cout << KGRN << "storing prep for view (" << v << ")" << KNRM << std::endl; }
+    if (DEBUG5) { std::cout << KGRN << "storing prep for view (" << v << ")" << KNRM << std::endl; }
     this->preparesFree[v] = std::make_tuple(msg);
-    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
+    if (DEBUG5) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
     return 1;
   }
 
@@ -750,7 +749,9 @@ unsigned int Log::storePcFree(MsgPreCommitFree msg) {
     std::set<MsgPreCommitFree> msgs = it1->second;
 
     if (!msgPreCommitFreeFrom(msgs,signers)) {
+      if (DEBUG) { std::cout << KGRN << "before #=" << msgs.size() << KNRM << std::endl; }
       msgs.insert(msg);
+      if (DEBUG) { std::cout << KGRN << "after #=" << msgs.size() << KNRM << std::endl; }
       this->precommitsFree[v]=msgs;
       return msgs.size();
     }
@@ -772,15 +773,102 @@ Auths Log::getPrecommitFree(View view, unsigned int n) {
     for (std::set<MsgPreCommitFree>::iterator it=msgs.begin(); auths.getSize() < n && it!=msgs.end(); ++it) {
       MsgPreCommitFree msg = (MsgPreCommitFree)*it;
       Auths others = msg.auths;
+      if (DEBUG) { std::cout << KGRN << "adding:" << others.prettyPrint() << KNRM << std::endl; }
       auths.addUpto(others,n);
     }
   }
   return auths;
 }
 
+bool Log::inPrecommitFree(View view, PID id) {
+  std::map<View,std::set<MsgPreCommitFree>>::iterator it1 = this->precommitsFree.find(view);
+  if (it1 != this->precommitsFree.end()) { // there is already an entry for this view
+    std::set<MsgPreCommitFree> msgs = it1->second;
+    for (std::set<MsgPreCommitFree>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
+      MsgPreCommitFree msg = (MsgPreCommitFree)*it;
+      if (msg.auths.in(id)) { return true; }
+    }
+  }
+  return false;
+}
+
 
 ///////////////////
 
+
+unsigned int Log::storeEchoRote(MsgEchoRote msg, unsigned int limit) {
+  View v = msg.view;
+  Auth a = msg.auth;
+  PID signer = msg.auth.getId();
+
+  std::map<View,Auths>::iterator it1 = this->echosRote.find(v);
+  if (it1 != this->echosRote.end()) { // there is already an entry for this view
+    Auths auths = it1->second;
+    unsigned int n1 = auths.getSize();
+
+    if (n1 < limit && !auths.in(signer)) {
+      auths.add(a);
+      this->echosRote[v]=auths;
+      return auths.getSize();
+    }
+
+  } else { // there is no entry for this view
+    Auths auths = Auths(a);
+    this->echosRote[v]=auths;
+    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+  }
+
+  return 0;
+}
+
+unsigned int Log::storeAckRote(MsgAckRote msg, unsigned int limit) {
+  View v = msg.view;
+  Auth a = msg.auth;
+  PID signer = msg.auth.getId();
+
+  std::map<View,Auths>::iterator it1 = this->acksRote.find(v);
+  if (it1 != this->acksRote.end()) { // there is already an entry for this view
+    Auths auths = it1->second;
+    unsigned int n1 = auths.getSize();
+
+    if (DEBUG) { std::cout << KGRN << "entries for view (" << v << "): " << auths.prettyPrint()
+                           << " - new entry: " << a.prettyPrint()
+                           << KNRM << std::endl; }
+
+    if (n1 < limit) {
+
+      if (!auths.in(signer)) {
+        auths.add(a);
+        this->acksRote[v]=auths;
+        unsigned int n2 = auths.getSize();
+        if (DEBUG) { std::cout << KGRN << "added an entry for signer (" << signer << ") view (" << v << ")"
+                               << " - before (" << n1 << ") after (" << n2 << ")"
+                               << KNRM << std::endl; }
+        return n2;
+      } else {
+        // will then return 0
+        if (DEBUG) { std::cout << KGRN << "already an entry for signer (" << signer << ") view (" << v << ")"
+                               << KNRM << std::endl; }
+      }
+
+    } else {
+        // will then return 0
+        if (DEBUG) { std::cout << KGRN << "already enough entries (" << n1 << ") limit is (" << limit << ")"
+                               << KNRM << std::endl; }
+    }
+  } else { // there is no entry for this view
+    Auths auths = Auths(a);
+    this->acksRote[v]=auths;
+    if (DEBUG) { std::cout << KGRN << "no entry for view (" << v << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+  }
+
+  return 0;
+}
+
+
+///////////////////
 
 
 unsigned int Log::storeNvOp(OPprepare prep) {
@@ -1822,4 +1910,833 @@ MsgPreCommitFree Log::firstPrecommitFree(View view) {
   View v = 0;
   MsgPreCommitFree msg(view,{});
   return msg;
+}
+
+// -----------------------------------
+// -- Rollback-resilient pacemaker
+
+bool msgSyncFrom(std::set<Sync> msgs, Session s, PID signer) {
+  for (std::set<Sync>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
+    Sync msg = (Sync)*it;
+    Session i = msg.getSession();
+    PID     k = msg.getAuth().getId();
+    if (s == i && signer == k) { return true; }
+  }
+  return false;
+}
+
+/*
+unsigned int Log::maxSync() {
+  unsigned int n = 0;
+  std::set<MsgSync>::iterator it = this->syncs.begin();
+  while (it != this->syncs.end()) {
+    MsgSync sync = (MsgSync)*it;
+    if (n < sync.sync.getView()) { n = sync.sync.getView(); }
+    it++;
+  }
+  return n;
+}
+*/
+
+unsigned int Log::storeSync(Sync msg) {
+  Session s = msg.getSession();
+  PID signer = msg.getAuth().getId();
+
+  std::map<Session,std::set<Sync>>::iterator it1 = this->syncs.find(s);
+  if (it1 != this->syncs.end()) { // there is already an entry for this session
+    std::set<Sync> msgs = it1->second;
+
+    if (!msgSyncFrom(msgs,s,signer)) {
+      unsigned int n = msgs.size();
+      msgs.insert(msg);
+      this->syncs[s]=msgs;
+      if (DEBUG5) { std::cout << KGRN << "added a sync (" << n << "->" << msgs.size() << ")" << KNRM << std::endl; }
+
+      return msgs.size();
+    } else {
+      if (DEBUG5) { std::cout << KGRN << "already entry for (" << s << "," << signer << ")" << KNRM << std::endl; }
+    }
+  } else {
+    this->syncs[s]={msg};
+    if (DEBUG5) { std::cout << KGRN << "no entry for this session (" << s << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+  }
+
+  return 0;
+}
+
+// get the syncs with a given session number
+std::set<Sync> Log::getSync(Session session) {
+  std::set<Sync> msgs = {};
+  std::map<Session,std::set<Sync>>::iterator it1 = this->syncs.find(session);
+  if (it1 != this->syncs.end()) { // there is an entry for this session
+    msgs = it1->second;
+  }
+  return msgs;
+}
+
+// get the sync-tcs with a given session number
+std::set<MsgSyncTC> Log::getSyncTcs(Session session) {
+  std::set<MsgSyncTC> msgs = {};
+  std::map<Session,std::set<MsgSyncTC>>::iterator it = this->synctcs.find(session);
+  if (it != this->synctcs.end()) { // there is an entry for this session
+    msgs = it->second;
+  }
+  return msgs;
+}
+
+bool msgSyncTcFrom(std::set<MsgSyncTC> msgs, Session s, PID id) {
+  for (std::set<MsgSyncTC>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
+    MsgSyncTC msg = (MsgSyncTC)*it;
+    Session   i   = msg.acc.getAcc().getSession();
+    PID       k   = msg.id;
+    if (s == i && id == k) { return true; }
+  }
+  return false;
+}
+
+bool Log::newSyncTc(MsgSyncTC msg) {
+  std::map<Session,std::set<MsgSyncTC>>::iterator it1 = this->synctcs.find(msg.acc.getAcc().getSession());
+  if (it1 != this->synctcs.end()) { // there is already an entry for this session
+    std::set<MsgSyncTC> msgs = it1->second;
+    for (std::set<MsgSyncTC>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
+      MsgSyncTC m = (MsgSyncTC)*it;
+      if (m.acc == msg.acc) { return false; }
+    }
+  }
+  return true;
+}
+
+unsigned int Log::storeSyncTC(MsgSyncTC msg) {
+  Session s = msg.acc.getAcc().getSession();
+  PID id = msg.id;
+
+  std::map<Session,std::set<MsgSyncTC>>::iterator it1 = this->synctcs.find(s);
+  if (it1 != this->synctcs.end()) { // there is already an entry for this session
+    std::set<MsgSyncTC> msgs = it1->second;
+
+    if (!msgSyncTcFrom(msgs,s,id)) {
+      unsigned int n = msgs.size();
+      msgs.insert(msg);
+      this->synctcs[s]=msgs;
+      if (DEBUG5) { std::cout << KGRN << "added a syncTC (" << n << "->" << msgs.size() << ")" << KNRM << std::endl; }
+
+      return msgs.size();
+    } else {
+      if (DEBUG5) { std::cout << KGRN << "already entry for (" << s << "," << id << ")" << KNRM << std::endl; }
+    }
+  } else {
+    this->synctcs[s]={msg};
+    if (DEBUG5) { std::cout << KGRN << "no entry for this session (" << s << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+  }
+
+  return 0;
+}
+
+bool Log::getSyncTcFrom(Session session, PID id) {
+  std::map<Session,std::set<MsgSyncTC>>::iterator it1 = this->synctcs.find(session);
+  if (it1 != this->synctcs.end()) { // there is already an entry for this session
+    std::set<MsgSyncTC> msgs = it1->second;
+    return msgSyncTcFrom(msgs,session,id);
+  }
+  return false;
+}
+
+/*
+bool msgJoinWishFrom(std::list<MsgJoinWish> msgs, View v, PID signer) {
+  for (std::list<MsgJoinWish>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
+    MsgJoinWish msg = (MsgJoinWish)*it;
+    View i = msg.wish.getView();
+    PID  k = msg.wish.getAuth().getId();
+    if (v == i && signer == k) { return true; }
+  }
+  return false;
+}
+
+unsigned int Log::storeJoinWish(MsgJoinWish msg) {
+  View v = msg.wish.getView();
+  PID signer = msg.wish.getAuth().getId();
+
+  // We only add 'msg' to the log if there is no entry for the (view+sender)
+  if (!msgJoinWishFrom(this->joinwishes,v,signer)) {
+    unsigned int n = this->joinwishes.size();
+    this->joinwishes.push_back(msg);
+    if (DEBUG1) { std::cout << KGRN << "added a wish (" << n << "->" << this->joinwishes.size() << ")" << KNRM << std::endl; }
+  } else {
+    if (DEBUG1) { std::cout << KGRN << "already an entry for (" << v << "," << signer << ")" << KNRM << std::endl; }
+  }
+
+  return this->joinwishes.size();
+}
+
+// extract up to n elements
+std::list<MsgJoinWish> Log::getJoinWish(unsigned int n) {
+  std::list<MsgJoinWish> msgs = {};
+  for (int i = 0; i < n; i++) {
+    if (this->joinwishes.empty()) { return msgs; }
+    MsgJoinWish wish = (MsgJoinWish)*(this->joinwishes.begin());
+    this->joinwishes.pop_front();
+    msgs.push_back(wish);
+  }
+  return msgs;
+}
+
+bool Log::storeOwnJoinVote(MsgJoinVote msg) {
+  View v = msg.vjoins.getTo();
+
+  std::map<View,std::tuple<MsgJoinVote>>::iterator it1 = this->joinownvote.find(v);
+  if (it1 != this->joinownvote.end()) { // there is already an entry for this view
+    return false; // false because nothing was added since there was already an entry
+  } else { // there is no entry for this view
+    this->joinownvote[v] = std::make_tuple(msg);
+    return true; // true because something was added
+  }
+
+  return false;
+}
+
+// checks whether there is already a stored MsgJoinVote
+bool Log::storedOwnJoinVote(View v) {
+  std::map<View,std::tuple<MsgJoinVote>>::iterator it1 = this->joinownvote.find(v);
+  return (it1 != this->joinownvote.end());
+}
+
+MsgJoinVote Log::getOwnJoinVote(View v) {
+  std::map<View,std::tuple<MsgJoinVote>>::iterator it1 = this->joinownvote.find(v);
+  if (it1 != this->joinownvote.end()) { // there is already an entry for this view
+    MsgJoinVote vote = std::get<0>(it1->second);
+    return vote;
+  } else { // there is no entry for this view
+    MsgJoinVote vote = MsgJoinVote();
+    return vote;
+  }
+}
+*/
+
+std::string Log::printSyncVotes() {
+  std::string text;
+  for (std::map<SyncVote,Auths>::iterator it1=this->syncvotes.begin(); it1!=this->syncvotes.end();++it1) {
+    SyncVote v = it1->first;
+    Auths auths = it1->second;
+    text += "[syncvote=" + v.prettyPrint() + ";auths=" + auths.prettyPrint() + "]";
+  }
+  return text;
+}
+
+unsigned int Log::storeSyncVote(MsgSyncVote msg) {
+  SyncVote vote   = msg.vote.getVote();
+  Auth     auth   = msg.vote.getAuth();
+  PID      signer = auth.getId();
+
+  if (DEBUG1) { std::cout << KGRN << "syncvotes:" << printSyncVotes() << KNRM << std::endl; }
+
+  std::map<SyncVote,Auths>::iterator it1 = this->syncvotes.find(vote);
+  if (it1 != this->syncvotes.end()) { // there is already an entry for this view
+    Auths auths = it1->second;
+
+    if (DEBUG1) { std::cout << KGRN << "found an entry (" << vote.prettyPrint() << ")" << KNRM << std::endl; }
+
+    // We only add 'msg' to the log if there is no entry for the sender
+    if (!auths.in(signer)) {
+      unsigned int n = auths.getSize();
+      auths.add(auth);
+      this->syncvotes[vote]=auths;
+      if (DEBUG1) { std::cout << KGRN << "added a vote (" << n << "->" << auths.getSize() << ")" << KNRM << std::endl; }
+      return auths.getSize();
+    } else {
+      if (DEBUG1) { std::cout << KGRN << "already a vote from " << signer << std::endl; }
+    }
+  } else { // there is no entry for this view
+    this->syncvotes[vote]=Auths(auth);
+    if (DEBUG1) { std::cout << KGRN << "no entry corresponding to this sync (" << vote.prettyPrint() << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+  }
+
+  return 0;
+}
+
+Auths Log::getSyncVote(SyncVote vote, unsigned int n) {
+  std::map<SyncVote,Auths>::iterator it1 = this->syncvotes.find(vote);
+  if (it1 != this->syncvotes.end()) { // there is already an entry for this view
+    Auths auths = it1->second;
+    return auths;
+  }
+  return Auths();
+}
+
+unsigned int Log::storeSyncVoteQc(MsgSyncVoteQc msg) {
+  Session s = msg.vote.getVote().getSession();
+
+  std::map<Session,std::tuple<MsgSyncVoteQc>>::iterator it1 = this->syncvoteqcs.find(s);
+  if (it1 != this->syncvoteqcs.end()) { // there is already an entry for this session
+
+    if (DEBUG1) { std::cout << KGRN << "there's already an entry for view (" << s << ")" << KNRM << std::endl; }
+    return 0;
+
+  } else { // there is no entry for this session
+
+    if (DEBUG1) { std::cout << KGRN << "storing sync-vote-qc for session (" << s << ")" << KNRM << std::endl; }
+    this->syncvoteqcs[s] = std::make_tuple(msg);
+    if (DEBUG) { std::cout << KGRN << "no entry for this session (" << s << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+
+  }
+
+  return 0;
+}
+
+MsgSyncVoteQc Log::getSyncVoteQc(Session session) {
+  std::map<Session,std::tuple<MsgSyncVoteQc>>::iterator it = this->syncvoteqcs.find(session);
+  if (it != this->syncvoteqcs.end()) { // there is an entry for this session
+    return std::get<0>(it->second);
+  }
+  return MsgSyncVoteQc(SyncVoteAuths(),0);
+}
+
+
+// -----------------------------------
+// -- Rollback-resilient Damysus
+
+
+std::set<RBnewviewAuth> Log::getNewViewRB(View view, unsigned int n) {
+  std::set<RBnewviewAuth> ret;
+  std::map<View,std::set<RBnewviewAuth>>::iterator it1 = this->newviewsRB.find(view);
+  if (it1 != this->newviewsRB.end()) { // there is already an entry for this view
+    std::set<RBnewviewAuth> msgs = it1->second;
+    for (std::set<RBnewviewAuth>::iterator it=msgs.begin(); ret.size() < n && it!=msgs.end(); ++it) {
+      RBnewviewAuth msg = (RBnewviewAuth)*it;
+      ret.insert(msg);
+    }
+  }
+  return ret;
+}
+
+bool msgNewViewRBFrom(std::set<RBnewviewAuth> msgs, PID signer) {
+  for (std::set<RBnewviewAuth>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
+    RBnewviewAuth msg = (RBnewviewAuth)*it;
+    PID k = msg.getAuth().getId();
+    if (signer == k) { return true; }
+  }
+  return false;
+}
+
+unsigned int Log::storeNvRB(RBnewviewAuth msg) {
+  RBnewview data = msg.getNewview();
+  View v = data.getView();
+  PID signer = msg.getAuth().getId();
+
+  std::map<View,std::set<RBnewviewAuth>>::iterator it1 = this->newviewsRB.find(v);
+  if (it1 != this->newviewsRB.end()) { // there is already an entry for this view
+    std::set<RBnewviewAuth> msgs = it1->second;
+
+    // We only add 'msg' to the log if the sender hasn't already sent a new-view message for this view
+    if (!msgNewViewRBFrom(msgs,signer)) {
+      msgs.insert(msg);
+      this->newviewsRB[v]=msgs;
+      //if (DEBUG) { std::cout << KGRN << "updated entry; #=" << msgs.size() << KNRM << std::endl; }
+      return msgs.size();
+      //k[hdr]=msgs;
+      //log[v]=k;
+    }
+
+    //return msgs.size();
+  } else { // there is no entry for this view
+    this->newviewsRB[v]={msg};
+    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+  }
+
+  return 0;
+}
+
+unsigned int Log::storePropRB(RBproposal msg) {
+  View v = msg.getAcc().getAcc().getView();
+
+  std::map<View,std::tuple<RBproposal>>::iterator it1 = this->proposalsRB.find(v);
+  if (it1 != this->proposalsRB.end()) { // there is already an entry for this view
+
+    if (DEBUG1) { std::cout << KGRN << "there's already an entry for view (" << v << ")" << KNRM << std::endl; }
+    return 0;
+
+  } else { // there is no entry for this view
+
+    if (DEBUG1) { std::cout << KGRN << "storing prop for view (" << v << ")" << KNRM << std::endl; }
+    this->proposalsRB[v] = std::make_tuple(msg);
+    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+
+  }
+
+  return 0;
+}
+
+RBproposal Log::getPropRB(View view) {
+  std::map<View,std::tuple<RBproposal>>::iterator it1 = this->proposalsRB.find(view);
+  if (it1 != this->proposalsRB.end()) { // there is already an entry for this view
+    return std::get<0>(it1->second);
+  }
+  return RBproposal();
+}
+
+unsigned int Log::storePrepRB(RBprepareAuth msg) {
+  View v = msg.getPrepare().getView();
+  PID signer = msg.getAuth().getId();
+
+  std::map<View,std::tuple<RBprepareAuths>>::iterator it1 = this->preparesRB.find(v);
+  if (it1 != this->preparesRB.end()) { // there is already an entry for this view
+    if (DEBUG1) { std::cout << KGRN << "updating prep for view (" << v << ")" << KNRM << std::endl; }
+    // We update the entry with the new info
+    RBprepareAuths prep = std::get<0>(it1->second);
+    if (DEBUG1) { std::cout << KLBLU << "currently:" << prep.prettyPrint() << KNRM << std::endl; }
+    if (DEBUG1) { std::cout << KLBLU << "adding:" << msg.prettyPrint() << KNRM << std::endl; }
+
+    if (!prep.getAuths().in(signer) && prep.getAuths().getSize() < MAX_NUM_SIGNATURES) {
+
+      prep.add(msg.getAuth());
+      it1->second = std::make_tuple(prep);
+      unsigned int s = prep.getAuths().getSize();
+      if (DEBUG1) { std::cout << KLBLU << "now:" << prep.prettyPrint() << KNRM << std::endl; }
+      if (DEBUG1) { std::cout << KLBLU << "storePrepRB(" << s << ")" << KNRM << std::endl; }
+      return s;
+
+    }
+
+  } else { // there is no entry for this view
+
+    if (DEBUG1) { std::cout << KGRN << "storing prep for view (" << v << ")" << KNRM << std::endl; }
+    this->preparesRB[v] = std::make_tuple(RBprepareAuths(msg.getPrepare(),Auths(msg.getAuth())));
+    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+
+  }
+
+  return 0;
+}
+
+// TODO: bound the number of entries we allow adding
+unsigned int Log::storePrepsRB(RBprepareAuths msg) {
+  View v = msg.getPrepare().getView();
+  Auths auths = msg.getAuths();
+
+  std::map<View,std::tuple<RBprepareAuths>>::iterator it1 = this->preparesRB.find(v);
+  if (it1 != this->preparesRB.end()) { // there is already an entry for this view
+    if (DEBUG1) { std::cout << KGRN << "updating prep for view (" << v << ")" << KNRM << std::endl; }
+    // We update the entry with the new info
+    RBprepareAuths prep = std::get<0>(it1->second);
+
+    for (int i = 0; i < auths.getSize(); i++) {
+      Auth auth  = auths.get(i);
+      PID signer = auth.getId();
+      if (!prep.getAuths().in(signer)) { prep.add(auth); }
+    }
+
+    it1->second = std::make_tuple(prep);
+    unsigned int s = prep.getAuths().getSize();
+    if (DEBUG1) { std::cout << KLBLU << "storePrepRB(" << s << ")" << KNRM << std::endl; }
+    return s;
+
+  } else { // there is no entry for this view
+
+    unsigned int n = auths.getSize();
+    if (DEBUG1) { std::cout << KGRN << "storing preps for view (" << v << ")" << KNRM << std::endl; }
+    this->preparesRB[v] = std::make_tuple(RBprepareAuths(msg.getPrepare(),auths));
+    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; now: #=" << n << KNRM << std::endl; }
+    return n;
+
+  }
+
+  return 0;
+}
+
+RBprepareAuths Log::getPrepareRB(View view) {
+  std::map<View,std::tuple<RBprepareAuths>>::iterator it1 = this->preparesRB.find(view);
+  if (it1 != this->preparesRB.end()) { // there is already an entry for this view
+    return std::get<0>(it1->second);
+  }
+  RBprepareAuths msg = RBprepareAuths(RBprepare(),Auths());
+  return msg;
+}
+
+RBstoreAuths Log::getPcRB(View view) {
+  std::map<View,std::tuple<RBstoreAuths>>::iterator it1 = this->storesRB.find(view);
+  if (it1 != this->storesRB.end()) { // there is already an entry for this view
+    return std::get<0>(it1->second);
+  }
+  RBstoreAuths msg = RBstoreAuths(RBstore(),Auths());
+  return msg;
+}
+
+bool msgPcRBFrom(RBstoreAuths msg, PID signer) {
+  for (int i = 0; i < msg.getAuths().getSize(); i++) {
+    if (signer == msg.getAuths().get(i).getId()) { return true; }
+  }
+  return false;
+}
+
+unsigned int Log::storePcRB(RBstoreAuth msg) {
+  View v = msg.getStore().getView();
+  PID signer = msg.getAuth().getId();
+
+  std::map<View,std::tuple<RBstoreAuths>>::iterator it1 = this->storesRB.find(v);
+  if (it1 != this->storesRB.end()) { // there is already an entry for this view
+    if (DEBUG1) { std::cout << KGRN << "updating store for view (" << v << ")" << KNRM << std::endl; }
+    // We update the entry with the new info
+    RBstoreAuths stores = std::get<0>(it1->second);
+
+    if (!msgPcRBFrom(stores,signer) && stores.getAuths().getSize() < MAX_NUM_SIGNATURES) {
+
+      stores.add(msg.getAuth());
+      it1->second = std::make_tuple(stores);
+      unsigned int s = stores.getAuths().getSize();
+      if (DEBUG1) { std::cout << KLBLU << "storePcRB(" << s << ")" << KNRM << std::endl; }
+      return s;
+
+    }
+
+  } else { // there is no entry for this view
+
+    if (DEBUG5) { std::cout << KGRN << "storing store for view (" << v << ")" << KNRM << std::endl; }
+    this->storesRB[v] = std::make_tuple(RBstoreAuths(msg.getStore(),Auths(msg.getAuth())));
+    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+
+  }
+
+  return 0;
+}
+
+// TODO: bound the number of entries we allow adding
+unsigned int Log::storePcsRB(RBstoreAuths msg) {
+  View v = msg.getStore().getView();
+  Auths auths = msg.getAuths();
+
+  std::map<View,std::tuple<RBstoreAuths>>::iterator it1 = this->storesRB.find(v);
+  if (it1 != this->storesRB.end()) { // there is already an entry for this view
+    if (DEBUG5) { std::cout << KGRN << "updating store for view (" << v << ")" << KNRM << std::endl; }
+    // We update the entry with the new info
+    RBstoreAuths store = std::get<0>(it1->second);
+
+    for (int i = 0; i < auths.getSize(); i++) {
+      Auth auth  = auths.get(i);
+      PID signer = auth.getId();
+      if (!store.getAuths().in(signer)) { store.add(auth); }
+    }
+
+    it1->second = std::make_tuple(store);
+    unsigned int s = store.getAuths().getSize();
+    if (DEBUG5) { std::cout << KLBLU << "storePcRB(" << s << ")" << KNRM << std::endl; }
+    return s;
+
+  } else { // there is no entry for this view
+
+    unsigned int n = auths.getSize();
+    if (DEBUG1) { std::cout << KGRN << "storing stores for view (" << v << ")" << KNRM << std::endl; }
+    this->storesRB[v] = std::make_tuple(RBstoreAuths(msg.getStore(),auths));
+    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; now: #=" << n << KNRM << std::endl; }
+    return n;
+
+  }
+
+  return 0;
+}
+
+bool pmSyncFrom(std::set<PmSync> msgs, View v, PID signer) {
+  for (std::set<PmSync>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
+    PmSync msg = (PmSync)*it;
+    View i = msg.getView();
+    PID  k = msg.getAuth().getId();
+    if (v == i && signer == k) { return true; }
+  }
+  return false;
+}
+
+unsigned int Log::storePmSync(PmSync msg) {
+  View v = msg.getView();
+  PID signer = msg.getAuth().getId();
+
+  std::map<View,std::set<PmSync>>::iterator it1 = this->pmsyncs.find(v);
+  if (it1 != this->pmsyncs.end()) { // there is already an entry for this session
+    std::set<PmSync> msgs = it1->second;
+
+    if (!pmSyncFrom(msgs,v,signer)) {
+      unsigned int n = msgs.size();
+      msgs.insert(msg);
+      this->pmsyncs[v]=msgs;
+      if (DEBUG5) { std::cout << KGRN << "added a sync (" << n << "->" << msgs.size() << ")" << KNRM << std::endl; }
+
+      return msgs.size();
+    } else {
+      if (DEBUG5) { std::cout << KGRN << "already entry for (" << v << "," << signer << ")" << KNRM << std::endl; }
+    }
+  } else {
+    this->pmsyncs[v]={msg};
+    if (DEBUG5) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+  }
+
+  return 0;
+}
+
+// get the syncs with a given session number
+std::set<PmSync> Log::getPmSync(View view) {
+  std::set<PmSync> msgs = {};
+  std::map<View,std::set<PmSync>>::iterator it1 = this->pmsyncs.find(view);
+  if (it1 != this->pmsyncs.end()) { // there is an entry for this session
+    msgs = it1->second;
+  }
+  return msgs;
+}
+
+bool msgPmSyncTcFrom(std::set<MsgPmSyncTC> msgs, View v, PID id) {
+  for (std::set<MsgPmSyncTC>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
+    MsgPmSyncTC msg = (MsgPmSyncTC)*it;
+    View i = msg.sync.getView();
+    PID  k = msg.id;
+    if (v == i && id == k) { return true; }
+  }
+  return false;
+}
+
+unsigned int Log::storePmSyncTC(MsgPmSyncTC msg) {
+  View v = msg.sync.getView();
+  PID id = msg.id;
+
+  std::map<View,std::set<MsgPmSyncTC>>::iterator it1 = this->pmsynctcs.find(v);
+  if (it1 != this->pmsynctcs.end()) { // there is already an entry for this view
+    std::set<MsgPmSyncTC> msgs = it1->second;
+
+    if (!msgPmSyncTcFrom(msgs,v,id)) {
+      unsigned int n = msgs.size();
+      msgs.insert(msg);
+      this->pmsynctcs[v]=msgs;
+      if (DEBUG5) { std::cout << KGRN << "added a syncTC (" << n << "->" << msgs.size() << ")" << KNRM << std::endl; }
+
+      return msgs.size();
+    } else {
+      if (DEBUG5) { std::cout << KGRN << "already entry for (" << v << "," << id << ")" << KNRM << std::endl; }
+    }
+  } else {
+    this->pmsynctcs[v]={msg};
+    if (DEBUG5) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+  }
+
+  return 0;
+}
+
+unsigned int Log::storePmSyncVote(PmSync vote) {
+  View v      = vote.getView();
+  Hash block  = vote.getBlock();
+  Auth auth   = vote.getAuth();
+  PID  signer = auth.getId();
+
+  //if (DEBUG1) { std::cout << KGRN << "syncvotes:" << printSyncVotes() << KNRM << std::endl; }
+
+  std::map<View,PmSyncs>::iterator it1 = this->pmsyncvotes.find(v);
+  if (it1 != this->pmsyncvotes.end()) { // there is already an entry for this view
+    PmSyncs syncs = it1->second;
+    Auths auths = syncs.getAuths();
+
+    if (DEBUG1) { std::cout << KGRN << "found an entry (" << vote.prettyPrint() << ")" << KNRM << std::endl; }
+
+    // We only add 'msg' to the log if there is no entry for the sender
+    if (!auths.in(signer)) {
+      unsigned int n = auths.getSize();
+      syncs.add(auth);
+      this->pmsyncvotes[v]=syncs;
+      if (DEBUG1) { std::cout << KGRN << "added a vote (" << n << "->" << syncs.getAuths().getSize() << ")" << KNRM << std::endl; }
+      return syncs.getAuths().getSize();
+    } else {
+      if (DEBUG1) { std::cout << KGRN << "already a vote from " << signer << std::endl; }
+    }
+  } else { // there is no entry for this view
+    this->pmsyncvotes[v]=PmSyncs(v,block,auth);
+    if (DEBUG1) { std::cout << KGRN << "no entry corresponding to this sync (" << vote.prettyPrint() << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+  }
+
+  return 0;
+}
+
+unsigned int Log::storePmSyncVoteQc(MsgPmSyncVoteQc msg) {
+  View v = msg.vote.getView();
+
+  std::map<View,std::tuple<MsgPmSyncVoteQc>>::iterator it1 = this->pmsyncvoteqcs.find(v);
+  if (it1 != this->pmsyncvoteqcs.end()) { // there is already an entry for this session
+
+    if (DEBUG1) { std::cout << KGRN << "there's already an entry for view (" << v << ")" << KNRM << std::endl; }
+    return 0;
+
+  } else { // there is no entry for this session
+
+    if (DEBUG1) { std::cout << KGRN << "storing sync-vote-qc for view (" << v << ")" << KNRM << std::endl; }
+    this->pmsyncvoteqcs[v] = std::make_tuple(msg);
+    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
+    return 1;
+
+  }
+
+  return 0;
+}
+
+Auths Log::getPmSyncVote(PmSync vote, unsigned int n) {
+  View v = vote.getView();
+  std::map<View,PmSyncs>::iterator it1 = this->pmsyncvotes.find(v);
+  if (it1 != this->pmsyncvotes.end()) { // there is already an entry for this view
+    PmSyncs syncs = it1->second;
+    return syncs.getAuths();
+  }
+  return Auths();
+}
+
+MsgPmSyncVoteQc Log::getPmSyncVoteQc(View v) {
+  std::map<View,std::tuple<MsgPmSyncVoteQc>>::iterator it = this->pmsyncvoteqcs.find(v);
+  if (it != this->pmsyncvoteqcs.end()) { // there is an entry for this session
+    return std::get<0>(it->second);
+  }
+  return MsgPmSyncVoteQc(PmSyncs(),0);
+}
+
+bool Log::newPmSyncTc(MsgPmSyncTC msg) {
+  View v = msg.sync.getView();
+  std::map<View,std::set<MsgPmSyncTC>>::iterator it1 = this->pmsynctcs.find(v);
+  if (it1 != this->pmsynctcs.end()) { // there is already an entry for this session
+    std::set<MsgPmSyncTC> msgs = it1->second;
+    for (std::set<MsgPmSyncTC>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
+      MsgPmSyncTC m = (MsgPmSyncTC)*it;
+      if (m.sync == msg.sync) { return false; }
+    }
+  }
+  return true;
+}
+
+// get the sync-tcs with a given session number
+std::set<MsgPmSyncTC> Log::getPmSyncTcs(View v) {
+  std::set<MsgPmSyncTC> msgs = {};
+  std::map<View,std::set<MsgPmSyncTC>>::iterator it = this->pmsynctcs.find(v);
+  if (it != this->pmsynctcs.end()) { // there is an entry for this session
+    msgs = it->second;
+  }
+  return msgs;
+}
+
+bool Log::inReplyCounterRote(View v, MsgReplyCounterRote m) {
+  std::map<View,std::set<MsgReplyCounterRote>>::iterator it = this->repliesCounterRote.find(v);
+  if (it != this->repliesCounterRote.end()) {
+    std::set<MsgReplyCounterRote> msgs = it->second;
+    for (std::set<MsgReplyCounterRote>::iterator it1=msgs.begin(); it1!=msgs.end(); ++it1) {
+      MsgReplyCounterRote msg = (MsgReplyCounterRote)*it1;
+      if (msg.auth.getId() == m.auth.getId()) { return true; }
+    }
+  }
+  return false;
+}
+
+unsigned int Log::storeReplyCounterRote(View v, MsgReplyCounterRote msg) {
+  unsigned int n = 0;
+
+  std::map<View,std::set<MsgReplyCounterRote>>::iterator it = this->repliesCounterRote.find(v);
+  if (it != this->repliesCounterRote.end()) {
+    std::set<MsgReplyCounterRote> msgs = it->second;
+
+    if (!inReplyCounterRote(v,msg)) {
+      msgs.insert(msg);
+      if (DEBUG) { std::cout << KGRN << "[ROTE] storing: " << msg.prettyPrint() << KNRM << std::endl; }
+      this->repliesCounterRote[v]=msgs;
+    }
+
+    n = msgs.size();
+  } else {
+    this->repliesCounterRote[v]={msg};
+    n = 1;
+  }
+
+  return n;
+}
+
+MsgReplyCounterRote Log::getHighestReplyCounterRote(View v) {
+  MsgReplyCounterRote m(v,0,Auth());
+
+  std::map<View,std::set<MsgReplyCounterRote>>::iterator it = this->repliesCounterRote.find(v);
+  if (it != this->repliesCounterRote.end()) {
+    std::set<MsgReplyCounterRote> msgs = it->second;
+
+    for (std::set<MsgReplyCounterRote>::iterator it1=msgs.begin(); it1!=msgs.end(); ++it1) {
+      MsgReplyCounterRote msg = (MsgReplyCounterRote)*it1;
+      if (DEBUG) { std::cout << KGRN << "[ROTE] entry: " << msg.prettyPrint() << KNRM << std::endl; }
+      if (msg.counter >= m.counter) { m = msg; }
+    }
+
+  }
+
+  return m;
+}
+
+bool Log::inReplyRestart(Hash nonce, MsgReplyRestart m) {
+  std::map<Hash,std::set<MsgReplyRestart>>::iterator it = this->repliesRestart.find(nonce);
+  if (it != this->repliesRestart.end()) {
+    std::set<MsgReplyRestart> msgs = it->second;
+    for (std::set<MsgReplyRestart>::iterator it1=msgs.begin(); it1!=msgs.end(); ++it1) {
+      MsgReplyRestart msg = (MsgReplyRestart)*it1;
+      if (msg.auth.getId() == m.auth.getId()) { return true; }
+    }
+  }
+  return false;
+}
+
+unsigned int Log::storeReplyRestart(Hash nonce, MsgReplyRestart msg) {
+  unsigned int n = 0;
+
+  std::map<Hash,std::set<MsgReplyRestart>>::iterator it = this->repliesRestart.find(nonce);
+  if (it != this->repliesRestart.end()) {
+    std::set<MsgReplyRestart> msgs = it->second;
+
+    if (!inReplyRestart(nonce,msg)) {
+      msgs.insert(msg);
+      if (DEBUG) { std::cout << KGRN << "[ACHILLES] storing: " << msg.prettyPrint() << KNRM << std::endl; }
+      this->repliesRestart[nonce]=msgs;
+    }
+
+    n = msgs.size();
+  } else {
+    this->repliesRestart[nonce]={msg};
+    n = 1;
+  }
+
+  return n;
+}
+
+MsgReplyRestart Log::getHighestReplyRestart(Hash nonce) {
+  MsgReplyRestart m(0,Hash(),Auth());
+
+  std::map<Hash,std::set<MsgReplyRestart>>::iterator it = this->repliesRestart.find(nonce);
+  if (it != this->repliesRestart.end()) {
+    std::set<MsgReplyRestart> msgs = it->second;
+
+    for (std::set<MsgReplyRestart>::iterator it1=msgs.begin(); it1!=msgs.end(); ++it1) {
+      MsgReplyRestart msg = (MsgReplyRestart)*it1;
+      if (DEBUG) { std::cout << KGRN << "[ACHILLES] entry: " << msg.prettyPrint() << KNRM << std::endl; }
+      if (msg.view >= m.view) { m = msg; }
+    }
+
+  }
+
+  return m;
+}
+
+
+bool Log::gotReplyRestartFrom(Hash nonce, PID id) {
+  std::map<Hash,std::set<MsgReplyRestart>>::iterator it = this->repliesRestart.find(nonce);
+  if (it != this->repliesRestart.end()) {
+    std::set<MsgReplyRestart> msgs = it->second;
+
+    for (std::set<MsgReplyRestart>::iterator it1=msgs.begin(); it1!=msgs.end(); ++it1) {
+      MsgReplyRestart msg = (MsgReplyRestart)*it1;
+      if (msg.auth.getId() == id) { return true; }
+    }
+
+  }
+
+  return false;
 }

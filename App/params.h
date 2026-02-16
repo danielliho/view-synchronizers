@@ -1,10 +1,10 @@
 #ifndef PARAMS_H
 #define PARAMS_H
 
-#define BASIC_ONEP
-#define MAX_NUM_NODES 9
-#define MAX_NUM_SIGNATURES 5
+#define BASIC_DAMYSUS_ACHILLES
+#define MAX_NUM_NODES 41
+#define MAX_NUM_SIGNATURES 21
 #define MAX_NUM_TRANSACTIONS 400
-#define PAYLOAD_SIZE 256
+#define PAYLOAD_SIZE 0
 
 #endif

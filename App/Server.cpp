@@ -55,9 +55,41 @@ int main(int argc, char const *argv[]) {
   if (argc > 5) { sscanf(argv[5], "%lf", &timeout); }
   std::cout << KYEL << "[" << myid << "]timeout=" << timeout << KNRM << std::endl;
 
+  unsigned int timeoutMul = 1; // timeoutMul
+  if (argc > 6) { sscanf(argv[6], "%d", &timeoutMul); }
+  std::cout << KYEL << "[" << myid << "]timeoutMul=" << timeoutMul << KNRM << std::endl;
+
+  unsigned int timeoutDiv = 1; // timeoutDiv
+  if (argc > 7) { sscanf(argv[7], "%d", &timeoutDiv); }
+  std::cout << KYEL << "[" << myid << "]timeoutDiv=" << timeoutDiv << KNRM << std::endl;
+
   unsigned int opdist = 0; // OP cases
-  if (argc > 6) { sscanf(argv[6], "%d", &opdist); }
+  if (argc > 8) { sscanf(argv[8], "%d", &opdist); }
   std::cout << KYEL << "[" << myid << "]opdist=" << opdist << KNRM << std::endl;
+
+  unsigned int syncPeriod = 0;
+  if (argc > 9) { sscanf(argv[9], "%d", &syncPeriod); }
+  std::cout << KYEL << "[" << myid << "]syncPeriod=" << syncPeriod << KNRM << std::endl;
+
+  unsigned int joinPeriod = 0;
+  if (argc > 10) { sscanf(argv[10], "%d", &joinPeriod); }
+  std::cout << KYEL << "[" << myid << "]joinPeriod=" << joinPeriod << KNRM << std::endl;
+
+  unsigned int numJoiners = 0;
+  if (argc > 11) { sscanf(argv[11], "%d", &numJoiners); }
+  std::cout << KYEL << "[" << myid << "]numJoiners=" << numJoiners << KNRM << std::endl;
+
+  unsigned int quant1 = 0;
+  if (argc > 12) { sscanf(argv[12], "%d", &quant1); }
+  std::cout << KYEL << "[" << myid << "]quant1=" << quant1 << KNRM << std::endl;
+
+  unsigned int quant2 = 0;
+  if (argc > 13) { sscanf(argv[13], "%d", &quant2); }
+  std::cout << KYEL << "[" << myid << "]quant2=" << quant2 << KNRM << std::endl;
+
+  unsigned int skip = 0;
+  if (argc > 14) { sscanf(argv[14], "%d", &skip); }
+  std::cout << KYEL << "[" << myid << "]skip=" << skip << KNRM << std::endl;
 
 
   // -- Public key
@@ -147,6 +179,55 @@ int main(int argc, char const *argv[]) {
                    sizeof(MsgBckPrepareFree),
                    sizeof(MsgPrepareFree),
                    sizeof(MsgPreCommitFree)});
+#elif defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS3_PACEMAKER) // Same as FREE + Pacemaker messages
+  size = std::max({size,
+                   sizeof(MsgNewViewFree),
+                   sizeof(MsgLdrPrepareFree),
+                   sizeof(MsgBckPrepareFree),
+                   sizeof(MsgPrepareFree),
+                   sizeof(MsgPreCommitFree),
+                   sizeof(MsgPmSync),
+                   sizeof(MsgPmSyncTC),
+                   sizeof(MsgPmSyncVote),
+                   sizeof(MsgPmSyncVoteQc)});
+#elif defined(BASIC_DAMYSUS_ACHILLES)
+  size = std::max({size,
+                   sizeof(MsgNewViewFree),
+                   sizeof(MsgLdrPrepareFree),
+                   sizeof(MsgBckPrepareFree),
+                   sizeof(MsgPrepareFree),
+                   sizeof(MsgPreCommitFree),
+                   sizeof(MsgPmSync),
+                   sizeof(MsgPmSyncTC),
+                   sizeof(MsgPmSyncVote),
+                   sizeof(MsgPmSyncVoteQc),
+                   sizeof(MsgRestart),
+                   sizeof(MsgReplyRestart)});
+#elif defined(BASIC_DAMYSUS_ROTE) // Same as FREE + ROTE messages
+  size = std::max({size,
+                   sizeof(MsgNewViewFree),
+                   sizeof(MsgLdrPrepareFree),
+                   sizeof(MsgBckPrepareFree),
+                   sizeof(MsgPrepareFree),
+                   sizeof(MsgPreCommitFree),
+                   sizeof(MsgCounterRote),
+                   sizeof(MsgEchoRote),
+                   sizeof(MsgAckRote),
+                   sizeof(MsgRequestCounterRote),
+                   sizeof(MsgReplyCounterRote)});
+#elif defined(BASIC_ROLL)
+  size = std::max({size,
+                   sizeof(MsgNewViewRB),
+                   sizeof(MsgLdrPrepareRB),
+                   sizeof(MsgBckPrepareRB),
+                   sizeof(MsgLdrPreCommitRB),
+                   sizeof(MsgBckPreCommitRB),
+                   sizeof(MsgDecideRB),
+                   sizeof(MsgSync),
+                   sizeof(MsgSyncTC),
+                   sizeof(MsgSyncVote),
+                   sizeof(MsgSyncVoteQc),
+                   sizeof(MsgJoin)});
 #elif defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC)
   size = std::max({size,
                    sizeof(MsgNewViewOPA),
@@ -201,14 +282,25 @@ int main(int argc, char const *argv[]) {
               << ";precommitop="    << sizeof(MsgPreCommitOP)
               << ";ldraddop="       << sizeof(MsgLdrAddOP)
               << ";bckaddop="       << sizeof(MsgBckAddOP)
+              << ";newviewrb="      << sizeof(MsgNewViewRB)
+              << ";ldrpreparerb="   << sizeof(MsgLdrPrepareRB)
+              << ";bckpreparerb="   << sizeof(MsgBckPrepareRB)
+              << ";ldrprecommitrb=" << sizeof(MsgLdrPreCommitRB)
+              << ";bckprecommitrb=" << sizeof(MsgBckPreCommitRB)
+              << ";deciderb="       << sizeof(MsgDecideRB)
+              << ";sync="           << sizeof(MsgSync)
+              << ";synctc="         << sizeof(MsgSyncTC)
+              << ";syncvote="       << sizeof(MsgSyncVote)
+              << ";syncvoteqc="     << sizeof(MsgSyncVoteQc)
+              << ";join="           << sizeof(MsgJoin)
               << KNRM << std::endl;
   }
   if (DEBUG0) std::cout << KYEL << "[" << myid << "]max-msg-size=" << size << KNRM << std::endl;
   salticidae::ConnPool::Config config;
   //config.nworker(2);
   //config.recv_chunk_size(200000);
-  //config.max_recv_buff_size(200000);
-  //config.max_send_buff_size(200000);
+  //config.max_recv_buff_size(6144);
+  //config.max_send_buff_size(6144);
   PeerNet::Config pconfig(config);
   // TODO: for some reason 'size' is not quite right
   //size = 2 * size;
@@ -218,7 +310,7 @@ int main(int argc, char const *argv[]) {
   cconfig.max_msg_size(size);
   //config.ping_period(2);
   if (DEBUG1) std::cout << KYEL << "[" << myid << "]starting handler" << KNRM << std::endl;
-  Handler handler(kf,myid,timeout,opdist,constFactor,numFaults,numViews,nodes,priv,pconfig,cconfig);
+  Handler handler(kf,myid,timeout,timeoutMul,timeoutDiv,opdist,constFactor,numFaults,numViews,syncPeriod,joinPeriod,numJoiners,quant1,quant2,skip,nodes,priv,pconfig,cconfig);
 
   return 0;
 };

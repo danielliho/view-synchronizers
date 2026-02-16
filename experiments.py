@@ -39,37 +39,49 @@ import mmap
 
 
 ## Parameters
-sgxmode     = "SIM"
-#sgxmode      = "HW"
-srcsgx       = "source /opt/intel/sgxsdk/environment" # this is where the sdk is supposed to be installed
-faults       = [1] #[1,2,4,10] #[1,2,4,10,20,30,40] #[1,2,4,6,8,10,12,14,20,30] # list of numbers of faults
-#faults      = [1,10,20,30,40,50]
-#faults      = [40]
-repeats      = 100 #10 #50 #5 #100 #2     # number of times to repeat each experiment
-repeatsL2    = 1
+sgxmode        = "SIM"
+#sgxmode       = "HW"
+srcsgx         = "source /opt/intel/sgxsdk/environment" # this is where the sdk is supposed to be installed
+faults         = [1] #[1,2,4,10] #[1,2,4,10,20,30,40] #[1,2,4,6,8,10,12,14,20,30] # list of numbers of faults
+#faults        = [1,10,20,30,40,50]
+#faults        = [40]
+repeats        = 100 #10 #50 #5 #100 #2     # number of times to repeat each experiment
+repeatsL2      = 1
 #
-numViews     = 30     # number of views in each run
-cutOffBound  = 60     # stop experiment after some time
+numViews       = 30     # number of views in each run
+cutOffBound    = 60     # stop experiment after some time
 #
-numClients   = 1     # number of clients
-numNonChCls  = 1     # number of clients for the non-chained versions
-numChCls     = 1     # number of clients for the chained versions
-numClTrans   = 1     # number of transactions sent by each clients
-sleepTime    = 0     # time clients sleep between 2 sends (in microseconds)
-timeout      = 5     # timeout before changing changing leader (in seconds)
+numClients     = 1     # number of clients
+numNonChCls    = 1     # number of clients for the non-chained versions
+numChCls       = 1     # number of clients for the chained versions
+numClTrans     = 1     # number of transactions sent by each clients
+sleepTime      = 0     # time clients sleep between 2 sends (in microseconds)
+timeout        = 5     # timeout before changing changing leader (in seconds)
+timeoutMul     = 4     # factor used to multiply the timeout with when timing out
+timeoutDiv     = 2     # factor used to divide the timeout with when making progress
 #
-opdist       = 0
+syncPeriod     = 0     # constrains the number of views between 2 synchronization (rollback-resilient protocol)
+joinPeriod     = 0     # constrains the number of sessions between 2 joins (rollback-resilient protocol)
+numJoiners     = 0     # number of nodes to join per session (rollback-resilient protocol)
+joining        = False # nodes are not joining by default - this is set to true when running experiments based on the number of joining nodes  (rollback-resilient protocol)
 #
-numTrans      = 400    # number of transactions
-payloadSize   = 0 #256 #0 #256 #128      # total size of a transaction
-useMultiCores = True
-numMakeCores  = multiprocessing.cpu_count()  # number of cores to use to make
+opdist         = 0
+#
+numTrans       = 400    # number of transactions
+payloadSize    = 0 #256 #0 #256 #128      # total size of a transaction
+useMultiCores  = True
+numMakeCores   = multiprocessing.cpu_count()  # number of cores to use to make
 #
 runBase      = False #True
 runCheap     = False #True
 runQuick     = False #True
 runComb      = False #True
+runDamr      = False #True
+runDama      = False #True
+runDamp      = False #True
+runDamq      = False #True
 runFree      = False #True
+runRoll      = False #True
 runOnep      = False #True
 runOnepB     = False #True
 runOnepC     = False #True
@@ -94,8 +106,10 @@ plotBasic    = True
 plotChained  = True
 displayPlot  = True # to display a plot once it is generated
 showYlabel   = True
-displayApp   = "shotwell"
-logScale     = True
+displayApp   = "eog"
+logScale     = False
+
+plotComb     = True
 
 barPlot      = False #True
 
@@ -113,7 +127,10 @@ if deadNodes:
     cutOffBound = cutOffBound * 2
 
 # For some experiments we remove the outliers
-quantileSize = 20
+quantileSize = 20 # Used in Python
+quantileSize1 = 0 # Used by the C++ code
+quantileSize2 = 0 # Used by the C++ code
+skipViews     = 0 # Used by the C++ code -- number of views to skip at the beginning of a run
 
 # don't change, those are hard coded in the C++ code:
 statsdir     = "stats"        # stats directory (don't change, hard coded in C++)
@@ -136,10 +153,11 @@ allLocalPorts = []    # list of all port numbers used in local experiments
 dateTimeObj  = datetime.now()
 timestampStr = dateTimeObj.strftime("%d-%b-%Y-%H:%M:%S.%f")
 pointsFile   = statsdir + "/points-" + timestampStr
+timesFile    = statsdir + "/view-times-" + timestampStr
 abortedFile  = statsdir + "/aborted-" + timestampStr
-plotFile     = statsdir + "/plot-" + timestampStr + ".png"
+plotFile     = statsdir + "/plot-" + timestampStr + ".svg"
 clientsFile  = statsdir + "/clients-" + timestampStr
-tvlFile      = statsdir + "/tvl-" + timestampStr + ".png"
+tvlFile      = statsdir + "/tvl-" + timestampStr + ".svg"
 debugFile    = statsdir + "/debug-" + timestampStr
 
 # Names
@@ -148,6 +166,11 @@ cheapHS  = "Damysus-C"
 quickHS  = "Damysus-A"
 combHS   = "Basic-Damysus"
 freeHS   = "Light-Damysus"
+damrHS   = "Basic-Damysus+ROTE"  # based on the "free/light" version
+damaHS   = "Achilles"            # based on the "free/light" version
+dampHS   = "Basic-Damysus"       # Damysus + Pacemaker # based on the "free/light" version
+damqHS   = "Flexi-Basic-Damysus" # "Basic-Damysus+Pacemaker+(3f+1)nodes" # based on the "free/light" version
+rollHS   = "Pallas"
 onepHS   = "Basic-OneShot"
 onepbHS  = "Basic-OneShot(2)"
 onepcHS  = "Basic-OneShot(3)"
@@ -161,6 +184,11 @@ cheapMRK  = "o"
 quickMRK  = "*"
 combMRK   = "X"
 freeMRK   = "s"
+damrMRK   = "p"
+damaMRK   = "+"
+dampMRK   = "s"
+damqMRK   = "*"
+rollMRK   = "o"
 onepMRK   = "+"
 onepbMRK  = "+"
 onepcMRK  = "+"
@@ -174,6 +202,11 @@ cheapLS  = "--"
 quickLS  = "-."
 combLS   = "-"
 freeLS   = "-"
+damrLS   = ":"
+damaLS   = "-"
+dampLS   = "-"
+damqLS   = "-."
+rollLS   = "--"
 onepLS   = "-"
 onepbLS  = "-"
 onepcLS  = "-"
@@ -186,7 +219,12 @@ baseCOL   = "black"
 cheapCOL  = "blue"
 quickCOL  = "green"
 combCOL   = "red"
-freeCOL   = "purple"
+freeCOL   = "magenta"
+damrCOL   = "black"
+damaCOL   = "cyan"
+dampCOL   = "purple"
+damqCOL   = "green"
+rollCOL   = "blue"
 onepCOL   = "brown"
 onepbCOL  = "pink"
 onepcCOL  = "cyan"
@@ -201,61 +239,61 @@ pem      = "aws.pem"
 
 # Region - North Virginia (us-east-1)
 region_USEAST1      = "us-east-1"
-imageID_USEAST1     = "ami-00d7b3d79694d6c0c" #"ami-09acfeca0b09f521f"
-secGroup_USEAST1    = "sg-0266789e1c3d42c86"
+imageID_USEAST1     = "ami-03f63e98cb2f222d1"
+secGroup_USEAST1    = "sg-056a18930b3b73e9f"
 
 # Region - Ohio (us-east-2)
 region_USEAST2      = "us-east-2"
-imageID_USEAST2     = "ami-0d9352c87302e23ea" #"ami-0182bc3b30beedfa4"
-secGroup_USEAST2    = "sg-0d89fb07bbd3d7700"
+imageID_USEAST2     = "ami-02aae622a1bef20a2"
+secGroup_USEAST2    = "sg-0aec5469d109ddaf5"
 subnetID_USEAST2_1  = "subnet-bc5baad7" # us-east-2a
 subnetID_USEAST2_2  = "subnet-30624c4a" # us-east-2b
 subnetID_USEAST2_3  = "subnet-25891f69" # us-east-2c
 
 # Region - North California (us-west-1)
 region_USWEST1      = "us-west-1"
-imageID_USWEST1     = "ami-0dfa74c225fb8c20b" #"ami-0c9bcbfb9feca56c7"
-secGroup_USWEST1    = "sg-0f7addd92bbae0cc2"
+imageID_USWEST1     = "ami-0131aae503c1738b7"
+secGroup_USWEST1    = "sg-0bbdc16a3f162f685"
 
 # Region - Oregon (us-west-2)
 region_USWEST2      = "us-west-2"
-imageID_USWEST2     = "ami-08ec50c7363bc5c50" #"ami-087b7bf2921249dc8"
-secGroup_USWEST2    = "sg-02435aae297812913"
+imageID_USWEST2     = "ami-0c62776e995e5644e"
+secGroup_USWEST2    = "sg-0e7f3ef81efe71201"
 
 # Region - Singapore (ap-southeast-1)
 region_APSEAST1     = "ap-southeast-1"
-imageID_APSEAST1    = "ami-07a6e7819f6d63dfe" #"ami-087f6cdc8a0780f6f"
-secGroup_APSEAST1   = "sg-01de5d6a5bd5576b8"
+imageID_APSEAST1    = "ami-0921318cc6b996226" #"ami-07a6e7819f6d63dfe" #"ami-087f6cdc8a0780f6f"
+secGroup_APSEAST1   = "sg-0a90db70b5ac267f2" #"sg-01de5d6a5bd5576b8"
 
 # Region - Sydney (ap-southeast-2)
 region_APSEAST2     = "ap-southeast-2"
-imageID_APSEAST2    = "ami-066ec398d3ccac032" #"ami-085ea5cb0e80ebfd1"
-secGroup_APSEAST2   = "sg-02b6c7b19d8c78ce6"
+imageID_APSEAST2    = "ami-0e0038e3a1e604f34" #"ami-066ec398d3ccac032" #"ami-085ea5cb0e80ebfd1"
+secGroup_APSEAST2   = "sg-0c0e848464d8a2c41" #"sg-02b6c7b19d8c78ce6"
 
 # Region - Ireland (eu-west-1)
 region_EUWEST1      = "eu-west-1"
-imageID_EUWEST1     = "ami-0464c84f3209ab9a1" #"ami-00477ebbb8f6355a4"
-secGroup_EUWEST1    = "sg-00033137d10223166"
+imageID_EUWEST1     = "ami-0eaa1be7c700b6860"
+secGroup_EUWEST1    = "sg-0c9c836572fff794b"
 
 # Region - London (eu-west-2)
 region_EUWEST2      = "eu-west-2"
-imageID_EUWEST2     = "ami-05537b7b067e11d64" #"ami-00ceb682affe4d8d8"
-secGroup_EUWEST2    = "sg-0da2a5dfe0d929307"
+imageID_EUWEST2     = "ami-09d1cc01b57b9f734"
+secGroup_EUWEST2    = "sg-04c12388070c59b4f"
 
 # Region - Paris (eu-west-3)
 region_EUWEST3      = "eu-west-3"
-imageID_EUWEST3     = "ami-0ec36d6c70d7509e7" #"ami-0186f01a534d9ff40"
-secGroup_EUWEST3    = "sg-03d07bde43685b6bf"
+imageID_EUWEST3     = "ami-091fc9882697f31f2"
+secGroup_EUWEST3    = "sg-06d5f2a8f5e86d8ff"
 
 # Region - Frankfurt (eu-central-1)
 region_EUCENT1      = "eu-central-1"
-imageID_EUCENT1     = "ami-0f435b368fd581c26" #"ami-048124818d35d6e15"
-secGroup_EUCENT1    = "sg-0b8b49fa3c6b6c77f"
+imageID_EUCENT1     = "ami-0511cdd436c6b8076"
+secGroup_EUCENT1    = "sg-0cc81ab8f10d5016d"
 
 # Region - Canada Central (ca-central-1)
 region_CACENT1      = "ca-central-1"
-imageID_CACENT1     = "ami-059fd80230a4c4512" #"ami-006e2b38fa3f30a8e"
-secGroup_CACENT1    = "sg-0ce99bc9e1b8a252c"
+imageID_CACENT1     = "ami-0afc1d0187db50762" #"ami-059fd80230a4c4512" #"ami-006e2b38fa3f30a8e"
+secGroup_CACENT1    = "sg-0daa11ad7e1542a37" #"sg-0ce99bc9e1b8a252c"
 
 # Regions around the world
 WregionsNAME = "w"
@@ -309,6 +347,17 @@ ALL2regions = [(region_USEAST1,  imageID_USEAST1,  secGroup_USEAST1),
                (region_USWEST2,  imageID_USWEST2,  secGroup_USWEST2),
                (region_EUCENT1,  imageID_EUCENT1,  secGroup_EUCENT1)]
 
+# EU/UK regions
+ALL3regionsNAME = "all3"
+ALL3regions = [(region_USEAST1,  imageID_USEAST1,  secGroup_USEAST1),
+               (region_EUWEST1,  imageID_EUWEST1,  secGroup_EUWEST1),
+               (region_USEAST2,  imageID_USEAST2,  secGroup_USEAST2),
+               (region_EUWEST2,  imageID_EUWEST2,  secGroup_EUWEST2),
+               (region_USWEST1,  imageID_USWEST1,  secGroup_USWEST1),
+               (region_EUWEST3,  imageID_EUWEST3,  secGroup_EUWEST3),
+               (region_USWEST2,  imageID_USWEST2,  secGroup_USWEST2),
+               (region_EUCENT1,  imageID_EUCENT1,  secGroup_EUCENT1)]
+
 ## regions = (USregionsNAME, USregions)
 #regions = (EUregionsNAME, EUregions)
 ## regions = (WregionsNAME, Wregions)
@@ -316,8 +365,13 @@ regions = (ONEregionsNAME, ONEregions)
 #regions = (ALLregionsNAME, ALLregions)
 ## regions = (ALL2regionsNAME, ALL2regions)
 
+
 sshOpt1  = "StrictHostKeyChecking=no"
 sshOpt2  = "ConnectTimeout=10"
+sshOpt3  = "ServerAliveInterval=60"
+sshOpt4  = "TCPKeepAlive=yes"
+sshOpt5  = "serverAliveCountMax=20"
+
 
 # Files
 instFile  = "instances"
@@ -328,12 +382,14 @@ descrFile = "description"
 
 runDocker  = False      # to run the code within docker contrainers
 docker     = "docker"
-dockerBase = "damysus"  # name of the docker container
+dockerBase = "damysus2"  # name of the docker container
 networkLat = 0          # network latency in ms
 networkVar = 0          # variation of the network latency
 rateMbit   = 0          # bandwidth
 dockerMem  = 0          # memory used by containers (0 means no constraints)
 dockerCpu  = 0          # cpus used by containers (0 means no constraints)
+msgLoss    = 0          # % of messages lost
+stressNg   = False      # whether to use stress-ng or not
 
 startRport = 8760
 startCport = 9760
@@ -353,6 +409,11 @@ class Protocol(Enum):
     QUICK     = "BASIC_QUICK"              # Accumulator only
     COMB      = "BASIC_CHEAP_AND_QUICK"    # Damysus (Checker + Accumulator)
     FREE      = "BASIC_FREE"               # hash & signature-free Damysus
+    DAMR      = "BASIC_DAMYSUS_ROTE"       # Damysus + kinda ROTE
+    DAMA      = "BASIC_DAMYSUS_ACHILLES"   # Damysus + Pacemaker + kinda Achilles
+    DAMP      = "BASIC_DAMYSUS_PACEMAKER"  # Damysus + Pacemaker
+    DAMQ      = "BASIC_DAMYSUS3_PACEMAKER" # Damysus + Pacemaker + 3f+1 nodes
+    ROLL      = "BASIC_ROLL"               # rollback prevention
     ONEP      = "BASIC_ONEP"               # 1+1/2 phase Damysus (case 1)
     ONEPB     = "BASIC_ONEPB"              # 1+1/2 phase Damysus (case 2)
     ONEPC     = "BASIC_ONEPC"              # 1+1/2 phase Damysus (case 3)
@@ -460,8 +521,8 @@ def startInstances(numRepInstances,numClInstances):
         print("starting", str(count), "instance(s) here:", str(reg))
         #subprocess.run(["aws","ec2","run-instances","--region",region,"--image-id",imageID,"--count",str(numRepInstances+numClInstances),"--instance-type",instType,"--security-group-ids",secGroup,"--subnet-id",subnetID1_1], stdout=f)
         #subprocess.run(["aws","ec2","run-instances","--region",region,"--image-id",imageID,"--count",str(numRepInstances+numClInstances),"--instance-type",instType,"--security-group-ids",secGroup], stdout=f)
-        print("aws ec2 run-instances --region " + region + " --image-id " + imageID + " --count " + str(count) + " --instance-type " + instType + " --security-group-ids " + secGroup)
-        subprocess.run(["aws","ec2","run-instances","--region",region,"--image-id",imageID,"--count",str(count),"--instance-type",instType,"--security-group-ids",secGroup], stdout=f)
+        print("aws ec2 run-instances --region " + region + " --image-id " + imageID + " --count " + str(count) + " --instance-type " + instType + " --key-name " + "aws" + " --security-group-ids " + secGroup)
+        subprocess.run(["aws","ec2","run-instances","--region",region,"--image-id",imageID,"--count",str(count),"--instance-type",instType,"--key-name","aws","--security-group-ids",secGroup], stdout=f)
         f.close()
 
         f = open(iFile,'r')
@@ -508,8 +569,8 @@ def startInstances(numRepInstances,numClInstances):
 
 
 def copyToAddr(sshAdr):
-    s1  = "scp -i " + pem + " -o " + sshOpt1 + " "
-    s2  = " " + sshAdr+":/home/ubuntu/xhotstuff/"
+    s1  = "scp -i " + pem + " -o " + sshOpt1 + " -o " + sshOpt3 + " -o " + sshOpt4 + " -o " + sshOpt5 + " "
+    s2  = " " + sshAdr+":/home/ubuntu/app/"
     scp = "until " + s1 + addresses + s2 + "; do sleep 1; done"
     subprocess.run(scp, shell=True, check=True)
     if copyAll:
@@ -518,11 +579,11 @@ def copyToAddr(sshAdr):
         subprocess.run(s1 + "Makefile"         + s2 + "",  shell=True, check=True)
         subprocess.run(s1 + "App.tar.gz"       + s2 + "",  shell=True, check=True)
         subprocess.run(s1 + "Enclave.tar.gz"   + s2 + "",  shell=True, check=True)
-        cmd = "\"\"cd xhotstuff && tar xvzf App.tar.gz && tar xvzf Enclave.tar.gz\"\"" # && make clean
-        p = Popen(["ssh","-i",pem,"-o",sshOpt1,"-ntt",sshAdr,cmd])
+        cmd = "\"\"cd app && tar xvzf App.tar.gz && tar xvzf Enclave.tar.gz\"\"" # && make clean
+        p = Popen(["ssh","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,cmd])
         p.communicate()
     else:
-        subprocess.run(["scp","-i",pem,"-o",sshOpt1,params,sshAdr+":/home/ubuntu/xhotstuff/App/"])
+        subprocess.run(["scp","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,params,sshAdr+":/home/ubuntu/app/App/"])
 
 
 def copyToInstances(instances):
@@ -550,7 +611,7 @@ def makeInstances(instanceIds,protocol):
     procs = []
     for (n,i,priv,pub,dns,region) in instanceIds:
         sshAdr = "ubuntu@" + dns
-        p      = Popen(["scp","-i",pem,"-o",sshOpt1,params,sshAdr+":/home/ubuntu/xhotstuff/App/"])
+        p      = Popen(["scp","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,params,sshAdr+":/home/ubuntu/app/App/"])
         procs.append(("R",n,i,priv,pub,dns,region,p))
         print("COPYNIG:",i)
 
@@ -562,11 +623,21 @@ def makeInstances(instanceIds,protocol):
     # then making - we reset procs
     procs = []
     for (n,i,priv,pub,dns,region) in instanceIds:
-        sshAdr = "ubuntu@" + dns
-        #subprocess.run(["scp","-i",pem,"-o",sshOpt1,params,sshAdr+":/home/ubuntu/xhotstuff/App/"])
+        sshAdr  = "ubuntu@" + dns
+        #subprocess.run(["scp","-i",pem,"-o",sshOpt1,params,sshAdr+":/home/ubuntu/app/App/"])
         #copyToAddr(sshAdr)
-        cmd    = "\"\"" + srcsgx + " && cd xhotstuff && mkdir -p stats && make clean && " + make + "\"\""
-        p      = Popen(["ssh","-i",pem,"-o",sshOpt1,"-ntt",sshAdr,cmd])
+
+        stressCmd = "pwd"
+        if stressNg:
+            print("installing stress-ng")
+            stressCmd = "sudo add-apt-repository -y ppa:colin-king/stress-ng && sudo apt update && sudo apt install -y stress-ng"
+
+        lossCmd = "pwd"
+        if msgLoss > 0:
+            print("setting message loss:", msgLoss)
+            lossCmd = "sudo tc qdisc add dev eth0 root netem loss " + str(msgLoss) + "%"
+        cmd     = "\"\"" + srcsgx + " && cd app && mkdir -p stats && make clean && " + make + " && " + stressCmd + " && " + lossCmd + "\"\""
+        p       = Popen(["ssh","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,cmd])
         print("MAKING:",i)
         print("the commandline is {}".format(p.args))
         procs.append(("R",n,i,priv,pub,dns,region,p))
@@ -583,33 +654,59 @@ def makeInstances(instanceIds,protocol):
 def copyClientStats(instanceClIds):
     for (n,i,priv,pub,dns,region) in instanceClIds:
         sshAdr = "ubuntu@" + dns
-        subprocess.run(["scp","-i",pem,"-o",sshOpt1,sshAdr+":/home/ubuntu/xhotstuff/stats/*","stats/"])
+        subprocess.run(["scp","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,sshAdr+":/home/ubuntu/app/stats/*","stats/"])
 # End of copyClientStats
 
 
-def executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,instance):
+def executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numJoiners,instance):
+    newtimeout = timeout #int(math.ceil(timeout+math.log(numFaults,2)))
+    print(">> timeout change: ", str(timeout), " -> " , str (newtimeout))
+
     print(">> connecting to",str(len(instanceRepIds)),"replica instance(s)")
     print(">> connecting to",str(len(instanceClIds)),"client instance(s)")
 
     procsRep   = []
     procsCl    = []
-    newtimeout = int(math.ceil(timeout+math.log(numFaults,2)))
     server     = "./sgxserver" if needsSGX(protocol) else "./server"
     client     = "./sgxclient" if needsSGX(protocol) else "./client"
+
+    stressCmd = "pwd"
+    if stressNg:
+        print("starting stress-ng")
+        stressCmd = "stress-ng --cpu 1 --timeout 60s"
 
     for (n,i,priv,pub,dns,region) in instanceRepIds:
         # we give some time for the nodes to connect gradually
         if (n%10 == 5):
             time.sleep(2)
         sshAdr = "ubuntu@" + dns
-        srun2  = server + " " + str(n) + " " + str(numFaults) + " " + str(constFactor) + " " + str(numViews) + " " + str(newtimeout) + " " + str(opdist)
+        srun2  = server + " " + str(n) + " " + str(numFaults) + " " + str(constFactor) + " " + str(numViews) + " " + str(newtimeout) + " " + str(timeoutMul) + " " + str(timeoutDiv) + " " + str(opdist) + " " + str(syncPeriod) + " " + str(joinPeriod) + " " + str(numJoiners) + " " + str(quantileSize1) + " " + str(quantileSize2) + " " + str(skipViews)
         srun   = "screen -d -m " + srun2
-        cmd    = "\"\"" + srcsgx + " && cd xhotstuff && rm -f stats/* && " + srun2 + "\"\""
-        p      = Popen(["ssh","-i",pem,"-o",sshOpt1,"-ntt",sshAdr,cmd])
+        cmd    = "\"\"" + srcsgx + " && cd app && rm -f stats/* && " + stressCmd + " && " + srun2 + "\"\""
+        p      = Popen(["ssh","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,cmd])
         print("the commandline is {}".format(p.args))
         procsRep.append(("R",n,i,priv,pub,dns,region,p))
 
+    print("starting", len(procsRep), "replicas")
+
+    totalStartTime = 0
+
+    remaining = procsRep.copy()
+    while 0 < len(remaining) and totalStartTime < cutOffBound:
+        print("processes that haven't started (" , totalStartTime , "," , cutOffBound , "):", remaining)
+        totalStartTime += 1
+        rem = remaining.copy()
+        for (tag,n,i,priv,pub,dns,region,p) in rem:
+            cmdF = "find app/" + statsdir + " -name start-" + str(n) + "* | wc -l"
+            addr = "ubuntu@" + dns
+            outF = int(subprocess.run("ssh -i " + pem + " -o " + sshOpt1 + " -o " + sshOpt3 + " -o " + sshOpt4 + " -o " + sshOpt5 + " -ntt " + addr + " " + cmdF, shell=True, capture_output=True, text=True).stdout)
+            #print("attempting to retrieve 'start' file for" , str(n), ":", outF)
+            if 0 < int(outF):
+                print("********** process started:" , str(n), "**********")
+                remaining.remove((tag,n,i,priv,pub,dns,region,p))
+
     print("started", len(procsRep), "replicas")
+    print("processes that we gave up on:", remaining)
 
     # we give some time for the replicas to connect before starting the clients
     wait = 5 + int(math.ceil(math.log(numFaults,2)))
@@ -619,8 +716,8 @@ def executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTran
         sshAdr = "ubuntu@" + dns
         crun2  = client + " " + str(n) + " " + str(numFaults) + " " + str(constFactor) + " " + str(numClTrans) + " " + str(sleepTime) + " " + str(instance)
         crun   = "screen -d -m " + crun2
-        cmd    = "\"\"" + srcsgx + " && cd xhotstuff && rm -f stats/* && " + crun2 + "\"\""
-        p      = Popen(["ssh","-i",pem,"-o",sshOpt1,"-ntt",sshAdr,cmd])
+        cmd    = "\"\"" + srcsgx + " && cd app && rm -f stats/* && " + crun2 + "\"\""
+        p      = Popen(["ssh","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,cmd])
         print("the commandline is {}".format(p.args))
         procsCl.append(("C",n,i,priv,pub,dns,region,p))
 
@@ -647,9 +744,9 @@ def executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTran
             print("remaining processes at time (", totalTime, "):", remaining)
             rem = remaining.copy()
             for (tag,n,i,priv,pub,dns,region,p) in rem:
-                cmdF = "find xhotstuff/" + statsdir + " -name done-" + str(n) + "* | wc -l"
+                cmdF = "find app/" + statsdir + " -name done-" + str(n) + "* | wc -l"
                 addr = "ubuntu@" + dns
-                outF = int(subprocess.run("ssh -i " + pem + " -o " + sshOpt1 + " -ntt " + addr + " " + cmdF, shell=True, capture_output=True, text=True).stdout)
+                outF = int(subprocess.run("ssh -i " + pem + " -o " + sshOpt1 + " -o " + sshOpt3 + " -o " + sshOpt4 + " -o " + sshOpt5 + " -ntt " + addr + " " + cmdF, shell=True, capture_output=True, text=True).stdout)
                 #print("attempting to retrieve 'done' file for" , str(n), ":", outF)
                 if 0 < int(outF):
                     print("process done:" , str(n))
@@ -757,18 +854,21 @@ def testAWS():
 
     (instanceRepIds, instanceClIds) = startInstances(numRepInstances,numClInstances)
     makeInstances(instanceRepIds+instanceClIds,protocol)
-    executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,instance)
+    executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numJoiners,instance)
     terminateInstances(instanceRepIds + instanceClIds)
+
+    terminateAllInstancesAllRegs()
 # End of testAWS
 
 
-def executeAWS(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numDeadNodes):
+def executeAWS(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numJoiners,numDeadNodes):
     print("<<<<<<<<<<<<<<<<<<<<",
           "protocol="+protocol.value,
           ";regions="+regions[0],
           ";payload="+str(payloadSize),
-          "(factor="+str(constFactor)+")",
-          "#faults="+str(numFaults),
+          ";factor="+str(constFactor),
+          ";#faults="+str(numFaults),
+          ";#joiners="+str(numJoiners),
           "[complete-runs="+str(completeRuns),"aborted-runs="+str(abortedRuns)+"]")
     print("aborted runs so far:", aborted)
 
@@ -790,13 +890,13 @@ def executeAWS(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,slee
         #reps = repeats * repeatsL2
         clearStatsDir()
         # execute the experiment
-        executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,instance)
+        executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numJoiners,instance)
 
         procs = []
         # copy the stats over
         for (n,i,priv,pub,dns,region) in instanceRepIds:
             sshAdr = "ubuntu@" + dns
-            p = Popen(["scp","-i",pem,"-o",sshOpt1,sshAdr+":/home/ubuntu/xhotstuff/stats/*","stats/"])
+            p = Popen(["scp","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,sshAdr+":/home/ubuntu/app/stats/*","stats/"])
             procs.append((n,i,priv,pub,dns,region,p))
 
         for (n,i,priv,pub,dns,region,p) in procs:
@@ -804,7 +904,7 @@ def executeAWS(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,slee
                 time.sleep(1)
             print("stats done:",i)
 
-        (throughputView,latencyView,handle,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numDeadNodes,instance,repeats)
+        (throughputView,latencyView,handle,timeouts,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats)
 # End of executeAWS
 
 
@@ -823,64 +923,203 @@ def runAWS():
     for numFaults in faults:
         for instance2 in range(repeatsL2):
             # starts the instances
-            maxNumReps = (3 * numFaults) + 1
+            maxNumReps = getMaxNumReps(numFaults) #(3 * numFaults) + 1
             (instanceRepIds, instanceClIds) = startInstances(maxNumReps,numClients)
             copyToInstances(instanceRepIds + instanceClIds)
 
-            numDeadNodes = numFaults
+            numDeadNodes = 0 #numFaults
 
             # ------
             # HotStuff-like baseline
             if runBase:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
             # Cheap-HotStuff (TEE locked/prepared blocks)
             if runCheap:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
             # Quick-HotStuff (Accumulator)
             if runQuick:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
             # Quick-HotStuff (Accumulator) - debug version
             if runQuickDbg:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
             # Combines Cheap&Quick-HotStuff
             if runComb:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
+            # ------
+            # Damysus + kinda ROTE
+            if runDamr:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMR,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
+            # ------
+            # Damysus + kinda Achilles
+            if runDama:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMA,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
+            # ------
+            # Damysus + Pacemaker
+            if runDamp:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
+            # ------
+            # Damysus + Pacemaker + 3f+1 nodes
+            if runDamq:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMQ,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
             # Free
             if runFree:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
+            # ------
+            # Rollback prevention
+            if runRoll:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ROLL,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
             # Onep
             if runOnep:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
             # OnepB
             if runOnepB:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
             # OnepC
             if runOnepC:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
             # OnepD
             if runOnepD:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
             # Chained HotStuff-like baseline
             if runChBase:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
             # Chained Cheap&Quick
             if runChComb:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
             # Chained Cheap&Quick - debug version
             if runChCombDbg:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
+            # ------
+            # We now terminate all instances just in case
+            #terminateAllInstances()
+
+            # terminates the instances
+            terminateInstances(instanceRepIds + instanceClIds)
+
+    print("num complete runs=", completeRuns)
+    print("num aborted runs=", abortedRuns)
+    print("aborted runs:", aborted)
+
+    createPlot(pointsFile)
+# End of runAWS
+
+
+def getMaxNumReps(numFaults):
+    maxNumReps = (2 * numFaults) + 1
+    if runBase or runQuick or runQuickDbg or runDamq or runChBase:
+        maxNumReps = (3 * numFaults) + 1
+    return maxNumReps
+
+## For p9 - to run experiments where we vary the number of nodes trying to rejoin the system
+def runAWSJoin(numFaults,joiners):
+    global numMakeCores
+    numMakeCores = 1
+
+    # Creating stats directory
+    Path(statsdir).mkdir(parents=True, exist_ok=True)
+
+    # terminating all instances
+    terminateAllInstances()
+
+    printNodePointParams()
+
+    print("will test the following number of joiners: ", joiners)
+
+    for j in joiners:
+        print("number of joiners: ", j)
+
+        for instance2 in range(repeatsL2):
+            # starts the instances
+            maxNumReps = getMaxNumReps(numFaults)
+            (instanceRepIds, instanceClIds) = startInstances(maxNumReps,numClients)
+            copyToInstances(instanceRepIds + instanceClIds)
+
+            numDeadNodes = 0 #numFaults
+
+            # ------
+            # HotStuff-like baseline
+            if runBase:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Cheap-HotStuff (TEE locked/prepared blocks)
+            if runCheap:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Quick-HotStuff (Accumulator)
+            if runQuick:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Quick-HotStuff (Accumulator) - debug version
+            if runQuickDbg:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Combines Cheap&Quick-HotStuff
+            if runComb:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Damysus + kinda ROTE
+            if runDamr:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMR,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Damysus + kinda Achilles
+            if runDama:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMA,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Damysus + Pacemaker
+            if runDamp:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Damysus + Pacemaker + 3f+1 nodes
+            if runDamq:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMQ,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Free
+            if runFree:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Rollback prevention
+            if runRoll:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ROLL,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Onep
+            if runOnep:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # OnepB
+            if runOnepB:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # OnepC
+            if runOnepC:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # OnepD
+            if runOnepD:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Chained HotStuff-like baseline
+            if runChBase:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Chained Cheap&Quick
+            if runChComb:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
+            # ------
+            # Chained Cheap&Quick - debug version
+            if runChCombDbg:
+                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
             # ------
             # We now terminate all instances just in case
             #terminateAllInstances()
@@ -921,7 +1160,7 @@ def startRemoteContainers(nodes,numReps,numClients):
         stop_cmd = docker + " stop " + instance
         rm_cmd   = docker + " rm " + instance
         sshAdr   = node["user"] + "@" + node["host"]
-        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,stop_cmd + "; " + rm_cmd])
+        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,stop_cmd + "; " + rm_cmd])
         print("the commandline is {}".format(s1.args))
         s1.communicate()
         #
@@ -933,12 +1172,12 @@ def startRemoteContainers(nodes,numReps,numClients):
         opt4 = "--name " + instance
         opts = " ".join([opt1, opt2, opt3, opt4])
         run_cmd = docker + " run -td " + opts + " " + dockerBase
-        s2 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,run_cmd])
+        s2 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,run_cmd])
         print("the commandline is {}".format(s2.args))
         s2.communicate()
         #
         exec_cmd = docker + " exec -t " + instance + " bash -c \"" + srcsgx + "; mkdir " + statsdir + "\""
-        s3 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,exec_cmd])
+        s3 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,exec_cmd])
         print("the commandline is {}".format(s3.args))
         s3.communicate()
         #
@@ -947,25 +1186,25 @@ def startRemoteContainers(nodes,numReps,numClients):
             print("----changing network latency to " + str(networkLat) + "ms")
             correlation=100
             dist="normal" #"uniform"
-            tc_cmd = "tc qdisc add dev eth0 root netem delay " + str(networkLat) + "ms " + str(networkVar) + "ms " + str(correlation) +"% distribution " + dist
+            tc_cmd = "tc qdisc add dev eth0 root netem delay " + str(networkLat) + "ms " + str(networkVar) + "ms " + str(correlation) +"% distribution " + dist + " loss " + str(msgLoss) + "%"
             lat_cmd = docker + " exec -t " + instance + " bash -c \"" + tc_cmd + "\""
-            s4 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,lat_cmd])
+            s4 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,lat_cmd])
             print("the commandline is {}".format(s4.args))
             s4.communicate()
         #
         # Extract the IP address of the container
         address = instance + "_addr"
         ip_cmd = "cd " + node["dir"] + "; " + docker + " inspect " + instance + " | jq '.[].NetworkSettings.Networks." + clusterNet + ".IPAddress' > " + address
-        s5 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,ip_cmd])
+        s5 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,ip_cmd])
         print("the commandline is {}".format(s5.args))
         s5.communicate()
         #
-        s6 = Popen(["scp","-i",node["key"],"-o",sshOpt1,sshAdr+":"+node["dir"]+"/"+address,address])
+        s6 = Popen(["scp","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,sshAdr+":"+node["dir"]+"/"+address,address])
         print("the commandline is {}".format(s6.args))
         s6.communicate()
         #
         rm_cmd = "cd " + node["dir"] + "; rm " + address
-        s7 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,rm_cmd])
+        s7 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,rm_cmd])
         print("the commandline is {}".format(s7.args))
         s7.communicate()
         #
@@ -992,12 +1231,12 @@ def startRemoteContainers(nodes,numReps,numClients):
         dockerInstance = dockerBase + i
         sshAdr = node["user"] + "@" + node["host"]
         #
-        s1 = Popen(["scp","-i",node["key"],"-o",sshOpt1,addresses,sshAdr+":"+node["dir"]+"/"+addresses])
+        s1 = Popen(["scp","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,addresses,sshAdr+":"+node["dir"]+"/"+addresses])
         print("the commandline is {}".format(s1.args))
         s1.communicate()
         #
         cp_cmd = docker + " cp " + node["dir"]+"/"+addresses + " " + dockerInstance + ":/app/"
-        s2 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,cp_cmd])
+        s2 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,cp_cmd])
         print("the commandline is {}".format(s2.args))
         s2.communicate()
 
@@ -1019,17 +1258,17 @@ def makeCluster(instanceIds,protocol):
         #
         dockerInstance = dockerBase + i
         sshAdr = node["user"] + "@" + node["host"]
-        s1 = Popen(["scp","-i",node["key"],"-o",sshOpt1,params,sshAdr+":"+node["dir"]+"/params.h"])
+        s1 = Popen(["scp","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,params,sshAdr+":"+node["dir"]+"/params.h"])
         print("the commandline is {}".format(s1.args))
         s1.communicate()
         #
         cp_cmd = docker + " cp " + node["dir"]+"/params.h" + " " + dockerInstance + ":/app/App/"
-        s2 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,cp_cmd])
+        s2 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,cp_cmd])
         print("the commandline is {}".format(s2.args))
         s2.communicate()
         #
         make_cmd = docker + " exec -t " + dockerInstance + " bash -c \"" + srcsgx + "; make clean; " + make + "\""
-        s3 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,make_cmd])
+        s3 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,make_cmd])
         print("the commandline is {}".format(s3.args))
         #s3.communicate()
         procs.append((n,i,node,s3))
@@ -1059,9 +1298,9 @@ def executeClusterInstances(instanceRepIds,instanceClIds,protocol,constFactor,nu
             time.sleep(2)
         dockerI = dockerBase + i
         sshAdr  = node["user"] + "@" + node["host"]
-        srun    = " ".join([server,str(n),str(numFaults),str(constFactor),str(numViews),str(newtimeout),str(opdist)])
+        srun    = " ".join([server,str(n),str(numFaults),str(constFactor),str(numViews),str(newtimeout),str(timeoutMul),str(timeoutDiv),str(opdist),str(syncPeriod),str(joinPeriod),str(numJoiners),str(quantileSize1),str(quantileSize2),str(skipViews)])
         run_cmd = docker + " exec -t " + dockerI + " bash -c \"" + srcsgx + "; rm -f stats/*; " + srun + "\""
-        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,run_cmd])
+        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,run_cmd])
         print("the commandline is {}".format(s1.args))
         #s1.communicate()
         procsRep.append(("R",n,i,node,s1))
@@ -1077,7 +1316,7 @@ def executeClusterInstances(instanceRepIds,instanceClIds,protocol,constFactor,nu
         sshAdr  = node["user"] + "@" + node["host"]
         crun    = " ".join([client,str(n),str(numFaults),str(constFactor),str(numClTrans),str(sleepTime),str(instance)])
         run_cmd = docker + " exec -t " + dockerI + " bash -c \"" + srcsgx + "; rm -f stats/*; " + crun + "\""
-        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,run_cmd])
+        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,run_cmd])
         print("the commandline is {}".format(s1.args))
         #s1.communicate()
         procsCl.append(("C",n,i,node,s1))
@@ -1113,16 +1352,16 @@ def executeClusterInstances(instanceRepIds,instanceClIds,protocol,constFactor,nu
                 find_done = "find /app/" + statsdir + " -name done-" + str(i) + "* | wc -l"
                 doneFile  = "done" + str(i)
                 find_cmd  = "cd " + node["dir"] + "; " + docker + " exec -t " + dockerI + " bash -c \"" + find_done + "\" > " + doneFile
-                s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,find_cmd])
+                s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,find_cmd])
                 print("the commandline is {}".format(s1.args))
                 s1.communicate()
                 #
-                s2 = Popen(["scp","-i",node["key"],"-o",sshOpt1,sshAdr+":"+node["dir"]+"/"+doneFile,doneFile])
+                s2 = Popen(["scp","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,sshAdr+":"+node["dir"]+"/"+doneFile,doneFile])
                 print("the commandline is {}".format(s2.args))
                 s2.communicate()
                 #
                 rm_cmd = "cd " + node["dir"] + "; rm " + doneFile
-                s3 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,rm_cmd])
+                s3 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,rm_cmd])
                 print("the commandline is {}".format(s3.args))
                 s3.communicate()
                 with open(doneFile, 'r') as f:
@@ -1168,34 +1407,34 @@ def executeClusterInstances(instanceRepIds,instanceClIds,protocol,constFactor,nu
         #
         kill_all = "killall -q sgxserver sgxclient server client; fuser -k " + ports
         kill_cmd = docker + " exec -t " + dockerI + " bash -c \"" + kill_all + "\""
-        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,kill_cmd])
+        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,kill_cmd])
         print("the commandline is {}".format(s1.args))
         s1.communicate()
         #
         src = dockerI + ":/app/" + statsdir + "/."
         dst = statsdir + "/"
         cp_cmd = "cd " + node["dir"] + "; mkdir " + statsdir + "; " + docker + " cp " + src + " " + dst
-        s2 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,cp_cmd])
+        s2 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,cp_cmd])
         print("the commandline is {}".format(s2.args))
         s2.communicate()
         #
-        subprocess.run(["scp","-i",node["key"],"-o",sshOpt1,sshAdr+":"+node["dir"]+"/stats/*","stats/"])
+        subprocess.run(["scp","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,sshAdr+":"+node["dir"]+"/stats/*","stats/"])
         #
         rcmd = "rm /app/" + statsdir + "/*"
         docker_rm_cmd = docker + " exec -t " + dockerI + " bash -c \"" + rcmd + "\""
         rm_cmd = "cd " + node["dir"] + "; rm -Rf " + statsdir + "; " + docker_rm_cmd
-        s3 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,rm_cmd])
+        s3 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,rm_cmd])
         print("the commandline is {}".format(s3.args))
         s3.communicate()
 # End of executeClusterInstances
 
 
-def executeCluster(info,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numDeadNodes):
+def executeCluster(info,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numJoiners,numDeadNodes):
     print("<<<<<<<<<<<<<<<<<<<<",
           "protocol="+protocol.value,
           ";payload="+str(payloadSize),
-          "(factor="+str(constFactor)+")",
-          "#faults="+str(numFaults),
+          ";factor="+str(constFactor),
+          ";#faults="+str(numFaults),
           "[complete-runs="+str(completeRuns),"aborted-runs="+str(abortedRuns)+"]")
     print("aborted runs so far:", aborted)
 
@@ -1216,14 +1455,14 @@ def executeCluster(info,protocol,constFactor,numClTrans,sleepTime,numViews,cutOf
         clearStatsDir()
         # execute the experiment
         executeClusterInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,instance)
-        (throughputView,latencyView,handle,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numDeadNodes,instance,repeats)
+        (throughputView,latencyView,handle,timeouts,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats)
 
     for (n,i,node) in instanceRepIds + instanceClIds:
         instance = dockerBase + i
         stop_cmd = docker + " stop " + instance
         rm_cmd   = docker + " rm " + instance
         sshAdr   = node["user"] + "@" + node["host"]
-        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,stop_cmd + "; " + rm_cmd])
+        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,stop_cmd + "; " + rm_cmd])
         print("the commandline is {}".format(s1.args))
         s1.communicate()
 # End of executeCluster
@@ -1250,7 +1489,7 @@ def runCluster():
     # Leave all swarms before starting
     for node in nodes:
         sshAdr = node["user"] + "@" + node["host"]
-        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,leave_cmd])
+        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,leave_cmd])
         print("the commandline is {}".format(s1.args))
         s1.communicate()
     subprocess.run([leave_cmd], shell=True) #, check=True)
@@ -1261,7 +1500,7 @@ def runCluster():
         print("----join command:" + join_cmd)
         for node in nodes:
             sshAdr = node["user"] + "@" + node["host"]
-            s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,join_cmd])
+            s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,join_cmd])
             print("the commandline is {}".format(s1.args))
             s1.communicate()
         net_cmd = docker + " network create --driver=overlay --attachable " + clusterNet
@@ -1270,65 +1509,85 @@ def runCluster():
         print("----no join command")
 
     for numFaults in faults:
-        numDeadNodes = numFaults
+        numDeadNodes = 0 #numFaults
 
         # ------
         # HotStuff-like baseline
         if runBase:
-            executeCluster(info=info,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
         # Cheap-HotStuff (TEE locked/prepared blocks)
         if runCheap:
-            executeCluster(info=info,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
         # Quick-HotStuff (Accumulator)
         if runQuick:
-            executeCluster(info=info,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
         # Quick-HotStuff (Accumulator) - debug version
         if runQuickDbg:
-            executeCluster(info=info,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
         # Combines Cheap&Quick-HotStuff
         if runComb:
-            executeCluster(info=info,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
+        # ------
+        # Damysus + kinda ROTE
+        if runDamr:
+            executeCluster(info=info,protocol=Protocol.DAMR,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
+        # ------
+        # Damysus + kinda Achilles
+        if runDama:
+            executeCluster(info=info,protocol=Protocol.DAMA,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
+        # ------
+        # Damysus + Pacemaker
+        if runDamp:
+            executeCluster(info=info,protocol=Protocol.DAMP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
+        # ------
+        # Damysus + Pacemaker + 3f+1 nodes
+        if runDamq:
+            executeCluster(info=info,protocol=Protocol.DAMQ,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
         # Free
         if runFree:
-            executeCluster(info=info,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
+        # ------
+        # Roll
+        if runRoll:
+            executeCluster(info=info,protocol=Protocol.ROLL,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
         # Onep
         if runOnep:
-            executeCluster(info=info,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
         # OnepB
         if runOnepB:
-            executeCluster(info=info,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
         # OnepC
         if runOnepC:
-            executeCluster(info=info,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
         # OnepD
         if runOnepD:
-            executeCluster(info=info,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
         # Chained HotStuff-like baseline
         if runChBase:
-            executeCluster(info=info,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
         # Chained Cheap&Quick
         if runChComb:
-            executeCluster(info=info,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
         # Chained Cheap&Quick - debug version
         if runChCombDbg:
-            executeCluster(info=info,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes)
+            executeCluster(info=info,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
 
     # cleanup
     for node in nodes:
         sshAdr = node["user"] + "@" + node["host"]
-        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,leave_cmd])
+        s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,leave_cmd])
         print("the commandline is {}".format(s1.args))
         s1.communicate()
     subprocess.run([leave_cmd], shell=True) #, check=True)
@@ -1352,7 +1611,7 @@ def prepareCluster():
     for node in nodes:
         sshAdr = node["user"] + "@" + node["host"]
         prep_cmd = "cd " + node["dir"] + "; git clone https://github.com/vrahli/damysus.git; cd damysus; docker build -t damysus ."
-        s = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-ntt",sshAdr,prep_cmd])
+        s = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,prep_cmd])
         procs.append((node,s))
 
     for (node,p) in procs:
@@ -1364,7 +1623,7 @@ def prepareCluster():
 
 ## Returns True if the protocol requires SGX
 def needsSGX(protocol):
-    if (protocol == Protocol.BASE or protocol == Protocol.CHBASE or protocol == Protocol.QUICKDBG or protocol == Protocol.CHCOMBDBG):
+    if (protocol in [Protocol.BASE, Protocol.CHBASE, Protocol.QUICKDBG, Protocol.CHCOMBDBG]):
         return False
     else:
         return True
@@ -1380,7 +1639,8 @@ def clearStatsDir():
     files4 = glob.glob(statsdir+"/crypto*")
     files5 = glob.glob(statsdir+"/done*")
     files6 = glob.glob(statsdir+"/client-throughput-latency*")
-    for f in files0 + files1 + files2 + files3 + files4 + files5 + files6:
+    files7 = glob.glob(statsdir+"/times*")
+    for f in files0 + files1 + files2 + files3 + files4 + files5 + files6 + files7:
         #print(f)
         os.remove(f)
 # End of clearStatsDir
@@ -1420,8 +1680,10 @@ def mkApp(protocol,constFactor,numFaults,numTrans,payloadSize):
         subprocess.run([docker + " cp Enclave/. " + edstx], shell=True, check=True)
         subprocess.run([docker + " exec -t " + instancex + " bash -c \"make clean\""], shell=True, check=True)
         if needsSGX(protocol):
+            print("protocol needs SGX")
             subprocess.run([docker + " exec -t " + instancex + " bash -c \"" + srcsgx + "; make -j " + str(ncores) + " SGX_MODE=" + sgxmode + "\""], shell=True, check=True)
         else:
+            print("protocol doesn't need SGX")
             subprocess.run([docker + " exec -t " + instancex + " bash -c \"make -j " + str(ncores) + " server client\""], shell=True, check=True)
 
         tmp = "docker_tmp"
@@ -1447,7 +1709,7 @@ def mkApp(protocol,constFactor,numFaults,numTrans,payloadSize):
 # End of mkApp
 
 
-def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numDeadNodes,instance):
+def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numDeadNodes,numJoiners,instance):
     subsReps    = [] # list of replica subprocesses
     subsClients = [] # list of client subprocesses
     numReps = (constFactor * numFaults) + 1
@@ -1481,7 +1743,7 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
         # we give some time for the nodes to connect gradually
         if (i%10 == 5):
             time.sleep(2)
-        cmd = " ".join([server, str(i), str(numFaults), str(constFactor), str(numViews), str(newtimeout), str(opdist)])
+        cmd = " ".join([server, str(i), str(numFaults), str(constFactor), str(numViews), str(newtimeout), str(timeoutMul), str(timeoutDiv), str(opdist), str(syncPeriod), str(joinPeriod), str(numJoiners), str(quantileSize1), str(quantileSize2), str(skipViews)])
         if runDocker:
             dockerInstance = dockerBase + str(i)
             if needsSGX(protocol):
@@ -1540,8 +1802,10 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
     else:
         remaining = subsReps.copy()
         # We wait here for all processes to complete
+        #     | We also want to allow numJoiners to not be done since they might be waiting to rejoin
+        #     | a session but the other nodes are already done, i.e., replace 0 with numJoiners.
         # but we stop the execution if it takes too long (cutOffBound)
-        while 0 < len(remaining) and totalTime < cutOffBound:
+        while numJoiners < len(remaining) and totalTime < cutOffBound:
             print("remaining processes:", remaining)
             # We filter out the ones that are done. x is of the form (t,i,p)
             if runDocker:
@@ -1563,7 +1827,7 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
 
     if totalTime < cutOffBound:
         completeRuns += 1
-        print("all", len(subsReps)+len(subsClients), "processes are done")
+        print("enough processes are done:", len(remaining) , "remaining amongst", len(subsReps)+len(subsClients))
     else:
         abortedRuns += 1
         conf = (protocol,numFaults,instance)
@@ -1602,16 +1866,16 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
 ## End of execute
 
 
-def printNodePoint(protocol,numFaults,numDeadNodes,tag,val):
+def printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,tag,val):
     f = open(pointsFile, 'a')
-    f.write("protocol="+protocol.value+" "+"faults="+str(numFaults)+" "+"dead="+str(numDeadNodes)+" "+tag+"="+str(val)+"\n")
+    f.write("protocol="+protocol.value+" "+"faults="+str(numFaults)+" "+"joiners="+str(numJoiners)+" "+"dead="+str(numDeadNodes)+" "+tag+"="+str(val)+"\n")
     f.close()
 # End of printNodePoint
 
 
-def printNodePointComment(protocol,numFaults,instance,repeats):
+def printNodePointComment(protocol,numFaults,numJoiners,instance,repeats):
     f = open(pointsFile, 'a')
-    f.write("# protocol="+protocol.value+" regions="+regions[0]+" payload="+str(payloadSize)+" faults="+str(numFaults)+" instance="+str(instance)+" repeats="+str(repeats)+"\n")
+    f.write("# protocol="+protocol.value+" regions="+regions[0]+" payload="+str(payloadSize)+" faults="+str(numFaults)+" joiners="+str(numJoiners)+" instance="+str(instance)+" repeats="+str(repeats)+"\n")
     f.close()
 # End of printNodePointComment
 
@@ -1634,7 +1898,7 @@ def printNodePointParams():
 # End of printNodePointParams
 
 
-def computeStats(protocol,numFaults,numDeadNodes,instance,repeats):
+def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
     # Computing throughput and latency
     throughputViewVal=0.0
     throughputViewNum=0
@@ -1665,13 +1929,22 @@ def computeStats(protocol,numFaults,numDeadNodes,instance,repeats):
     cryptoNumVerifVal=0.0
     cryptoNumVerifNum=0
 
-    printNodePointComment(protocol,numFaults,instance,repeats)
+    printNodePointComment(protocol,numFaults,numJoiners,instance,repeats)
 
     files = glob.glob(statsdir+"/*")
     for filename in files:
+        if filename.startswith(statsdir+"/times"):
+            f = open(filename, "r")
+            s = f.read()
+            f.close()
+            #
+            g = open(timesFile, 'a')
+            g.write(protocol.value+" "+str(numFaults)+" "+s+"\n")
+            g.close()
         if filename.startswith(statsdir+"/vals"):
             f = open(filename, "r")
             s = f.read()
+            f.close()
             l = s.split(" ")
             if not(len(l) == 10):
                 print("wrong vals file:", filename)
@@ -1681,56 +1954,57 @@ def computeStats(protocol,numFaults,numDeadNodes,instance,repeats):
                 valTH = float(thru)
                 throughputViewNum += 1
                 throughputViewVal += valTH
-                printNodePoint(protocol,numFaults,numDeadNodes,"throughput-view",valTH)
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"throughput-view",valTH)
 
                 valLA = float(lat)
                 latencyViewNum += 1
                 latencyViewVal += valLA
-                printNodePoint(protocol,numFaults,numDeadNodes,"latency-view",valLA)
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"latency-view",valLA)
 
                 valHD = float(hdl)
                 handleNum += 1
                 handleVal += valHD
-                printNodePoint(protocol,numFaults,numDeadNodes,"handle",valHD)
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"handle",valHD)
 
                 valTO = float(tos)
                 tosNum += 1
                 tosVal += valTO
-                printNodePoint(protocol,numFaults,numDeadNodes,"timeouts",valTO)
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"timeouts",valTO)
 
                 valPB = float(pbs)
                 pbsNum += 1
                 pbsVal += valPB
-                printNodePoint(protocol,numFaults,numDeadNodes,"onepbs",valPB)
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"onepbs",valPB)
 
                 valPC = float(pcs)
                 pcsNum += 1
                 pcsVal += valPC
-                printNodePoint(protocol,numFaults,numDeadNodes,"onepcs",valPC)
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"onepcs",valPC)
 
                 valST = float(signTime)
                 cryptoSignNum += 1
                 cryptoSignVal += valST
-                printNodePoint(protocol,numFaults,numDeadNodes,"crypto-sign",valST)
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"crypto-sign",valST)
 
                 valVT = float(verifTime)
                 cryptoVerifNum += 1
                 cryptoVerifVal += valVT
-                printNodePoint(protocol,numFaults,numDeadNodes,"crypto-verif",valVT)
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"crypto-verif",valVT)
 
                 valSN = int(signNum)
                 cryptoNumSignNum += 1
                 cryptoNumSignVal += valSN
-                printNodePoint(protocol,numFaults,numDeadNodes,"crypto-num-sign",valSN)
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"crypto-num-sign",valSN)
 
                 valVN = int(verifNum)
                 cryptoNumVerifNum += 1
                 cryptoNumVerifVal += valVN
-                printNodePoint(protocol,numFaults,numDeadNodes,"crypto-num-verif",valVN)
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"crypto-num-verif",valVN)
 
     throughputView = throughputViewVal/throughputViewNum if throughputViewNum > 0 else 0.0
     latencyView    = latencyViewVal/latencyViewNum       if latencyViewNum > 0    else 0.0
     handle         = handleVal/handleNum                 if handleNum > 0         else 0.0
+    timeouts       = tosVal/tosNum                       if tosNum > 0            else 0.0
     cryptoSign     = cryptoSignVal/cryptoSignNum         if cryptoSignNum > 0     else 0.0
     cryptoVerif    = cryptoVerifVal/cryptoVerifNum       if cryptoVerifNum > 0    else 0.0
     cryptoNumSign  = cryptoNumSignVal/cryptoNumSignNum   if cryptoNumSignNum > 0  else 0.0
@@ -1739,12 +2013,13 @@ def computeStats(protocol,numFaults,numDeadNodes,instance,repeats):
     print("throughput-view:",  throughputView, "out of", throughputViewNum)
     print("latency-view:",     latencyView,    "out of", latencyViewNum)
     print("handle:",           handle,         "out of", handleNum)
+    print("timeouts:",         timeouts,       "out of", tosNum)
     print("crypto-sign:",      cryptoSign,     "out of", cryptoSignNum)
     print("crypto-verif:",     cryptoVerif,    "out of", cryptoVerifNum)
     print("crypto-num-sign:",  cryptoNumSign,  "out of", cryptoNumSignNum)
     print("crypto-num-verif:", cryptoNumVerif, "out of", cryptoNumVerifNum)
 
-    return (throughputView, latencyView, handle, cryptoSign, cryptoVerif, cryptoNumSign, cryptoNumVerif)
+    return (throughputView, latencyView, handle, timeouts, cryptoSign, cryptoVerif, cryptoNumSign, cryptoNumVerif)
 ## End of computeStats
 
 
@@ -1795,7 +2070,7 @@ def startContainers(numReps,numClients):
                 rate = " rate " + str(rateMbit) + "Mbit limit " + str(LIMIT_PKTS)
             #latcmd = "tc qdisc add dev eth0 root netem delay " + str(networkLat) + "ms " + str(networkVar) + "ms distribution normal" + rate
             # the distribution arg causes problems... the default distribution is normal anyway
-            latcmd = "tc qdisc add dev eth0 root netem delay " + str(networkLat) + "ms " + str(networkVar) + "ms" + rate
+            latcmd = "tc qdisc add dev eth0 root netem delay " + str(networkLat) + "ms " + str(networkVar) + "ms" + rate + " loss " + str(msgLoss) + "%"
             print(latcmd)
             #latcmd = "tc qdisc add dev eth0 root netem delay " + str(networkLat) + "ms"
             subprocess.run([docker + " exec -t " + instance + " bash -c \"" + latcmd + "\""], shell=True, check=True)
@@ -1829,23 +2104,39 @@ def stopContainers(numReps,numClients):
 
 
 # if 'recompile' is true, the application will be recompiled (default=true)
-def computeAvgStats(recompile,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numDeadNodes,numRepeats):
+def computeAvgStats(recompile,
+                    protocol,
+                    constFactor,
+                    numClTrans,
+                    sleepTime,
+                    numViews,
+                    cutOffBound,
+                    numFaults,
+                    numJoiners,
+                    numDeadNodes,
+                    numRepeats):
     print("<<<<<<<<<<<<<<<<<<<<",
           "protocol="+protocol.value,
           ";regions="+regions[0],
           ";payload="+str(payloadSize),
-          "(factor="+str(constFactor)+")",
-          "#faults="+str(numFaults),
+          ";factor="+str(constFactor),
+          ";#faults="+str(numFaults),
+          ";#joiners="+str(numJoiners),
+          ";#repeats="+str(numRepeats),
           "[complete-runs="+str(completeRuns),"aborted-runs="+str(abortedRuns)+"]")
     print("aborted runs so far:", aborted)
 
-    throughputViews=[]
-    latencyViews=[]
-    handles=[]
-    cryptoSigns=[]
-    cryptoVerifs=[]
-    cryptoNumSigns=[]
-    cryptoNumVerifs=[]
+    g = open(timesFile, 'a')
+    g.write("# "+protocol.value+" "+str(numFaults)+"\n")
+    g.close()
+
+    throughputViews = []
+    latencyViews    = []
+    handles         = []
+    cryptoSigns     = []
+    cryptoVerifs    = []
+    cryptoNumSigns  = []
+    cryptoNumVerifs = []
 
     numReps = (constFactor * numFaults) + 1
 
@@ -1864,14 +2155,15 @@ def computeAvgStats(recompile,protocol,constFactor,numClTrans,sleepTime,numViews
               "protocol="+protocol.value,
               ";regions="+regions[0],
               ";payload="+str(payloadSize),
-              "(factor="+str(constFactor)+")",
-              "#faults="+str(numFaults),
-              "repeat="+str(i),
+              ";factor="+str(constFactor),
+              ";#faults="+str(numFaults),
+              ";#joiners="+str(numJoiners),
+              ";repeat="+str(i),
               "[complete-runs="+str(completeRuns),"aborted-runs="+str(abortedRuns)+"]")
         print("aborted runs so far:", aborted)
         clearStatsDir()
-        execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numDeadNodes,i)
-        (throughputView,latencyView,handle,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numDeadNodes,i,numRepeats)
+        execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numDeadNodes,numJoiners,i)
+        (throughputView,latencyView,handle,timeouts,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,i,numRepeats)
         if throughputView > 0 and latencyView > 0 and handle > 0 and cryptoSign > 0 and cryptoVerif > 0 and cryptoNumSign > 0 and cryptoNumVerif > 0:
             throughputViews.append(throughputView)
             latencyViews.append(latencyView)
@@ -1912,7 +2204,8 @@ def dict2val(d,f):
 
 
 # p is a Boolean: true to print some debugging info
-def dict2lists(d,quantileSize,p):
+# q is a Boolean: true to generate averages
+def dict2lists(d,quantileSize,p,q):
     keys = []
     vals = []
     nums = []
@@ -1931,7 +2224,10 @@ def dict2lists(d,quantileSize,p):
         v    = s/m if m > 0 else 0.0 # and computing the average
         if p:
             print(l,quantileSize,n,v,m,"---------\n", val, "\n", newval,"\n")
-        vals.append(v)
+        if q:
+            vals.append(v)
+        else:
+            vals.append(newval)
         nums.append(m)
 
     return (keys,vals,nums)
@@ -1939,13 +2235,17 @@ def dict2lists(d,quantileSize,p):
 
 
 ## So that 3f1+1=2f2+1
-def comparisonN(f1,f2,dTVBase,dTVCheap,dTVQuick,dTVComb,dTVChBase,dTVChComb,dLVBase,dLVCheap,dLVQuick,dLVComb,dLVChBase,dLVChComb):
+def comparisonN(f1,f2,dTVBase,dTVCheap,dTVQuick,dTVDamq,dTVComb,dTVDamr,dTVDama,dTVDamp,dTVChBase,dTVChComb,dLVBase,dLVCheap,dLVQuick,dLVDamq,dLVComb,dLVDamr,dLVDama,dLVDamp,dLVChBase,dLVChComb):
     tv1 = dict2val(dTVBase,f1)
     tv2 = dict2val(dTVCheap,f2)
     tv3 = dict2val(dTVQuick,f2)
     tv4 = dict2val(dTVComb,f2)
     tv5 = dict2val(dTVChBase,f1)
     tv6 = dict2val(dTVChComb,f2)
+    tv7 = dict2val(dTVDamr,f2)
+    #tv7 = dict2val(dTVDama,f2)
+    tv8 = dict2val(dTVDamp,f2)
+    tv9 = dict2val(dTVDamq,f2)
 
     tv12 = (tv2 - tv1) / tv1 * 100
     tv13 = (tv3 - tv1) / tv1 * 100
@@ -1959,6 +2259,10 @@ def comparisonN(f1,f2,dTVBase,dTVCheap,dTVQuick,dTVComb,dTVChBase,dTVChComb,dLVB
     lv4 = dict2val(dLVComb,f2)
     lv5 = dict2val(dLVChBase,f1)
     lv6 = dict2val(dLVChComb,f2)
+    lv7 = dict2val(dLVDamr,f2)
+    #lv7 = dict2val(dLVDama,f2)
+    lv8 = dict2val(dLVDamp,f2)
+    lv9 = dict2val(dLVDamq,f2)
 
     lv12 = (lv1 - lv2) / lv1 * 100
     lv13 = (lv1 - lv3) / lv1 * 100
@@ -2014,64 +2318,57 @@ def adjustFigAspect(fig,aspect=1):
 # End of adjustFigAspect
 
 
-def updateDictionaries(protVal,numFaults,numDeads,pointVal,dBase,dCheap,dQuick,dComb,dFree,dOnep,dOnepB,dOnepC,dOnepD,dChBase,dChComb):
+def updateDictionary(key,pointVal,d):
+    (val,num) = d.get(key,([],0))
+    val.append(float(pointVal))
+    d.update({key:(val,num+1)})
+
+
+def updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dBase,dCheap,dQuick,dDamq,dComb,dDamr,dDama,dDamp,dFree,dRoll,dOnep,dOnepB,dOnepC,dOnepD,dChBase,dChComb):
     key = numFaults
 
     if deadNodes:
         key = numDeads
 
+    if joining:
+        key = numJoins
+
     if protVal == "BASIC_BASELINE":
-        (val,num) = dBase.get(key,([],0))
-        val.append(float(pointVal))
-        dBase.update({key:(val,num+1)})
+        updateDictionary(key,pointVal,dBase)
     if protVal == "BASIC_CHEAP":
-        (val,num) = dCheap.get(key,([],0))
-        val.append(float(pointVal))
-        dCheap.update({key:(val,num+1)})
+        updateDictionary(key,pointVal,dCheap)
     if protVal == "BASIC_QUICK":
-        (val,num) = dQuick.get(key,([],0))
-        val.append(float(pointVal))
-        dQuick.update({key:(val,num+1)})
+        updateDictionary(key,pointVal,dQuick)
     if protVal == "BASIC_QUICK_DEBUG":
-        (val,num) = dQuick.get(key,([],0))
-        val.append(float(pointVal))
-        dQuick.update({key:(val,num+1)})
-    if protVal == "BASIC_CHEAP_AND_QUICK":
-        (val,num) = dComb.get(key,([],0))
-        val.append(float(pointVal))
-        dComb.update({key:(val,num+1)})
+        updateDictionary(key,pointVal,dQuick)
     if protVal == "BASIC_FREE":
-        (val,num) = dFree.get(key,([],0))
-        val.append(float(pointVal))
-        dFree.update({key:(val,num+1)})
+        updateDictionary(key,pointVal,dFree)
+    if protVal == "BASIC_CHEAP_AND_QUICK":
+        updateDictionary(key,pointVal,dComb)
+    if protVal == "BASIC_DAMYSUS_ROTE":
+        updateDictionary(key,pointVal,dDamr)
+    if protVal == "BASIC_DAMYSUS_ACHILLES":
+        updateDictionary(key,pointVal,dDama)
+    if protVal == "BASIC_DAMYSUS_PACEMAKER":
+        updateDictionary(key,pointVal,dDamp)
+    if protVal == "BASIC_DAMYSUS3_PACEMAKER":
+        updateDictionary(key,pointVal,dDamq)
+    if protVal == "BASIC_ROLL":
+        updateDictionary(key,pointVal,dRoll)
     if protVal == "BASIC_ONEP":
-        (val,num) = dOnep.get(key,([],0))
-        val.append(float(pointVal))
-        dOnep.update({key:(val,num+1)})
+        updateDictionary(key,pointVal,dOnep)
     if protVal == "BASIC_ONEPB":
-        (val,num) = dOnepB.get(key,([],0))
-        val.append(float(pointVal))
-        dOnepB.update({key:(val,num+1)})
+        updateDictionary(key,pointVal,dOnepB)
     if protVal == "BASIC_ONEPC":
-        (val,num) = dOnepC.get(key,([],0))
-        val.append(float(pointVal))
-        dOnepC.update({key:(val,num+1)})
+        updateDictionary(key,pointVal,dOnepC)
     if protVal == "BASIC_ONEPD":
-        (val,num) = dOnepD.get(key,([],0))
-        val.append(float(pointVal))
-        dOnepD.update({key:(val,num+1)})
+        updateDictionary(key,pointVal,dOnepD)
     if protVal == "CHAINED_BASELINE":
-        (val,num) = dChBase.get(key,([],0))
-        val.append(float(pointVal))
-        dChBase.update({key:(val,num+1)})
+        updateDictionary(key,pointVal,dChBase)
     if protVal == "CHAINED_CHEAP_AND_QUICK":
-        (val,num) = dChComb.get(key,([],0))
-        val.append(float(pointVal))
-        dChComb.update({key:(val,num+1)})
+        updateDictionary(key,pointVal,dChComb)
     if protVal == "CHAINED_CHEAP_AND_QUICK_DEBUG":
-        (val,num) = dChComb.get(key,([],0))
-        val.append(float(pointVal))
-        dChComb.update({key:(val,num+1)})
+        updateDictionary(key,pointVal,dChComb)
 
 
 def createPlot(pFile):
@@ -2079,92 +2376,139 @@ def createPlot(pFile):
     dictTVBase   = {}
     dictTVCheap  = {}
     dictTVQuick  = {}
+    dictTVDamq   = {}
     dictTVComb   = {}
+    dictTVDamr   = {}
+    dictTVDama   = {}
+    dictTVDamp   = {}
     dictTVFree   = {}
+    dictTVRoll   = {}
     dictTVOnep   = {}
     dictTVOnepB  = {}
     dictTVOnepC  = {}
     dictTVOnepD  = {}
     dictTVChBase = {}
     dictTVChComb = {}
+
     # latency-view
     dictLVBase   = {}
     dictLVCheap  = {}
     dictLVQuick  = {}
+    dictLVDamq   = {}
     dictLVComb   = {}
+    dictLVDamr   = {}
+    dictLVDama   = {}
+    dictLVDamp   = {}
     dictLVFree   = {}
+    dictLVRoll   = {}
     dictLVOnep   = {}
     dictLVOnepB  = {}
     dictLVOnepC  = {}
     dictLVOnepD  = {}
     dictLVChBase = {}
     dictLVChComb = {}
+
     # handle
     dictHBase   = {}
     dictHCheap  = {}
     dictHQuick  = {}
+    dictHDamq   = {}
     dictHComb   = {}
+    dictHDamr   = {}
+    dictHDama   = {}
+    dictHDamp   = {}
     dictHFree   = {}
+    dictHRoll   = {}
     dictHOnep   = {}
     dictHOnepB  = {}
     dictHOnepC  = {}
     dictHOnepD  = {}
     dictHChBase = {}
     dictHChComb = {}
+
     # timeouts
     dictTOBase   = {}
     dictTOCheap  = {}
     dictTOQuick  = {}
+    dictTODamq   = {}
     dictTOComb   = {}
+    dictTODamr   = {}
+    dictTODama   = {}
+    dictTODamp   = {}
     dictTOFree   = {}
+    dictTORoll   = {}
     dictTOOnep   = {}
     dictTOOnepB  = {}
     dictTOOnepC  = {}
     dictTOOnepD  = {}
     dictTOChBase = {}
     dictTOChComb = {}
+
     # onepbs
     dictPBBase   = {}
     dictPBCheap  = {}
     dictPBQuick  = {}
+    dictPBDamq   = {}
     dictPBComb   = {}
+    dictPBDamr   = {}
+    dictPBDama   = {}
+    dictPBDamp   = {}
     dictPBFree   = {}
+    dictPBRoll   = {}
     dictPBOnep   = {}
     dictPBOnepB  = {}
     dictPBOnepC  = {}
     dictPBOnepD  = {}
     dictPBChBase = {}
     dictPBChComb = {}
+
     # onepcs
     dictPCBase   = {}
     dictPCCheap  = {}
     dictPCQuick  = {}
+    dictPCDamq   = {}
     dictPCComb   = {}
+    dictPCDamr   = {}
+    dictPCDama   = {}
+    dictPCDamp   = {}
     dictPCFree   = {}
+    dictPCRoll   = {}
     dictPCOnep   = {}
     dictPCOnepB  = {}
     dictPCOnepC  = {}
     dictPCOnepD  = {}
     dictPCChBase = {}
     dictPCChComb = {}
+
     # crypto-sign
     dictCSBase   = {}
     dictCSCheap  = {}
     dictCSQuick  = {}
+    dictCSDamq   = {}
     dictCSComb   = {}
+    dictCSDamr   = {}
+    dictCSDama   = {}
+    dictCSDamp   = {}
     dictCSFree   = {}
+    dictCSRoll   = {}
     dictCSOnep   = {}
     dictCSOnepB  = {}
     dictCSOnepC  = {}
     dictCSOnepD  = {}
     dictCSChBase = {}
     dictCSChComb = {}
+
     # crypto-verif
     dictCVBase   = {}
     dictCVCheap  = {}
     dictCVQuick  = {}
+    dictCVDamq   = {}
     dictCVComb   = {}
+    dictCVDamr   = {}
+    dictCVDama   = {}
+    dictCVDamp   = {}
     dictCVFree   = {}
+    dictCVRoll   = {}
     dictCVOnep   = {}
     dictCVOnepB  = {}
     dictCVOnepC  = {}
@@ -2218,45 +2562,50 @@ def createPlot(pFile):
             l = line.split(" ")
             prot   = "protocol=BASIC_BASELINE"
             faults = "faults=1"
+            joins  = "joiners=0"
             deads  = "deads=0"
             point  = "throughput-view=0.0"
             if len(l) == 3:
                 [prot,faults,point] = l
             elif len(l) == 4:
                 [prot,faults,deads,point] = l
+            elif len(l) == 5:
+                [prot,faults,joins,deads,point] = l
             else:
                 print("WRONG ARGUMENTS in point line: " + line)
             [protTag,protVal]     = prot.split("=")
             [faultsTag,faultsVal] = faults.split("=")
+            [joinsTag,joinsVal]   = joins.split("=")
             [deadsTag,deadsVal]   = deads.split("=")
             [pointTag,pointVal]   = point.split("=")
             numFaults=int(faultsVal)
+            numJoins=int(joinsVal)
             numDeads=int(deadsVal)
             if float(pointVal) < float('inf'):
                 # Throughputs-view
                 if pointTag == "throughput-view":
-                    updateDictionaries(protVal,numFaults,numDeads,pointVal,dictTVBase,dictTVCheap,dictTVQuick,dictTVComb,dictTVFree,dictTVOnep,dictTVOnepB,dictTVOnepC,dictTVOnepD,dictTVChBase,dictTVChComb)
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictTVBase,dictTVCheap,dictTVQuick,dictTVDamq,dictTVComb,dictTVDamr,dictTVDama,dictTVDamp,dictTVFree,dictTVRoll,dictTVOnep,dictTVOnepB,dictTVOnepC,dictTVOnepD,dictTVChBase,dictTVChComb)
                 # Latencies-view
                 if pointTag == "latency-view":
-                    updateDictionaries(protVal,numFaults,numDeads,pointVal,dictLVBase,dictLVCheap,dictLVQuick,dictLVComb,dictLVFree,dictLVOnep,dictLVOnepB,dictLVOnepC,dictLVOnepD,dictLVChBase,dictLVChComb)
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictLVBase,dictLVCheap,dictLVQuick,dictLVDamq,dictLVComb,dictLVDamr,dictLVDama,dictLVDamp,dictLVFree,dictLVRoll,dictLVOnep,dictLVOnepB,dictLVOnepC,dictLVOnepD,dictLVChBase,dictLVChComb)
                 # handle
                 if (pointTag == "handle" or pointTag == "latency-handle"):
-                    updateDictionaries(protVal,numFaults,numDeads,pointVal,dictHBase,dictHCheap,dictHQuick,dictHComb,dictHFree,dictHOnep,dictHOnepB,dictHOnepC,dictHOnepD,dictHChBase,dictHChComb)
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictHBase,dictHCheap,dictHQuick,dictHDamq,dictHComb,dictHDamr,dictHDama,dictHDamp,dictHFree,dictHRoll,dictHOnep,dictHOnepB,dictHOnepC,dictHOnepD,dictHChBase,dictHChComb)
                 # timeouts
                 if pointTag == "timeouts":
-                    updateDictionaries(protVal,numFaults,numDeads,pointVal,dictTOBase,dictTOCheap,dictTOQuick,dictTOComb,dictTOFree,dictTOOnep,dictTOOnepB,dictTOOnepC,dictTOOnepD,dictTOChBase,dictTOChComb)
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictTOBase,dictTOCheap,dictTOQuick,dictTODamq,dictTOComb,dictTODamr,dictTODama,dictTODamp,dictTOFree,dictTORoll,dictTOOnep,dictTOOnepB,dictTOOnepC,dictTOOnepD,dictTOChBase,dictTOChComb)
                 # onepbs
                 if pointTag == "onepbs":
-                    updateDictionaries(protVal,numFaults,numDeads,pointVal,dictPBBase,dictPBCheap,dictPBQuick,dictPBComb,dictPBFree,dictPBOnep,dictPBOnepB,dictPBOnepC,dictPBOnepD,dictPBChBase,dictPBChComb)
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictPBBase,dictPBCheap,dictPBQuick,dictPBDamq,dictPBComb,dictPBDamr,dictPBDama,dictPBDamp,dictPBFree,dictPBRoll,dictPBOnep,dictPBOnepB,dictPBOnepC,dictPBOnepD,dictPBChBase,dictPBChComb)
                 # onepcs
                 if pointTag == "onepcs":
-                    updateDictionaries(protVal,numFaults,numDeads,pointVal,dictPCBase,dictPCCheap,dictPCQuick,dictPCComb,dictPCFree,dictPCOnep,dictPCOnepB,dictPCOnepC,dictPCOnepD,dictPCChBase,dictPCChComb)
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictPCBase,dictPCCheap,dictPCQuick,dictPCDamq,dictPCComb,dictPCDamr,dictPCDama,dictPCDamp,dictPCFree,dictPCRoll,dictPCOnep,dictPCOnepB,dictPCOnepC,dictPCOnepD,dictPCChBase,dictPCChComb)
                 # crypto-sign
                 if pointTag == "crypto-sign":
-                    updateDictionaries(protVal,numFaults,numDeads,pointVal,dictCSBase,dictCSCheap,dictCSQuick,dictCSComb,dictCSFree,dictCSOnep,dictCSOnepB,dictCSOnepC,dictCSOnepD,dictCSChBase,dictCSChComb)
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictCSBase,dictCSCheap,dictCSQuick,dictCSDamq,dictCSComb,dictCSDamr,dictCSDama,dictCSDamp,dictCSFree,dictCSRoll,dictCSOnep,dictCSOnepB,dictCSOnepC,dictCSOnepD,dictCSChBase,dictCSChComb)
                 # crypto-verif
                 if pointTag == "crypto-verif":
-                    updateDictionaries(protVal,numFaults,numDeads,pointVal,dictCVBase,dictCVCheap,dictCVQuick,dictCVComb,dictCVFree,dictCVOnep,dictCVOnepB,dictCVOnepC,dictCVOnepD,dictCVChBase,dictCVChComb)
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictCVBase,dictCVCheap,dictCVQuick,dictCVDamq,dictCVComb,dictCVDamr,dictCVDama,dictCVDamp,dictCVFree,dictCVRoll,dictCVOnep,dictCVOnepB,dictCVOnepC,dictCVOnepD,dictCVChBase,dictCVChComb)
     f.close()
 
     quantileSize = 20
@@ -2265,101 +2614,148 @@ def createPlot(pFile):
 
     # We convert the dictionaries to lists
     # throughput-view
-    (faultsTVBase,   valsTVBase,   numsTVBase)   = dict2lists(dictTVBase,quantileSize,False)
-    (faultsTVCheap,  valsTVCheap,  numsTVCheap)  = dict2lists(dictTVCheap,quantileSize,False)
-    (faultsTVQuick,  valsTVQuick,  numsTVQuick)  = dict2lists(dictTVQuick,quantileSize,False)
-    (faultsTVComb,   valsTVComb,   numsTVComb)   = dict2lists(dictTVComb,quantileSize,False)
-    (faultsTVFree,   valsTVFree,   numsTVFree)   = dict2lists(dictTVFree,quantileSize,False)
-    (faultsTVOnep,   valsTVOnep,   numsTVOnep)   = dict2lists(dictTVOnep,quantileSize,False)
-    (faultsTVOnepB,  valsTVOnepB,  numsTVOnepB)  = dict2lists(dictTVOnepB,quantileSize,False)
-    (faultsTVOnepC,  valsTVOnepC,  numsTVOnepC)  = dict2lists(dictTVOnepC,quantileSize,False)
-    (faultsTVOnepD,  valsTVOnepD,  numsTVOnepD)  = dict2lists(dictTVOnepD,quantileSize,False)
-    (faultsTVChBase, valsTVChBase, numsTVChBase) = dict2lists(dictTVChBase,quantileSize,False)
-    (faultsTVChComb, valsTVChComb, numsTVChComb) = dict2lists(dictTVChComb,quantileSize,False)
+    (faultsTVBase,   valsTVBase,   numsTVBase)   = dict2lists(dictTVBase,quantileSize,False,True)
+    (faultsTVCheap,  valsTVCheap,  numsTVCheap)  = dict2lists(dictTVCheap,quantileSize,False,True)
+    (faultsTVQuick,  valsTVQuick,  numsTVQuick)  = dict2lists(dictTVQuick,quantileSize,False,True)
+    (faultsTVDamq,   valsTVDamq,   numsTVDamq)   = dict2lists(dictTVDamq,quantileSize,False,True)
+    (faultsTVComb,   valsTVComb,   numsTVComb)   = dict2lists(dictTVComb,quantileSize,False,True)
+    (faultsTVDamr,   valsTVDamr,   numsTVDamr)   = dict2lists(dictTVDamr,quantileSize,False,True)
+    (faultsTVDama,   valsTVDama,   numsTVDama)   = dict2lists(dictTVDama,quantileSize,False,True)
+    (faultsTVDamp,   valsTVDamp,   numsTVDamp)   = dict2lists(dictTVDamp,quantileSize,False,True)
+    (faultsTVFree,   valsTVFree,   numsTVFree)   = dict2lists(dictTVFree,quantileSize,False,True)
+    (faultsTVRoll,   valsTVRoll,   numsTVRoll)   = dict2lists(dictTVRoll,quantileSize,False,True)
+    (faultsTVOnep,   valsTVOnep,   numsTVOnep)   = dict2lists(dictTVOnep,quantileSize,False,True)
+    (faultsTVOnepB,  valsTVOnepB,  numsTVOnepB)  = dict2lists(dictTVOnepB,quantileSize,False,True)
+    (faultsTVOnepC,  valsTVOnepC,  numsTVOnepC)  = dict2lists(dictTVOnepC,quantileSize,False,True)
+    (faultsTVOnepD,  valsTVOnepD,  numsTVOnepD)  = dict2lists(dictTVOnepD,quantileSize,False,True)
+    (faultsTVChBase, valsTVChBase, numsTVChBase) = dict2lists(dictTVChBase,quantileSize,False,True)
+    (faultsTVChComb, valsTVChComb, numsTVChComb) = dict2lists(dictTVChComb,quantileSize,False,True)
+
     # latency-view
-    (faultsLVBase,   valsLVBase,   numsLVBase)   = dict2lists(dictLVBase,quantileSize,False)
-    (faultsLVCheap,  valsLVCheap,  numsLVCheap)  = dict2lists(dictLVCheap,quantileSize,False)
-    (faultsLVQuick,  valsLVQuick,  numsLVQuick)  = dict2lists(dictLVQuick,quantileSize,False)
-    (faultsLVComb,   valsLVComb,   numsLVComb)   = dict2lists(dictLVComb,quantileSize,False)
-    (faultsLVFree,   valsLVFree,   numsLVFree)   = dict2lists(dictLVFree,quantileSize,False)
-    (faultsLVOnep,   valsLVOnep,   numsLVOnep)   = dict2lists(dictLVOnep,quantileSize,False)
-    (faultsLVOnepB,  valsLVOnepB,  numsLVOnepB)  = dict2lists(dictLVOnepB,quantileSize,False)
-    (faultsLVOnepC,  valsLVOnepC,  numsLVOnepC)  = dict2lists(dictLVOnepC,quantileSize,False)
-    (faultsLVOnepD,  valsLVOnepD,  numsLVOnepD)  = dict2lists(dictLVOnepD,quantileSize,False)
-    (faultsLVChBase, valsLVChBase, numsLVChBase) = dict2lists(dictLVChBase,quantileSize,False)
-    (faultsLVChComb, valsLVChComb, numsLVChComb) = dict2lists(dictLVChComb,quantileSize,False)
+    (faultsLVBase,   valsLVBase,   numsLVBase)   = dict2lists(dictLVBase,quantileSize,False,True)
+    (faultsLVCheap,  valsLVCheap,  numsLVCheap)  = dict2lists(dictLVCheap,quantileSize,False,True)
+    (faultsLVQuick,  valsLVQuick,  numsLVQuick)  = dict2lists(dictLVQuick,quantileSize,False,True)
+    (faultsLVDamq,   valsLVDamq,   numsLVDamq)   = dict2lists(dictLVDamq,quantileSize,False,True)
+    (faultsLVComb,   valsLVComb,   numsLVComb)   = dict2lists(dictLVComb,quantileSize,False,True)
+    (faultsLVDamr,   valsLVDamr,   numsLVDamr)   = dict2lists(dictLVDamr,quantileSize,False,True)
+    (faultsLVDama,   valsLVDama,   numsLVDama)   = dict2lists(dictLVDama,quantileSize,False,True)
+    (faultsLVDamp,   valsLVDamp,   numsLVDamp)   = dict2lists(dictLVDamp,quantileSize,False,True)
+    (faultsLVFree,   valsLVFree,   numsLVFree)   = dict2lists(dictLVFree,quantileSize,False,True)
+    (faultsLVRoll,   valsLVRoll,   numsLVRoll)   = dict2lists(dictLVRoll,quantileSize,False,True)
+    (faultsLVOnep,   valsLVOnep,   numsLVOnep)   = dict2lists(dictLVOnep,quantileSize,False,True)
+    (faultsLVOnepB,  valsLVOnepB,  numsLVOnepB)  = dict2lists(dictLVOnepB,quantileSize,False,True)
+    (faultsLVOnepC,  valsLVOnepC,  numsLVOnepC)  = dict2lists(dictLVOnepC,quantileSize,False,True)
+    (faultsLVOnepD,  valsLVOnepD,  numsLVOnepD)  = dict2lists(dictLVOnepD,quantileSize,False,True)
+    (faultsLVChBase, valsLVChBase, numsLVChBase) = dict2lists(dictLVChBase,quantileSize,False,True)
+    (faultsLVChComb, valsLVChComb, numsLVChComb) = dict2lists(dictLVChComb,quantileSize,False,True)
+
     # handle
-    (faultsHBase,   valsHBase,   numsHBase)   = dict2lists(dictHBase,quantileSize1,False)
-    (faultsHCheap,  valsHCheap,  numsHCheap)  = dict2lists(dictHCheap,quantileSize1,False)
-    (faultsHQuick,  valsHQuick,  numsHQuick)  = dict2lists(dictHQuick,quantileSize1,False)
-    (faultsHComb,   valsHComb,   numsHComb)   = dict2lists(dictHComb,quantileSize1,False)
-    (faultsHFree,   valsHFree,   numsHFree)   = dict2lists(dictHFree,quantileSize1,False)
-    (faultsHOnep,   valsHOnep,   numsHOnep)   = dict2lists(dictHOnep,quantileSize1,False)
-    (faultsHOnepB,  valsHOnepB,  numsHOnepB)  = dict2lists(dictHOnepB,quantileSize1,False)
-    (faultsHOnepC,  valsHOnepC,  numsHOnepC)  = dict2lists(dictHOnepC,quantileSize1,False)
-    (faultsHOnepD,  valsHOnepD,  numsHOnepD)  = dict2lists(dictHOnepD,quantileSize1,False)
-    (faultsHChBase, valsHChBase, numsHChBase) = dict2lists(dictHChBase,quantileSize1,False)
-    (faultsHChComb, valsHChComb, numsHChComb) = dict2lists(dictHChComb,quantileSize1,False)
+    (faultsHBase,   valsHBase,   numsHBase)   = dict2lists(dictHBase,quantileSize1,False,True)
+    (faultsHCheap,  valsHCheap,  numsHCheap)  = dict2lists(dictHCheap,quantileSize1,False,True)
+    (faultsHQuick,  valsHQuick,  numsHQuick)  = dict2lists(dictHQuick,quantileSize1,False,True)
+    (faultsHDamq,   valsHDamq,   numsHDamq)   = dict2lists(dictHDamq,quantileSize1,False,True)
+    (faultsHComb,   valsHComb,   numsHComb)   = dict2lists(dictHComb,quantileSize1,False,True)
+    (faultsHDamr,   valsHDamr,   numsHDamr)   = dict2lists(dictHDamr,quantileSize1,False,True)
+    (faultsHDama,   valsHDama,   numsHDama)   = dict2lists(dictHDama,quantileSize1,False,True)
+    (faultsHDamp,   valsHDamp,   numsHDamp)   = dict2lists(dictHDamp,quantileSize1,False,True)
+    (faultsHFree,   valsHFree,   numsHFree)   = dict2lists(dictHFree,quantileSize1,False,True)
+    (faultsHRoll,   valsHRoll,   numsHRoll)   = dict2lists(dictHRoll,quantileSize1,False,True)
+    (faultsHOnep,   valsHOnep,   numsHOnep)   = dict2lists(dictHOnep,quantileSize1,False,True)
+    (faultsHOnepB,  valsHOnepB,  numsHOnepB)  = dict2lists(dictHOnepB,quantileSize1,False,True)
+    (faultsHOnepC,  valsHOnepC,  numsHOnepC)  = dict2lists(dictHOnepC,quantileSize1,False,True)
+    (faultsHOnepD,  valsHOnepD,  numsHOnepD)  = dict2lists(dictHOnepD,quantileSize1,False,True)
+    (faultsHChBase, valsHChBase, numsHChBase) = dict2lists(dictHChBase,quantileSize1,False,True)
+    (faultsHChComb, valsHChComb, numsHChComb) = dict2lists(dictHChComb,quantileSize1,False,True)
+
     # timeouts
-    (faultsTOBase,   valsTOBase,   numsTOBase)   = dict2lists(dictTOBase,0,False)
-    (faultsTOCheap,  valsTOCheap,  numsTOCheap)  = dict2lists(dictTOCheap,0,False)
-    (faultsTOQuick,  valsTOQuick,  numsTOQuick)  = dict2lists(dictTOQuick,0,False)
-    (faultsTOComb,   valsTOComb,   numsTOComb)   = dict2lists(dictTOComb,0,False)
-    (faultsTOFree,   valsTOFree,   numsTOFree)   = dict2lists(dictTOFree,0,False)
-    (faultsTOOnep,   valsTOOnep,   numsTOOnep)   = dict2lists(dictTOOnep,0,False)
-    (faultsTOOnepB,  valsTOOnepB,  numsTOOnepB)  = dict2lists(dictTOOnepB,0,False)
-    (faultsTOOnepC,  valsTOOnepC,  numsTOOnepC)  = dict2lists(dictTOOnepC,0,False)
-    (faultsTOOnepD,  valsTOOnepD,  numsTOOnepD)  = dict2lists(dictTOOnepD,0,False)
-    (faultsTOChBase, valsTOChBase, numsTOChBase) = dict2lists(dictTOChBase,0,False)
-    (faultsTOChComb, valsTOChComb, numsTOChComb) = dict2lists(dictTOChComb,0,False)
+    (faultsTOBase,   valsTOBase,   numsTOBase)   = dict2lists(dictTOBase,0,False,True)
+    (faultsTOCheap,  valsTOCheap,  numsTOCheap)  = dict2lists(dictTOCheap,0,False,True)
+    (faultsTOQuick,  valsTOQuick,  numsTOQuick)  = dict2lists(dictTOQuick,0,False,True)
+    (faultsTODamq,   valsTODamq,   numsTODamq)   = dict2lists(dictTODamq,0,False,True)
+    (faultsTOComb,   valsTOComb,   numsTOComb)   = dict2lists(dictTOComb,0,False,True)
+    (faultsTODamr,   valsTODamr,   numsTODamr)   = dict2lists(dictTODamr,0,False,True)
+    (faultsTODama,   valsTODama,   numsTODama)   = dict2lists(dictTODama,0,False,True)
+    (faultsTODamp,   valsTODamp,   numsTODamp)   = dict2lists(dictTODamp,0,False,True)
+    (faultsTOFree,   valsTOFree,   numsTOFree)   = dict2lists(dictTOFree,0,False,True)
+    (faultsTORoll,   valsTORoll,   numsTORoll)   = dict2lists(dictTORoll,0,False,True)
+    (faultsTOOnep,   valsTOOnep,   numsTOOnep)   = dict2lists(dictTOOnep,0,False,True)
+    (faultsTOOnepB,  valsTOOnepB,  numsTOOnepB)  = dict2lists(dictTOOnepB,0,False,True)
+    (faultsTOOnepC,  valsTOOnepC,  numsTOOnepC)  = dict2lists(dictTOOnepC,0,False,True)
+    (faultsTOOnepD,  valsTOOnepD,  numsTOOnepD)  = dict2lists(dictTOOnepD,0,False,True)
+    (faultsTOChBase, valsTOChBase, numsTOChBase) = dict2lists(dictTOChBase,0,False,True)
+    (faultsTOChComb, valsTOChComb, numsTOChComb) = dict2lists(dictTOChComb,0,False,True)
+
     # onepbs
-    (faultsPBBase,   valsPBBase,   numsPBBase)   = dict2lists(dictPBBase,0,False)
-    (faultsPBCheap,  valsPBCheap,  numsPBCheap)  = dict2lists(dictPBCheap,0,False)
-    (faultsPBQuick,  valsPBQuick,  numsPBQuick)  = dict2lists(dictPBQuick,0,False)
-    (faultsPBComb,   valsPBComb,   numsPBComb)   = dict2lists(dictPBComb,0,False)
-    (faultsPBFree,   valsPBFree,   numsPBFree)   = dict2lists(dictPBFree,0,False)
-    (faultsPBOnep,   valsPBOnep,   numsPBOnep)   = dict2lists(dictPBOnep,0,False)
-    (faultsPBOnepB,  valsPBOnepB,  numsPBOnepB)  = dict2lists(dictPBOnepB,0,False)
-    (faultsPBOnepC,  valsPBOnepC,  numsPBOnepC)  = dict2lists(dictPBOnepC,0,False)
-    (faultsPBOnepD,  valsPBOnepD,  numsPBOnepD)  = dict2lists(dictPBOnepD,0,False)
-    (faultsPBChBase, valsPBChBase, numsPBChBase) = dict2lists(dictPBChBase,0,False)
-    (faultsPBChComb, valsPBChComb, numsPBChComb) = dict2lists(dictPBChComb,0,False)
+    (faultsPBBase,   valsPBBase,   numsPBBase)   = dict2lists(dictPBBase,0,False,True)
+    (faultsPBCheap,  valsPBCheap,  numsPBCheap)  = dict2lists(dictPBCheap,0,False,True)
+    (faultsPBQuick,  valsPBQuick,  numsPBQuick)  = dict2lists(dictPBQuick,0,False,True)
+    (faultsPBDamq,   valsPBDamq,   numsPBDamq)   = dict2lists(dictPBDamq,0,False,True)
+    (faultsPBComb,   valsPBComb,   numsPBComb)   = dict2lists(dictPBComb,0,False,True)
+    (faultsPBDamr,   valsPBDamr,   numsPBDamr)   = dict2lists(dictPBDamr,0,False,True)
+    (faultsPBDama,   valsPBDama,   numsPBDama)   = dict2lists(dictPBDama,0,False,True)
+    (faultsPBDamp,   valsPBDamp,   numsPBDamp)   = dict2lists(dictPBDamp,0,False,True)
+    (faultsPBFree,   valsPBFree,   numsPBFree)   = dict2lists(dictPBFree,0,False,True)
+    (faultsPBRoll,   valsPBRoll,   numsPBRoll)   = dict2lists(dictPBRoll,0,False,True)
+    (faultsPBOnep,   valsPBOnep,   numsPBOnep)   = dict2lists(dictPBOnep,0,False,True)
+    (faultsPBOnepB,  valsPBOnepB,  numsPBOnepB)  = dict2lists(dictPBOnepB,0,False,True)
+    (faultsPBOnepC,  valsPBOnepC,  numsPBOnepC)  = dict2lists(dictPBOnepC,0,False,True)
+    (faultsPBOnepD,  valsPBOnepD,  numsPBOnepD)  = dict2lists(dictPBOnepD,0,False,True)
+    (faultsPBChBase, valsPBChBase, numsPBChBase) = dict2lists(dictPBChBase,0,False,True)
+    (faultsPBChComb, valsPBChComb, numsPBChComb) = dict2lists(dictPBChComb,0,False,True)
+
     # onepcs
-    (faultsPCBase,   valsPCBase,   numsPCBase)   = dict2lists(dictPCBase,0,False)
-    (faultsPCCheap,  valsPCCheap,  numsPCCheap)  = dict2lists(dictPCCheap,0,False)
-    (faultsPCQuick,  valsPCQuick,  numsPCQuick)  = dict2lists(dictPCQuick,0,False)
-    (faultsPCComb,   valsPCComb,   numsPCComb)   = dict2lists(dictPCComb,0,False)
-    (faultsPCFree,   valsPCFree,   numsPCFree)   = dict2lists(dictPCFree,0,False)
-    (faultsPCOnep,   valsPCOnep,   numsPCOnep)   = dict2lists(dictPCOnep,0,False)
-    (faultsPCOnepB,  valsPCOnepB,  numsPCOnepB)  = dict2lists(dictPCOnepB,0,False)
-    (faultsPCOnepC,  valsPCOnepC,  numsPCOnepC)  = dict2lists(dictPCOnepC,0,False)
-    (faultsPCOnepD,  valsPCOnepD,  numsPCOnepD)  = dict2lists(dictPCOnepD,0,False)
-    (faultsPCChBase, valsPCChBase, numsPCChBase) = dict2lists(dictPCChBase,0,False)
-    (faultsPCChComb, valsPCChComb, numsPCChComb) = dict2lists(dictPCChComb,0,False)
+    (faultsPCBase,   valsPCBase,   numsPCBase)   = dict2lists(dictPCBase,0,False,True)
+    (faultsPCCheap,  valsPCCheap,  numsPCCheap)  = dict2lists(dictPCCheap,0,False,True)
+    (faultsPCQuick,  valsPCQuick,  numsPCQuick)  = dict2lists(dictPCQuick,0,False,True)
+    (faultsPCDamq,   valsPCDamq,   numsPCDamq)   = dict2lists(dictPCDamq,0,False,True)
+    (faultsPCComb,   valsPCComb,   numsPCComb)   = dict2lists(dictPCComb,0,False,True)
+    (faultsPCDamr,   valsPCDamr,   numsPCDamr)   = dict2lists(dictPCDamr,0,False,True)
+    (faultsPCDama,   valsPCDama,   numsPCDama)   = dict2lists(dictPCDama,0,False,True)
+    (faultsPCDamp,   valsPCDamp,   numsPCDamp)   = dict2lists(dictPCDamp,0,False,True)
+    (faultsPCFree,   valsPCFree,   numsPCFree)   = dict2lists(dictPCFree,0,False,True)
+    (faultsPCRoll,   valsPCRoll,   numsPCRoll)   = dict2lists(dictPCRoll,0,False,True)
+    (faultsPCOnep,   valsPCOnep,   numsPCOnep)   = dict2lists(dictPCOnep,0,False,True)
+    (faultsPCOnepB,  valsPCOnepB,  numsPCOnepB)  = dict2lists(dictPCOnepB,0,False,True)
+    (faultsPCOnepC,  valsPCOnepC,  numsPCOnepC)  = dict2lists(dictPCOnepC,0,False,True)
+    (faultsPCOnepD,  valsPCOnepD,  numsPCOnepD)  = dict2lists(dictPCOnepD,0,False,True)
+    (faultsPCChBase, valsPCChBase, numsPCChBase) = dict2lists(dictPCChBase,0,False,True)
+    (faultsPCChComb, valsPCChComb, numsPCChComb) = dict2lists(dictPCChComb,0,False,True)
+
     # crypto-sign
-    (faultsCSBase,   valsCSBase,   numsCSBase)   = dict2lists(dictCSBase,quantileSize2,False)
-    (faultsCSCheap,  valsCSCheap,  numsCSCheap)  = dict2lists(dictCSCheap,quantileSize2,False)
-    (faultsCSQuick,  valsCSQuick,  numsCSQuick)  = dict2lists(dictCSQuick,quantileSize2,False)
-    (faultsCSComb,   valsCSComb,   numsCSComb)   = dict2lists(dictCSComb,quantileSize2,False)
-    (faultsCSFree,   valsCSFree,   numsCSFree)   = dict2lists(dictCSFree,quantileSize2,False)
-    (faultsCSOnep,   valsCSOnep,   numsCSOnep)   = dict2lists(dictCSOnep,quantileSize2,False)
-    (faultsCSOnepB,  valsCSOnepB,  numsCSOnepB)  = dict2lists(dictCSOnepB,quantileSize2,False)
-    (faultsCSOnepC,  valsCSOnepC,  numsCSOnepC)  = dict2lists(dictCSOnepC,quantileSize2,False)
-    (faultsCSOnepD,  valsCSOnepD,  numsCSOnepD)  = dict2lists(dictCSOnepD,quantileSize2,False)
-    (faultsCSChBase, valsCSChBase, numsCSChBase) = dict2lists(dictCSChBase,quantileSize2,False)
-    (faultsCSChComb, valsCSChComb, numsCSChComb) = dict2lists(dictCSChComb,quantileSize2,False)
+    (faultsCSBase,   valsCSBase,   numsCSBase)   = dict2lists(dictCSBase,quantileSize2,False,True)
+    (faultsCSCheap,  valsCSCheap,  numsCSCheap)  = dict2lists(dictCSCheap,quantileSize2,False,True)
+    (faultsCSQuick,  valsCSQuick,  numsCSQuick)  = dict2lists(dictCSQuick,quantileSize2,False,True)
+    (faultsCSDamq,   valsCSDamq,   numsCSDamq)   = dict2lists(dictCSDamq,quantileSize2,False,True)
+    (faultsCSComb,   valsCSComb,   numsCSComb)   = dict2lists(dictCSComb,quantileSize2,False,True)
+    (faultsCSDamr,   valsCSDamr,   numsCSDamr)   = dict2lists(dictCSDamr,quantileSize2,False,True)
+    (faultsCSDama,   valsCSDama,   numsCSDama)   = dict2lists(dictCSDama,quantileSize2,False,True)
+    (faultsCSDamp,   valsCSDamp,   numsCSDamp)   = dict2lists(dictCSDamp,quantileSize2,False,True)
+    (faultsCSFree,   valsCSFree,   numsCSFree)   = dict2lists(dictCSFree,quantileSize2,False,True)
+    (faultsCSRoll,   valsCSRoll,   numsCSRoll)   = dict2lists(dictCSRoll,quantileSize2,False,True)
+    (faultsCSOnep,   valsCSOnep,   numsCSOnep)   = dict2lists(dictCSOnep,quantileSize2,False,True)
+    (faultsCSOnepB,  valsCSOnepB,  numsCSOnepB)  = dict2lists(dictCSOnepB,quantileSize2,False,True)
+    (faultsCSOnepC,  valsCSOnepC,  numsCSOnepC)  = dict2lists(dictCSOnepC,quantileSize2,False,True)
+    (faultsCSOnepD,  valsCSOnepD,  numsCSOnepD)  = dict2lists(dictCSOnepD,quantileSize2,False,True)
+    (faultsCSChBase, valsCSChBase, numsCSChBase) = dict2lists(dictCSChBase,quantileSize2,False,True)
+    (faultsCSChComb, valsCSChComb, numsCSChComb) = dict2lists(dictCSChComb,quantileSize2,False,True)
+
     # crypto-verif
-    (faultsCVBase,   valsCVBase,   numsCVBase)   = dict2lists(dictCVBase,quantileSize2,False)
-    (faultsCVCheap,  valsCVCheap,  numsCVCheap)  = dict2lists(dictCVCheap,quantileSize2,False)
-    (faultsCVQuick,  valsCVQuick,  numsCVQuick)  = dict2lists(dictCVQuick,quantileSize2,False)
-    (faultsCVComb,   valsCVComb,   numsCVComb)   = dict2lists(dictCVComb,quantileSize2,False)
-    (faultsCVFree,   valsCVFree,   numsCVFree)   = dict2lists(dictCVFree,quantileSize2,False)
-    (faultsCVOnep,   valsCVOnep,   numsCVOnep)   = dict2lists(dictCVOnep,quantileSize2,False)
-    (faultsCVOnepB,  valsCVOnepB,  numsCVOnepB)  = dict2lists(dictCVOnepB,quantileSize2,False)
-    (faultsCVOnepC,  valsCVOnepC,  numsCVOnepC)  = dict2lists(dictCVOnepC,quantileSize2,False)
-    (faultsCVOnepD,  valsCVOnepD,  numsCVOnepD)  = dict2lists(dictCVOnepD,quantileSize2,False)
-    (faultsCVChBase, valsCVChBase, numsCVChBase) = dict2lists(dictCVChBase,quantileSize2,False)
-    (faultsCVChComb, valsCVChComb, numsCVChComb) = dict2lists(dictCVChComb,quantileSize2,False)
+    (faultsCVBase,   valsCVBase,   numsCVBase)   = dict2lists(dictCVBase,quantileSize2,False,True)
+    (faultsCVCheap,  valsCVCheap,  numsCVCheap)  = dict2lists(dictCVCheap,quantileSize2,False,True)
+    (faultsCVQuick,  valsCVQuick,  numsCVQuick)  = dict2lists(dictCVQuick,quantileSize2,False,True)
+    (faultsCVDamq,   valsCVDamq,   numsCVDamq)   = dict2lists(dictCVDamq,quantileSize2,False,True)
+    (faultsCVComb,   valsCVComb,   numsCVComb)   = dict2lists(dictCVComb,quantileSize2,False,True)
+    (faultsCVDamr,   valsCVDamr,   numsCVDamr)   = dict2lists(dictCVDamr,quantileSize2,False,True)
+    (faultsCVDama,   valsCVDama,   numsCVDama)   = dict2lists(dictCVDama,quantileSize2,False,True)
+    (faultsCVDamp,   valsCVDamp,   numsCVDamp)   = dict2lists(dictCVDamp,quantileSize2,False,True)
+    (faultsCVFree,   valsCVFree,   numsCVFree)   = dict2lists(dictCVFree,quantileSize2,False,True)
+    (faultsCVRoll,   valsCVRoll,   numsCVRoll)   = dict2lists(dictCVRoll,quantileSize2,False,True)
+    (faultsCVOnep,   valsCVOnep,   numsCVOnep)   = dict2lists(dictCVOnep,quantileSize2,False,True)
+    (faultsCVOnepB,  valsCVOnepB,  numsCVOnepB)  = dict2lists(dictCVOnepB,quantileSize2,False,True)
+    (faultsCVOnepC,  valsCVOnepC,  numsCVOnepC)  = dict2lists(dictCVOnepC,quantileSize2,False,True)
+    (faultsCVOnepD,  valsCVOnepD,  numsCVOnepD)  = dict2lists(dictCVOnepD,quantileSize2,False,True)
+    (faultsCVChBase, valsCVChBase, numsCVChBase) = dict2lists(dictCVChBase,quantileSize2,False,True)
+    (faultsCVChComb, valsCVChComb, numsCVChComb) = dict2lists(dictCVChComb,quantileSize2,False,True)
 
     print("== faults/throughputs(val+num)/latencies(val+num)/cypto-verif(val+num)/cypto-sign(val+num)")
     if len(faultsTVBase):
@@ -2368,10 +2764,20 @@ def createPlot(pFile):
         print("cheap",  (faultsTVCheap,  (valsTVCheap,  numsTVCheap),  (valsLVCheap,  numsLVCheap),  (valsCVCheap,  numsCVCheap),  (valsCSCheap,  numsCSCheap),   (valsTOCheap,  numsTOCheap)))
     if len(faultsTVQuick):
         print("quick",  (faultsTVQuick,  (valsTVQuick,  numsTVQuick),  (valsLVQuick,  numsLVQuick),  (valsCVQuick,  numsCVQuick),  (valsCSQuick,  numsCSQuick),   (valsTOQuick,  numsTOQuick)))
+    if len(faultsTVDamq):
+        print("damq",   (faultsTVDamq,   (valsTVDamq,   numsTVDamq),   (valsLVDamq,   numsLVDamq),   (valsCVDamq,   numsCVDamq),   (valsCSDamq,   numsCSDamq),    (valsTODamq,   numsTODamq)))
     if len(faultsTVComb):
         print("comb",   (faultsTVComb,   (valsTVComb,   numsTVComb),   (valsLVComb,   numsLVComb),   (valsCVComb,   numsCVComb),   (valsCSComb,   numsCSComb),    (valsTOComb,   numsTOComb)))
+    if len(faultsTVDamr):
+        print("damr",   (faultsTVDamr,   (valsTVDamr,   numsTVDamr),   (valsLVDamr,   numsLVDamr),   (valsCVDamr,   numsCVDamr),   (valsCSDamr,   numsCSDamr),    (valsTODamr,   numsTODamr)))
+    if len(faultsTVDama):
+        print("dama",   (faultsTVDama,   (valsTVDama,   numsTVDama),   (valsLVDama,   numsLVDama),   (valsCVDama,   numsCVDama),   (valsCSDama,   numsCSDama),    (valsTODama,   numsTODama)))
+    if len(faultsTVDamp):
+        print("damp",   (faultsTVDamp,   (valsTVDamp,   numsTVDamp),   (valsLVDamp,   numsLVDamp),   (valsCVDamp,   numsCVDamp),   (valsCSDamp,   numsCSDamp),    (valsTODamp,   numsTODamp)))
     if len(faultsTVFree):
         print("free",   (faultsTVFree,   (valsTVFree,   numsTVFree),   (valsLVFree,   numsLVFree),   (valsCVFree,   numsCVFree),   (valsCSFree,   numsCSFree),    (valsTOFree,   numsTOFree)))
+    if len(faultsTVRoll):
+        print("roll",   (faultsTVRoll,   (valsTVRoll,   numsTVRoll),   (valsLVRoll,   numsLVRoll),   (valsCVRoll,   numsCVRoll),   (valsCSRoll,   numsCSRoll),    (valsTORoll,   numsTORoll)))
     if len(faultsTVOnep):
         print("onep",   (faultsTVOnep,   (valsTVOnep,   numsTVOnep),   (valsLVOnep,   numsLVOnep),   (valsCVOnep,   numsCVOnep),   (valsCSOnep,   numsCSOnep),    (valsTOOnep,   numsTOOnep), (valsPBOnep, numsPBOnep), (valsPCOnep, numsPCOnep)))
     if len(faultsTVOnepB):
@@ -2392,10 +2798,20 @@ def createPlot(pFile):
         print("cheap",  faultsTVCheap,  valsTVCheap,  valsLVCheap)
     if len(faultsTVQuick):
         print("quick",  faultsTVQuick,  valsTVQuick,  valsLVQuick)
+    if len(faultsTVDamq):
+        print("damq",   faultsTVDamq,   valsTVDamq,   valsLVDamq)
     if len(faultsTVComb):
         print("comb",   faultsTVComb,   valsTVComb,   valsLVComb)
+    if len(faultsTVDamr):
+        print("damr",   faultsTVDamr,   valsTVDamr,   valsLVDamr)
+    if len(faultsTVDama):
+        print("dama",   faultsTVDama,   valsTVDama,   valsLVDama)
+    if len(faultsTVDamp):
+        print("damp",   faultsTVDamp,   valsTVDamp,   valsLVDamp)
     if len(faultsTVFree):
         print("free",   faultsTVFree,   valsTVFree,   valsLVFree)
+    if len(faultsTVRoll):
+        print("roll",   faultsTVRoll,   valsTVRoll,   valsLVRoll)
     if len(faultsTVOnep):
         print("onep",   faultsTVOnep,   valsTVOnep,   valsLVOnep)
     if len(faultsTVOnepB):
@@ -2415,8 +2831,16 @@ def createPlot(pFile):
         getPercentage(False,baseHS,faultsTVBase,valsTVBase,cheapHS,faultsTVCheap,valsTVCheap)
     if len(faultsTVQuick):
         getPercentage(False,baseHS,faultsTVBase,valsTVBase,quickHS,faultsTVQuick,valsTVQuick)
+    if len(faultsTVDamq):
+        getPercentage(False,baseHS,faultsTVBase,valsTVBase,damqHS,faultsTVDamq,valsTVDamq)
     if len(faultsTVComb):
         getPercentage(False,baseHS,faultsTVBase,valsTVBase,combHS, faultsTVComb, valsTVComb)
+    if len(faultsTVDamr):
+        getPercentage(False,baseHS,faultsTVBase,valsTVBase,damrHS, faultsTVDamr, valsTVDamr)
+    if len(faultsTVDama):
+        getPercentage(False,baseHS,faultsTVBase,valsTVBase,damaHS, faultsTVDama, valsTVDama)
+    if len(faultsTVDamp):
+        getPercentage(False,baseHS,faultsTVBase,valsTVBase,dampHS, faultsTVDamp, valsTVDamp)
     if len(faultsTVFree):
         getPercentage(False,baseHS,faultsTVBase,valsTVBase,freeHS, faultsTVFree, valsTVFree)
     if len(faultsTVFree):
@@ -2425,6 +2849,10 @@ def createPlot(pFile):
         getPercentage(False,baseHS,faultsTVBase,valsTVBase,onepHS, faultsTVOnep, valsTVOnep)
     if len(faultsTVOnep):
         getPercentage(False,combHS,faultsTVComb,valsTVComb,onepHS, faultsTVOnep, valsTVOnep)
+    if len(faultsTVRoll):
+        getPercentage(False,damrHS,faultsTVDamr,valsTVDamr,rollHS, faultsTVRoll, valsTVRoll)
+    if len(faultsTVRoll):
+        getPercentage(False,damqHS,faultsTVDamq,valsTVDamq,rollHS, faultsTVRoll, valsTVRoll)
     # chained
     if len(faultsTVChComb):
         getPercentage(False,baseChHS,faultsTVChBase,valsTVChBase,combChHS,faultsTVChComb,valsTVChComb)
@@ -2435,8 +2863,16 @@ def createPlot(pFile):
         getPercentage(True,baseHS,faultsLVBase,valsLVBase,cheapHS,faultsLVCheap,valsLVCheap)
     if len(faultsLVQuick):
         getPercentage(True,baseHS,faultsLVBase,valsLVBase,quickHS,faultsLVQuick,valsLVQuick)
+    if len(faultsLVDamq):
+        getPercentage(True,baseHS,faultsLVBase,valsLVBase,damqHS,faultsLVDamq,valsLVDamq)
     if len(faultsLVComb):
         getPercentage(True,baseHS,faultsLVBase,valsLVBase,combHS, faultsLVComb, valsLVComb)
+    if len(faultsLVDamr):
+        getPercentage(True,baseHS,faultsLVBase,valsLVBase,damrHS, faultsLVDamr, valsLVDamr)
+    if len(faultsLVDama):
+        getPercentage(True,baseHS,faultsLVBase,valsLVBase,damaHS, faultsLVDama, valsLVDama)
+    if len(faultsLVDamp):
+        getPercentage(True,baseHS,faultsLVBase,valsLVBase,dampHS, faultsLVDamp, valsLVDamp)
     if len(faultsLVFree):
         getPercentage(True,baseHS,faultsLVBase,valsLVBase,freeHS, faultsLVFree, valsLVFree)
     if len(faultsLVFree):
@@ -2445,6 +2881,10 @@ def createPlot(pFile):
         getPercentage(True,baseHS,faultsLVBase,valsLVBase,onepHS, faultsLVOnep, valsLVOnep)
     if len(faultsLVOnep):
         getPercentage(True,combHS,faultsLVComb,valsLVComb,onepHS, faultsLVOnep, valsLVOnep)
+    if len(faultsLVRoll):
+        getPercentage(True,damrHS,faultsLVDamr,valsLVDamr,rollHS, faultsLVRoll, valsLVRoll)
+    if len(faultsLVRoll):
+        getPercentage(True,damqHS,faultsLVDamq,valsLVDamq,rollHS, faultsLVRoll, valsLVRoll)
     # chained
     if len(faultsLVChComb):
         getPercentage(True,baseChHS,faultsLVChBase,valsLVChBase,combChHS,faultsLVChComb,valsLVChComb)
@@ -2455,8 +2895,16 @@ def createPlot(pFile):
         getPercentage(True,baseHS,faultsHBase,valsHBase,cheapHS,faultsHCheap,valsHCheap)
     if len(faultsHQuick):
         getPercentage(True,baseHS,faultsHBase,valsHBase,quickHS,faultsHQuick,valsHQuick)
+    if len(faultsHDamq):
+        getPercentage(True,baseHS,faultsHBase,valsHBase,damqHS,faultsHDamq,valsHDamq)
     if len(faultsHComb):
         getPercentage(True,baseHS,faultsHBase,valsHBase,combHS, faultsHComb, valsHComb)
+    if len(faultsHDamr):
+        getPercentage(True,baseHS,faultsHBase,valsHBase,damrHS, faultsHDamr, valsHDamr)
+    if len(faultsHDama):
+        getPercentage(True,baseHS,faultsHBase,valsHBase,damaHS, faultsHDama, valsHDama)
+    if len(faultsHDamp):
+        getPercentage(True,baseHS,faultsHBase,valsHBase,dampHS, faultsHDamp, valsHDamp)
     if len(faultsHFree):
         getPercentage(True,baseHS,faultsHBase,valsHBase,freeHS, faultsHFree, valsHFree)
     if len(faultsHFree):
@@ -2512,8 +2960,1383 @@ def createPlot(pFile):
         else:
             if plotHandle and not plotView:
                 fig.suptitle("Handling time")
+#            else:
+#                fig.suptitle("Throughputs (top) & Latencies (bottom)")
+
+    adjustFigAspect(fig,aspect=0.9)
+    #adjustFigAspect(fig,aspect=0.9)
+    if numPlots == 2:
+        fig.set_figheight(6)
+    else: # == 1
+        fig.set_figheight(3)
+    #fig.set_figwidth(4)
+
+    if plotThroughput:
+        xs = []
+        # naming the x/y axis
+        #axs[0].set(xlabel="#faults", ylabel="throughput")
+        if showYlabel:
+            axs[0].set(ylabel="throughput (Kops/s)")
+        if logScale:
+            axs[0].set_yscale('log')
+        if whichExp == "EUexp1":
+            axs[0].set_yticks((0.5,1,10,20,70))
+            axs[0].set_ylim([0.5,70])
+            axs[0].get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+        elif whichExp == "ALLexp1":
+            axs[0].set_yticks((0.3,1,6))
+            axs[0].set_ylim([0.3,6])
+            axs[0].get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+        # giving a title to my graph
+        #axs[0].set_title("throughputs")
+        # plotting the points
+        if plotView:
+            if plotBasic:
+                if len(faultsTVBase) > 0:
+                    axs[0].plot(faultsTVBase,   valsTVBase,   color=baseCOL,   linewidth=LW, marker=baseMRK,   markersize=MS, linestyle=baseLS,   label=baseHS)
+                    xs = list(set(xs) | set(faultsTVBase))
+                if len(faultsTVCheap) > 0:
+                    axs[0].plot(faultsTVCheap,  valsTVCheap,  color=cheapCOL,  linewidth=LW, marker=cheapMRK,  markersize=MS, linestyle=cheapLS,  label=cheapHS)
+                    xs = list(set(xs) | set(faultsTVCheap))
+                if len(faultsTVQuick) > 0:
+                    axs[0].plot(faultsTVQuick,  valsTVQuick,  color=quickCOL,  linewidth=LW, marker=quickMRK,  markersize=MS, linestyle=quickLS,  label=quickHS)
+                    xs = list(set(xs) | set(faultsTVQuick))
+                if len(faultsTVDamq) > 0:
+                    axs[0].plot(faultsTVDamq,   valsTVDamq,   color=damqCOL,   linewidth=LW, marker=damqMRK,   markersize=MS, linestyle=damqLS,   label=damqHS)
+                    xs = list(set(xs) | set(faultsTVDamq))
+                if plotComb and len(faultsTVComb) > 0:
+                    axs[0].plot(faultsTVComb,   valsTVComb,   color=combCOL,   linewidth=LW, marker=combMRK,   markersize=MS, linestyle=combLS,   label=combHS)
+                    xs = list(set(xs) | set(faultsTVComb))
+                if len(faultsTVDamr) > 0:
+                    axs[0].plot(faultsTVDamr,   valsTVDamr,   color=damrCOL,   linewidth=LW, marker=damrMRK,   markersize=MS, linestyle=damrLS,   label=damrHS)
+                    xs = list(set(xs) | set(faultsTVDamr))
+                if len(faultsTVDama) > 0:
+                    axs[0].plot(faultsTVDama,   valsTVDama,   color=damaCOL,   linewidth=LW, marker=damaMRK,   markersize=MS, linestyle=damaLS,   label=damaHS)
+                    xs = list(set(xs) | set(faultsTVDama))
+                if len(faultsTVDamp) > 0:
+                    axs[0].plot(faultsTVDamp,   valsTVDamp,   color=dampCOL,   linewidth=LW, marker=dampMRK,   markersize=MS, linestyle=dampLS,   label=dampHS)
+                    xs = list(set(xs) | set(faultsTVDamp))
+                if len(faultsTVFree) > 0:
+                    axs[0].plot(faultsTVFree,   valsTVFree,   color=freeCOL,   linewidth=LW, marker=freeMRK,   markersize=MS, linestyle=freeLS,   label=freeHS)
+                    xs = list(set(xs) | set(faultsTVFree))
+                if len(faultsTVRoll) > 0:
+                    axs[0].plot(faultsTVRoll,   valsTVRoll,   color=rollCOL,   linewidth=LW, marker=rollMRK,   markersize=MS, linestyle=rollLS,   label=rollHS)
+                    xs = list(set(xs) | set(faultsTVRoll))
+                if len(faultsTVOnep) > 0:
+                    axs[0].plot(faultsTVOnep,   valsTVOnep,   color=onepCOL,   linewidth=LW, marker=onepMRK,   markersize=MS, linestyle=onepLS,   label=onepHS)
+                    xs = list(set(xs) | set(faultsTVOnep))
+                if len(faultsTVOnepB) > 0:
+                    axs[0].plot(faultsTVOnepB,  valsTVOnepB,  color=onepbCOL,  linewidth=LW, marker=onepbMRK,  markersize=MS, linestyle=onepbLS,  label=onepbHS)
+                    xs = list(set(xs) | set(faultsTVOnepB))
+                if len(faultsTVOnepC) > 0:
+                    axs[0].plot(faultsTVOnepC,  valsTVOnepC,  color=onepcCOL,  linewidth=LW, marker=onepcMRK,  markersize=MS, linestyle=onepcLS,  label=onepcHS)
+                    xs = list(set(xs) | set(faultsTVOnepC))
+                if len(faultsTVOnepD) > 0:
+                    axs[0].plot(faultsTVOnepD,  valsTVOnepD,  color=onepdCOL,  linewidth=LW, marker=onepdMRK,  markersize=MS, linestyle=onepdLS,  label=onepdHS)
+                    xs = list(set(xs) | set(faultsTVOnepD))
+            if plotChained:
+                if len(faultsTVChBase) > 0:
+                    axs[0].plot(faultsTVChBase, valsTVChBase, color=baseChCOL, linewidth=LW, marker=baseChMRK, markersize=MS, linestyle=baseChLS, label=baseChHS)
+                    xs = list(set(xs) | set(faultsTVChBase))
+                if len(faultsTVChComb) > 0:
+                    axs[0].plot(faultsTVChComb, valsTVChComb, color=combChCOL, linewidth=LW, marker=combChMRK, markersize=MS, linestyle=combChLS, label=combChHS)
+                    xs = list(set(xs) | set(faultsTVChComb))
+            if debugPlot:
+                if plotBasic:
+                    for x,y,z in zip(faultsTVBase, valsTVBase, numsTVBase):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVCheap, valsTVCheap, numsTVCheap):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVQuick, valsTVQuick, numsTVQuick):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVDamq, valsTVDamq, numsTVDamq):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVComb, valsTVComb, numsTVComb):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVDamr, valsTVDamr, numsTVDamr):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVDama, valsTVDama, numsTVDama):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVDamp, valsTVDamp, numsTVDamp):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVFree, valsTVFree, numsTVFree):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVRoll, valsTVRoll, numsTVRoll):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVOnep, valsTVOnep, numsTVOnep):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVOnepB, valsTVOnepB, numsTVOnepB):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVOnepC, valsTVOnepC, numsTVOnepC):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVOnepD, valsTVOnepD, numsTVOnepD):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                if plotChained:
+                    for x,y,z in zip(faultsTVChBase, valsTVChBase, numsTVChBase):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsTVChComb, valsTVChComb, numsTVChComb):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+
+        axs[0].set_xticks(xs)
+
+        # legend
+        if showLegend1:
+            #axs[0].legend(ncol=1,prop={'size': 9},loc='upper center', bbox_to_anchor=(0.4, 1.44))
+            axs[0].legend(ncol=1,prop={'size': 9})
+
+    if plotLatency:
+        xs = []
+        ax=axs[0]
+        if plotThroughput:
+            ax=axs[1]
+        # naming the x/y axis
+        if showYlabel:
+            if plotHandle and not plotView:
+                if deadNodes:
+                    ax.set(xlabel="#nodes", ylabel="handling time (ms)")
+                else:
+                    ax.set(xlabel="fault threshold (f)", ylabel="handling time (ms)")
             else:
-                fig.suptitle("Throughputs (top) & Latencies (bottom)")
+                if deadNodes:
+                    ax.set(xlabel="#nodes", ylabel="latency (ms)")
+                else:
+                    ax.set(xlabel="fault threshold (f)", ylabel="latency (ms)")
+        else:
+            ax.set(xlabel="fault threshold (f)")
+        if logScale:
+            ax.set_yscale('log')
+        if whichExp == "EUexp1":
+            ax.set_yticks((5,100,600))
+            ax.set_ylim([5,600])
+            ax.get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+        elif whichExp == "ALLexp1":
+            ax.set_yticks((60,100,1000))
+            ax.set_ylim([60,1000])
+            ax.get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+        # giving a title to my graph
+        #ax.set_title("latencies")
+        # plotting the points
+        if plotView:
+            if plotBasic:
+                if len(faultsLVBase) > 0: #and not runBase:
+                    ax.plot(faultsLVBase,   valsLVBase,   color=baseCOL,   linewidth=LW, marker=baseMRK,   markersize=MS, linestyle=baseLS,   label=baseHS)
+                    xs = list(set(xs) | set(faultsLVBase))
+                if len(faultsLVCheap) > 0: #and not runCheap:
+                    ax.plot(faultsLVCheap,  valsLVCheap,  color=cheapCOL,  linewidth=LW, marker=cheapMRK,  markersize=MS, linestyle=cheapLS,  label=cheapHS)
+                    xs = list(set(xs) | set(faultsLVCheap))
+                if len(faultsLVQuick) > 0: #and not runQuick:
+                    ax.plot(faultsLVQuick,  valsLVQuick,  color=quickCOL,  linewidth=LW, marker=quickMRK,  markersize=MS, linestyle=quickLS,  label=quickHS)
+                    xs = list(set(xs) | set(faultsLVQuick))
+                if len(faultsLVDamq) > 0: #and not runDamq:
+                    ax.plot(faultsLVDamq,   valsLVDamq,   color=damqCOL,   linewidth=LW, marker=damqMRK,   markersize=MS, linestyle=damqLS,   label=damqHS)
+                    xs = list(set(xs) | set(faultsLVDamq))
+                if plotComb and len(faultsLVComb) > 0: #and not runComb:
+                    ax.plot(faultsLVComb,   valsLVComb,   color=combCOL,   linewidth=LW, marker=combMRK,   markersize=MS, linestyle=combLS,   label=combHS)
+                    xs = list(set(xs) | set(faultsLVComb))
+                if len(faultsLVDamr) > 0: #and not runDamr:
+                    ax.plot(faultsLVDamr,   valsLVDamr,   color=damrCOL,   linewidth=LW, marker=damrMRK,   markersize=MS, linestyle=damrLS,   label=damrHS)
+                    xs = list(set(xs) | set(faultsLVDamr))
+                if len(faultsLVDama) > 0: #and not runDama:
+                    ax.plot(faultsLVDama,   valsLVDama,   color=damaCOL,   linewidth=LW, marker=damaMRK,   markersize=MS, linestyle=damaLS,   label=damaHS)
+                    xs = list(set(xs) | set(faultsLVDama))
+                if len(faultsLVDamp) > 0: #and not runDamp:
+                    ax.plot(faultsLVDamp,   valsLVDamp,   color=dampCOL,   linewidth=LW, marker=dampMRK,   markersize=MS, linestyle=dampLS,   label=dampHS)
+                    xs = list(set(xs) | set(faultsLVDamp))
+                if len(faultsLVFree) > 0: #and not runFree:
+                    ax.plot(faultsLVFree,   valsLVFree,   color=freeCOL,   linewidth=LW, marker=freeMRK,   markersize=MS, linestyle=freeLS,   label=freeHS)
+                    xs = list(set(xs) | set(faultsLVFree))
+                if len(faultsLVRoll) > 0: #and not runRoll:
+                    ax.plot(faultsLVRoll,   valsLVRoll,   color=rollCOL,   linewidth=LW, marker=rollMRK,   markersize=MS, linestyle=rollLS,   label=rollHS)
+                    xs = list(set(xs) | set(faultsLVRoll))
+                if len(faultsLVOnep) > 0: #and not runOnep:
+                    ax.plot(faultsLVOnep,   valsLVOnep,   color=onepCOL,   linewidth=LW, marker=onepMRK,   markersize=MS, linestyle=onepLS,   label=onepHS)
+                    xs = list(set(xs) | set(faultsLVOnep))
+                if len(faultsLVOnepB) > 0: #and not runOnepB:
+                    ax.plot(faultsLVOnepB,  valsLVOnepB,  color=onepbCOL,  linewidth=LW, marker=onepbMRK,  markersize=MS, linestyle=onepbLS,  label=onepbHS)
+                    xs = list(set(xs) | set(faultsLVOnepB))
+                if len(faultsLVOnepC) > 0: #and not runOnepC:
+                    ax.plot(faultsLVOnepC,  valsLVOnepC,  color=onepcCOL,  linewidth=LW, marker=onepcMRK,  markersize=MS, linestyle=onepcLS,  label=onepcHS)
+                    xs = list(set(xs) | set(faultsLVOnepC))
+                if len(faultsLVOnepD) > 0: #and not runOnepD:
+                    ax.plot(faultsLVOnepD,  valsLVOnepD,  color=onepdCOL,  linewidth=LW, marker=onepdMRK,  markersize=MS, linestyle=onepdLS,  label=onepdHS)
+                    xs = list(set(xs) | set(faultsLVOnepD))
+            if plotChained:
+                if len(faultsLVChBase) > 0:
+                    ax.plot(faultsLVChBase, valsLVChBase, color=baseChCOL, linewidth=LW, marker=baseChMRK, markersize=MS, linestyle=baseChLS, label=baseChHS)
+                    xs = list(set(xs) | set(faultsLVChBase))
+                if len(faultsLVChComb) > 0:
+                    ax.plot(faultsLVChComb, valsLVChComb, color=combChCOL, linewidth=LW, marker=combChMRK, markersize=MS, linestyle=combChLS, label=combChHS)
+                    xs = list(set(xs) | set(faultsLVChComb))
+            if debugPlot:
+                if plotBasic:
+                    for x,y,z in zip(faultsLVBase, valsLVBase, numsLVBase):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVCheap, valsLVCheap, numsLVCheap):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVQuick, valsLVQuick, numsLVQuick):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVDamq, valsLVDamq, numsLVDamq):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVComb, valsLVComb, numsLVComb):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVDamr, valsLVDamr, numsLVDamr):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVDama, valsLVDama, numsLVDama):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVDamp, valsLVDamp, numsLVDamp):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVFree, valsLVFree, numsLVFree):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVRoll, valsLVRoll, numsLVRoll):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVOnep, valsLVOnep, numsLVOnep):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVOnepB, valsLVOnepB, numsLVOnepB):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVOnepC, valsLVOnepC, numsLVOnepC):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVOnepD, valsLVOnepD, numsLVOnepD):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                if plotChained:
+                    for x,y,z in zip(faultsLVChBase, valsLVChBase, numsLVChBase):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsLVChComb, valsLVChComb, numsLVChComb):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+        if plotHandle:
+            if plotBasic:
+                if len(faultsHBase) > 0:
+                    ax.plot(faultsHBase,   valsHBase,   color=baseCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=baseLS,   label=baseHS+"")
+                if len(faultsHCheap) > 0:
+                    ax.plot(faultsHCheap,  valsHCheap,  color=cheapCOL,  linewidth=LW, marker="+", markersize=MS, linestyle=cheapLS,  label=cheapHS+"")
+                if len(faultsHQuick) > 0:
+                    ax.plot(faultsHQuick,  valsHQuick,  color=quickCOL,  linewidth=LW, marker="+", markersize=MS, linestyle=quickLS,  label=quickHS+"")
+                if len(faultsHDamq) > 0:
+                    ax.plot(faultsHDamq,   valsHDamq,   color=damqCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=damqLS,   label=damqHS+"")
+                if len(faultsHComb) > 0:
+                    ax.plot(faultsHComb,   valsHComb,   color=combCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=combLS,   label=combHS+"")
+                if len(faultsHDamr) > 0:
+                    ax.plot(faultsHDamr,   valsHDamr,   color=damrCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=damrLS,   label=damrHS+"")
+                if len(faultsHDama) > 0:
+                    ax.plot(faultsHDama,   valsHDama,   color=damaCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=damaLS,   label=damaHS+"")
+                if len(faultsHDamp) > 0:
+                    ax.plot(faultsHDamp,   valsHDamp,   color=dampCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=dampLS,   label=dampHS+"")
+                if len(faultsHFree) > 0:
+                    ax.plot(faultsHFree,   valsHFree,   color=freeCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=freeLS,   label=freeHS+"")
+                if len(faultsHRoll) > 0:
+                    ax.plot(faultsHRoll,   valsHRoll,   color=rollCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=rollLS,   label=rollHS+"")
+                if len(faultsHOnep) > 0:
+                    ax.plot(faultsHOnep,   valsHOnep,   color=onepCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=onepLS,   label=onepHS+"")
+                if len(faultsHOnepB) > 0:
+                    ax.plot(faultsHOnepB,  valsHOnepB,  color=onepbCOL,  linewidth=LW, marker="+", markersize=MS, linestyle=onepbLS,  label=onepbHS+"")
+                if len(faultsHOnepC) > 0:
+                    ax.plot(faultsHOnepC,  valsHOnepC,  color=onepcCOL,  linewidth=LW, marker="+", markersize=MS, linestyle=onepcLS,  label=onepcHS+"")
+                if len(faultsHOnepD) > 0:
+                    ax.plot(faultsHOnepD,  valsHOnepD,  color=onepdCOL,  linewidth=LW, marker="+", markersize=MS, linestyle=onepdLS,  label=onepdHS+"")
+            if plotChained:
+                if len(faultsHChBase) > 0:
+                    ax.plot(faultsHChBase, valsHChBase, color=baseChCOL, linewidth=LW, marker="+", markersize=MS, linestyle=baseChLS, label=baseChHS+"")
+                if len(faultsHChComb) > 0:
+                    ax.plot(faultsHChComb, valsHChComb, color=combChCOL, linewidth=LW, marker="+", markersize=MS, linestyle=combChLS, label=combChHS+"")
+            if debugPlot:
+                if plotBasic:
+                    for x,y,z in zip(faultsHBase, valsHBase, numsHBase):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHCheap, valsHCheap, numsHCheap):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHQuick, valsHQuick, numsHQuick):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHDamq, valsHDamq, numsHDamq):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHComb, valsHComb, numsHComb):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHDamr, valsHDamr, numsHDamr):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHDama, valsHDama, numsHDama):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHDamp, valsHDamp, numsHDamp):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHFree, valsHFree, numsHFree):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHRoll, valsHRoll, numsHRoll):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHOnep, valsHOnep, numsHOnep):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHOnepB, valsHOnepB, numsHOnepB):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHOnepC, valsHOnepC, numsHOnepC):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHOnepD, valsHOnepD, numsHOnepD):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                if plotChained:
+                    for x,y,z in zip(faultsHChBase, valsHChBase, numsHChBase):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsHChComb, valsHChComb, numsHChComb):
+                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+        if plotCrypto: # Sign
+            if plotBasic:
+                if len(faultsCSBase) > 0:
+                    axs[0].plot(faultsCSBase,   valsCSBase,   color=baseCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=baseLS,   label=baseHS+" (crypto-sign)")
+                if len(faultsCSCheap) > 0:
+                    axs[0].plot(faultsCSCheap,  valsCSCheap,  color=cheapCOL,  linewidth=LW, marker="1", markersize=MS, linestyle=cheapLS,  label=cheapHS+" (crypto-sign)")
+                if len(faultsCSQuick) > 0:
+                    axs[0].plot(faultsCSQuick,  valsCSQuick,  color=quickCOL,  linewidth=LW, marker="1", markersize=MS, linestyle=quickLS,  label=quickHS+" (crypto-sign)")
+                if len(faultsCSDamq) > 0:
+                    axs[0].plot(faultsCSDamq,   valsCSDamq,   color=damqCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=damqLS,   label=damqHS+" (crypto-sign)")
+                if len(faultsCSComb) > 0:
+                    axs[0].plot(faultsCSComb,   valsCSComb,   color=combCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=combLS,   label=combHS+" (crypto-sign)")
+                if len(faultsCSDamr) > 0:
+                    axs[0].plot(faultsCSDamr,   valsCSDamr,   color=damrCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=damrLS,   label=damrHS+" (crypto-sign)")
+                if len(faultsCSDama) > 0:
+                    axs[0].plot(faultsCSDama,   valsCSDama,   color=damaCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=damaLS,   label=damaHS+" (crypto-sign)")
+                if len(faultsCSDamp) > 0:
+                    axs[0].plot(faultsCSDamp,   valsCSDamp,   color=dampCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=dampLS,   label=dampHS+" (crypto-sign)")
+                if len(faultsCSFree) > 0:
+                    axs[0].plot(faultsCSFree,   valsCSFree,   color=freeCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=freeLS,   label=freeHS+" (crypto-sign)")
+                if len(faultsCSRoll) > 0:
+                    axs[0].plot(faultsCSRoll,   valsCSRoll,   color=rollCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=rollLS,   label=rollHS+" (crypto-sign)")
+                if len(faultsCSOnep) > 0:
+                    axs[0].plot(faultsCSOnep,   valsCSOnep,   color=onepCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=onepLS,   label=onepHS+" (crypto-sign)")
+                if len(faultsCSOnepB) > 0:
+                    axs[0].plot(faultsCSOnepB,  valsCSOnepB,  color=onepbCOL,  linewidth=LW, marker="1", markersize=MS, linestyle=onepbLS,  label=onepbHS+" (crypto-sign)")
+                if len(faultsCSOnepC) > 0:
+                    axs[0].plot(faultsCSOnepC,  valsCSOnepC,  color=onepcCOL,  linewidth=LW, marker="1", markersize=MS, linestyle=onepcLS,  label=onepcHS+" (crypto-sign)")
+                if len(faultsCSOnepD) > 0:
+                    axs[0].plot(faultsCSOnepD,  valsCSOnepD,  color=onepdCOL,  linewidth=LW, marker="1", markersize=MS, linestyle=onepdLS,  label=onepdHS+" (crypto-sign)")
+            if plotChained:
+                if len(faultsCSChBase) > 0:
+                    axs[0].plot(faultsCSChBase, valsCSChBase, color=baseChCOL, linewidth=LW, marker="1", markersize=MS, linestyle=baseChLS, label=baseChHS+" (crypto-sign)")
+                if len(faultsCSChComb) > 0:
+                    axs[0].plot(faultsCSChComb, valsCSChComb, color=combChCOL, linewidth=LW, marker="1", markersize=MS, linestyle=combChLS, label=combChHS+" (crypto-sign)")
+            if debugPlot:
+                if plotBasic:
+                    for x,y,z in zip(faultsCSBase, valsCSBase, numsCSBase):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSCheap, valsCSCheap, numsCSCheap):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSQuick, valsCSQuick, numsCSQuick):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSDamq, valsCSDamq, numsCSDamq):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSComb, valsCSComb, numsCSComb):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSDamr, valsCSDamr, numsCSDamr):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSDama, valsCSDama, numsCSDama):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSDamp, valsCSDamp, numsCSDamp):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSFree, valsCSFree, numsCSFree):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSRoll, valsCSRoll, numsCSRoll):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSOnep, valsCSOnep, numsCSOnep):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSOnepB, valsCSOnepB, numsCSOnepB):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSOnepC, valsCSOnepC, numsCSOnepC):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSOnepD, valsCSOnepD, numsCSOnepD):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                if plotChained:
+                    for x,y,z in zip(faultsCSChBase, valsCSChBase, numsCSChBase):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCSChComb, valsCSChComb, numsCSChComb):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+        if plotCrypto: # Verif
+            if plotBasic:
+                if len(faultsCVBase) > 0:
+                    axs[0].plot(faultsCVBase,   valsCVBase,   color=baseCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=baseLS,   label=baseHS+" (crypto-verif)")
+                if len(faultsCVCheap) > 0:
+                    axs[0].plot(faultsCVCheap,  valsCVCheap,  color=cheapCOL,  linewidth=LW, marker="2", markersize=MS, linestyle=cheapLS,  label=cheapHS+" (crypto-verif)")
+                if len(faultsCVQuick) > 0:
+                    axs[0].plot(faultsCVQuick,  valsCVQuick,  color=quickCOL,  linewidth=LW, marker="2", markersize=MS, linestyle=quickLS,  label=quickHS+" (crypto-verif)")
+                if len(faultsCVDamq) > 0:
+                    axs[0].plot(faultsCVDamq,   valsCVDamq,   color=damqCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=damqLS,   label=damqHS+" (crypto-verif)")
+                if len(faultsCVComb) > 0:
+                    axs[0].plot(faultsCVComb,   valsCVComb,   color=combCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=combLS,   label=combHS+" (crypto-verif)")
+                if len(faultsCVDamr) > 0:
+                    axs[0].plot(faultsCVDamr,   valsCVDamr,   color=damrCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=damrLS,   label=damrHS+" (crypto-verif)")
+                if len(faultsCVDama) > 0:
+                    axs[0].plot(faultsCVDama,   valsCVDama,   color=damaCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=damaLS,   label=damaHS+" (crypto-verif)")
+                if len(faultsCVDamp) > 0:
+                    axs[0].plot(faultsCVDamp,   valsCVDamp,   color=dampCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=dampLS,   label=dampHS+" (crypto-verif)")
+                if len(faultsCVFree) > 0:
+                    axs[0].plot(faultsCVFree,   valsCVFree,   color=freeCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=freeLS,   label=freeHS+" (crypto-verif)")
+                if len(faultsCVRoll) > 0:
+                    axs[0].plot(faultsCVRoll,   valsCVRoll,   color=rollCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=rollLS,   label=rollHS+" (crypto-verif)")
+                if len(faultsCVOnep) > 0:
+                    axs[0].plot(faultsCVOnep,   valsCVOnep,   color=onepCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=onepLS,   label=onepHS+" (crypto-verif)")
+                if len(faultsCVOnepB) > 0:
+                    axs[0].plot(faultsCVOnepB,  valsCVOnepB,  color=onepbCOL,  linewidth=LW, marker="2", markersize=MS, linestyle=onepbLS,  label=onepbHS+" (crypto-verif)")
+                if len(faultsCVOnepC) > 0:
+                    axs[0].plot(faultsCVOnepC,  valsCVOnepC,  color=onepcCOL,  linewidth=LW, marker="2", markersize=MS, linestyle=onepcLS,  label=onepcHS+" (crypto-verif)")
+                if len(faultsCVOnepD) > 0:
+                    axs[0].plot(faultsCVOnepD,  valsCVOnepD,  color=onepdCOL,  linewidth=LW, marker="2", markersize=MS, linestyle=onepdLS,  label=onepdHS+" (crypto-verif)")
+            if plotChained:
+                if len(faultsCVChBase) > 0:
+                    axs[0].plot(faultsCVChBase, valsCVChBase, color=baseChCOL, linewidth=LW, marker="2", markersize=MS, linestyle=baseChLS, label=baseChHS+" (crypto-verif)")
+                if len(faultsCVChComb) > 0:
+                    axs[0].plot(faultsCVChComb, valsCVChComb, color=combChCOL, linewidth=LW, marker="2", markersize=MS, linestyle=combChLS, label=combChHS+" (crypto-verif)")
+            if debugPlot:
+                if plotBasic:
+                    for x,y,z in zip(faultsCVBase, valsCVBase, numsCVBase):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVCheap, valsCVCheap, numsCVCheap):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVQuick, valsCVQuick, numsCVQuick):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVDamq, valsCVDamq, numsCVDamq):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVComb, valsCVComb, numsCVComb):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVDamr, valsCVDamr, numsCVDamr):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVDama, valsCVDama, numsCVDama):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVDamp, valsCVDamp, numsCVDamp):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVFree, valsCVFree, numsCVFree):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVRoll, valsCVRoll, numsCVRoll):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVOnep, valsCVOnep, numsCVOnep):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVOnepB, valsCVOnepB, numsCVOnepB):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVOnepC, valsCVOnepC, numsCVOnepC):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVOnepD, valsCVOnepD, numsCVOnepD):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                if plotChained:
+                    for x,y,z in zip(faultsCVChBase, valsCVChBase, numsCVChBase):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                    for x,y,z in zip(faultsCVChComb, valsCVChComb, numsCVChComb):
+                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+
+        ax.set_xticks(xs)
+
+        # legend
+        if showLegend2 or (showLegend1 and not plotThroughput):
+            ax.legend(prop={'size': 9})
+
+    #fig.subplots_adjust(hspace=0.5)
+    fig.savefig(plotFile, bbox_inches='tight', pad_inches=0.05)
+    print("view-times are in", timesFile)
+    print("points are in", pFile)
+    print("plot is in", plotFile)
+    if displayPlot:
+        try:
+            subprocess.call([displayApp, plotFile])
+        except:
+            print("couldn't display the plot using '" + displayApp + "'. Consider changing the 'displayApp' variable.")
+    return (dictTVBase, dictTVCheap, dictTVQuick, dictTVDamq, dictTVComb, dictTVDamr, dictTVDama, dictTVDamp, dictTVFree, dictTVRoll, dictTVOnep, dictTVOnepB, dictTVOnepC, dictTVOnepD, dictTVChBase, dictTVChComb,
+            dictLVBase, dictLVCheap, dictLVQuick, dictLVDamq, dictLVComb, dictLVDamr, dictLVDama, dictLVDamp, dictLVFree, dictLVRoll, dictLVOnep, dictLVOnepB, dictLVOnepC, dictLVOnepD, dictLVChBase, dictLVChComb)
+# End of createPlot
+
+
+## Plots the points in a view-times file
+def createPlotViewTimes(file):
+    prot    = ""
+    faults  = 0
+    vals    = []
+    latency = ""
+    rate    = ""
+    payload = ""
+
+    fig, axs = plt.subplots(1,1)
+    axs.set(xlabel="view")
+    axs.set(ylabel="time")
+
+    f = open(file,'r')
+    for line in f.readlines():
+        l = re.split(r'[ \n]+', line)
+        l = [x for x in l if x.strip()]
+        if line.startswith("## "):
+            if len(l) == 4:
+                [_,lat,rat,pld] = l
+                [_,latency] = lat.split("=")
+                [_,rate]    = rat.split("=")
+                [_,payload] = pld.split("=")
+            else:
+                print("unexpected line:", line)
+        elif line.startswith("# "):
+            if 0 < len(vals):
+                # We have values to plot
+                xpoints = range(len(vals))
+                ypoints = vals
+                lab     = prot + "(" + str(faults) + ")"
+                print(lab)
+                plt.plot(xpoints, ypoints, marker="o", label=lab)
+
+            if len(l) == 3:
+                [_,prot,faults] = l
+                vals = []
+            else:
+                print("unexpected line:", line)
+        else:
+            p    = l[0]
+            f    = l[1]
+            rest = l[2:]
+            if len(vals) == 0:
+                vals = [float(x) for x in rest]
+            else:
+                vals = [ (x[0]+float(x[1]))/2 for x in zip(vals,rest) ]
+
+    if 0 < len(vals):
+        xpoints = range(len(vals))
+        ypoints = vals
+        lab     = prot + "(" + str(faults) + ")"
+        plt.plot(xpoints, ypoints, marker="o", label=lab)
+
+    fig.suptitle("latency="+latency+" rate="+rate+" payload="+payload)
+
+    axs.legend(prop={'size': 9})
+    pfile = file + ".svg"
+    fig.savefig(pfile, bbox_inches='tight', pad_inches=0.05)
+    subprocess.call([displayApp, pfile])
+
+
+def createPlotJoin(pFile):
+    # throughput-view
+    dictTVBase   = {}
+    dictTVCheap  = {}
+    dictTVQuick  = {}
+    dictTVDamq   = {}
+    dictTVComb   = {}
+    dictTVDamr   = {}
+    dictTVDama   = {}
+    dictTVDamp   = {}
+    dictTVFree   = {}
+    dictTVRoll   = {}
+    dictTVOnep   = {}
+    dictTVOnepB  = {}
+    dictTVOnepC  = {}
+    dictTVOnepD  = {}
+    dictTVChBase = {}
+    dictTVChComb = {}
+
+    # latency-view
+    dictLVBase   = {}
+    dictLVCheap  = {}
+    dictLVQuick  = {}
+    dictLVDamq   = {}
+    dictLVComb   = {}
+    dictLVDamr   = {}
+    dictLVDama   = {}
+    dictLVDamp   = {}
+    dictLVFree   = {}
+    dictLVRoll   = {}
+    dictLVOnep   = {}
+    dictLVOnepB  = {}
+    dictLVOnepC  = {}
+    dictLVOnepD  = {}
+    dictLVChBase = {}
+    dictLVChComb = {}
+
+    # handle
+    dictHBase   = {}
+    dictHCheap  = {}
+    dictHQuick  = {}
+    dictHDamq   = {}
+    dictHComb   = {}
+    dictHDamr   = {}
+    dictHDama   = {}
+    dictHDamp   = {}
+    dictHFree   = {}
+    dictHRoll   = {}
+    dictHOnep   = {}
+    dictHOnepB  = {}
+    dictHOnepC  = {}
+    dictHOnepD  = {}
+    dictHChBase = {}
+    dictHChComb = {}
+
+    # timeouts
+    dictTOBase   = {}
+    dictTOCheap  = {}
+    dictTOQuick  = {}
+    dictTODamq   = {}
+    dictTOComb   = {}
+    dictTODamr   = {}
+    dictTODama   = {}
+    dictTODamp   = {}
+    dictTOFree   = {}
+    dictTORoll   = {}
+    dictTOOnep   = {}
+    dictTOOnepB  = {}
+    dictTOOnepC  = {}
+    dictTOOnepD  = {}
+    dictTOChBase = {}
+    dictTOChComb = {}
+
+    # onepbs
+    dictPBBase   = {}
+    dictPBCheap  = {}
+    dictPBQuick  = {}
+    dictPBDamq   = {}
+    dictPBComb   = {}
+    dictPBDamr   = {}
+    dictPBDama   = {}
+    dictPBDamp   = {}
+    dictPBFree   = {}
+    dictPBRoll   = {}
+    dictPBOnep   = {}
+    dictPBOnepB  = {}
+    dictPBOnepC  = {}
+    dictPBOnepD  = {}
+    dictPBChBase = {}
+    dictPBChComb = {}
+
+    # onepcs
+    dictPCBase   = {}
+    dictPCCheap  = {}
+    dictPCQuick  = {}
+    dictPCDamq   = {}
+    dictPCComb   = {}
+    dictPCDamr   = {}
+    dictPCDama   = {}
+    dictPCDamp   = {}
+    dictPCFree   = {}
+    dictPCRoll   = {}
+    dictPCOnep   = {}
+    dictPCOnepB  = {}
+    dictPCOnepC  = {}
+    dictPCOnepD  = {}
+    dictPCChBase = {}
+    dictPCChComb = {}
+
+    # crypto-sign
+    dictCSBase   = {}
+    dictCSCheap  = {}
+    dictCSQuick  = {}
+    dictCSDamq   = {}
+    dictCSComb   = {}
+    dictCSDamr   = {}
+    dictCSDama   = {}
+    dictCSDamp   = {}
+    dictCSFree   = {}
+    dictCSRoll   = {}
+    dictCSOnep   = {}
+    dictCSOnepB  = {}
+    dictCSOnepC  = {}
+    dictCSOnepD  = {}
+    dictCSChBase = {}
+    dictCSChComb = {}
+
+    # crypto-verif
+    dictCVBase   = {}
+    dictCVCheap  = {}
+    dictCVQuick  = {}
+    dictCVDamq   = {}
+    dictCVComb   = {}
+    dictCVDamr   = {}
+    dictCVDama   = {}
+    dictCVDamp   = {}
+    dictCVFree   = {}
+    dictCVRoll   = {}
+    dictCVOnep   = {}
+    dictCVOnepB  = {}
+    dictCVOnepC  = {}
+    dictCVOnepD  = {}
+    dictCVChBase = {}
+    dictCVChComb = {}
+
+    global dockerCpu, dockerMem, networkLat, payloadSize, repeats, repeatsL2, numViews, rateMbit
+
+    # We accumulate all the points in dictionaries
+    print("reading points from:", pFile)
+    f = open(pFile,'r')
+    for line in f.readlines():
+        if line.startswith("##params"):
+            args = line.split(" ")
+            cpu     = "cpus=0"
+            mem     = "mem=0"
+            lat     = "lat=0"
+            rate    = "rate=0"
+            payload = "payload=0"
+            rep1    = "repeats1=0"
+            rep2    = "repeats2=0"
+            views   = "views=0"
+            regs    = "regions=one"
+            if len(args) == 9:
+                [hdr,cpu,mem,lat,payload,rep1,rep2,views,regs] = args
+            elif len(args) == 10:
+                [hdr,cpu,mem,lat,rate,payload,rep1,rep2,views,regs] = args
+            else:
+                print("WRONG ARGUMENTS in ##params comment")
+            [cpuTag,cpuVal] = cpu.split("=")
+            dockerCpu = float(cpuVal)
+            [memTag,memVal] = mem.split("=")
+            dockerMem = int(memVal)
+            [latTag,latVal] = lat.split("=")
+            networkLat = float(latVal)
+            [rateTag,rateVal] = rate.split("=")
+            rateMbit = float(rateVal)
+            [payloadTag,payloadVal] = payload.split("=")
+            payloadSize = int(payloadVal)
+            [rep1Tag,rep1Val] = rep1.split("=")
+            repeats = int(rep1Val)
+            [rep2Tag,rep2Val] = rep2.split("=")
+            repeatsL2 = int(rep2Val)
+            [viewsTag,viewsVal] = views.split("=")
+            numViews = int(viewsVal)
+            [regsTag,regsVal] = regs.split("=")
+            setRegion(regsVal)
+
+        if line.startswith("protocol"):
+            l = line.split(" ")
+            prot   = "protocol=BASIC_BASELINE"
+            faults = "faults=1"
+            joins  = "joiners=0"
+            deads  = "deads=0"
+            point  = "throughput-view=0.0"
+            if len(l) == 3:
+                [prot,faults,point] = l
+            elif len(l) == 4:
+                [prot,faults,deads,point] = l
+            elif len(l) == 5:
+                [prot,faults,joins,dead,point] = l
+            else:
+                print("WRONG ARGUMENTS in point line: " + line)
+            [protTag,protVal]     = prot.split("=")
+            [faultsTag,faultsVal] = faults.split("=")
+            [joinsTag,joinsVal]   = joins.split("=")
+            [deadsTag,deadsVal]   = deads.split("=")
+            [pointTag,pointVal]   = point.split("=")
+            numFaults=int(faultsVal)
+            numJoins=int(joinsVal)
+            numDeads=int(deadsVal)
+            if float(pointVal) < float('inf'):
+                # Throughputs-view
+                if pointTag == "throughput-view":
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictTVBase,dictTVCheap,dictTVQuick,dictTVDamq,dictTVComb,dictTVDamr,dictTVDama,dictTVDamp,dictTVFree,dictTVRoll,dictTVOnep,dictTVOnepB,dictTVOnepC,dictTVOnepD,dictTVChBase,dictTVChComb)
+                # Latencies-view
+                if pointTag == "latency-view":
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictLVBase,dictLVCheap,dictLVQuick,dictLVDamq,dictLVComb,dictLVDamr,dictLVDama,dictLVDamp,dictLVFree,dictLVRoll,dictLVOnep,dictLVOnepB,dictLVOnepC,dictLVOnepD,dictLVChBase,dictLVChComb)
+                # handle
+                if (pointTag == "handle" or pointTag == "latency-handle"):
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictHBase,dictHCheap,dictHQuick,dictHDamq,dictHComb,dictHDamr,dictHDama,dictHDamp,dictHFree,dictHRoll,dictHOnep,dictHOnepB,dictHOnepC,dictHOnepD,dictHChBase,dictHChComb)
+                # timeouts
+                if pointTag == "timeouts":
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictTOBase,dictTOCheap,dictTOQuick,dictTODamq,dictTOComb,dictTODamr,dictTODama,dictTODamp,dictTOFree,dictTORoll,dictTOOnep,dictTOOnepB,dictTOOnepC,dictTOOnepD,dictTOChBase,dictTOChComb)
+                # onepbs
+                if pointTag == "onepbs":
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictPBBase,dictPBCheap,dictPBQuick,dictPBDamq,dictPBComb,dictPBDamr,dictPBDama,dictPBDamp,dictPBFree,dictPBRoll,dictPBOnep,dictPBOnepB,dictPBOnepC,dictPBOnepD,dictPBChBase,dictPBChComb)
+                # onepcs
+                if pointTag == "onepcs":
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictPCBase,dictPCCheap,dictPCQuick,dictPCDamq,dictPCComb,dictPCDamr,dictPCDama,dictPCDamp,dictPCFree,dictPCRoll,dictPCOnep,dictPCOnepB,dictPCOnepC,dictPCOnepD,dictPCChBase,dictPCChComb)
+                # crypto-sign
+                if pointTag == "crypto-sign":
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictCSBase,dictCSCheap,dictCSQuick,dictCSDamq,dictCSComb,dictCSDamr,dictCSDama,dictCSDamp,dictCSFree,dictCSRoll,dictCSOnep,dictCSOnepB,dictCSOnepC,dictCSOnepD,dictCSChBase,dictCSChComb)
+                # crypto-verif
+                if pointTag == "crypto-verif":
+                    updateDictionaries(protVal,numFaults,numJoins,numDeads,pointVal,dictCVBase,dictCVCheap,dictCVQuick,dictCVDamq,dictCVComb,dictCVDamr,dictCVDama,dictCVDamp,dictCVFree,dictCVRoll,dictCVOnep,dictCVOnepB,dictCVOnepC,dictCVOnepD,dictCVChBase,dictCVChComb)
+    f.close()
+
+    quantileSize  = 20
+    quantileSize1 = 20
+    quantileSize2 = 20
+
+    # We convert the dictionaries to lists
+    # throughput-view
+    (joinsTVBase,   valsTVBase,   numsTVBase)   = dict2lists(dictTVBase,quantileSize,False,True)
+    (joinsTVCheap,  valsTVCheap,  numsTVCheap)  = dict2lists(dictTVCheap,quantileSize,False,True)
+    (joinsTVQuick,  valsTVQuick,  numsTVQuick)  = dict2lists(dictTVQuick,quantileSize,False,True)
+    (joinsTVDamq,   valsTVDamq,   numsTVDamq)   = dict2lists(dictTVDamq,quantileSize,False,True)
+    (joinsTVComb,   valsTVComb,   numsTVComb)   = dict2lists(dictTVComb,quantileSize,False,True)
+    (joinsTVDamr,   valsTVDamr,   numsTVDamr)   = dict2lists(dictTVDamr,quantileSize,False,True)
+    (joinsTVDama,   valsTVDama,   numsTVDama)   = dict2lists(dictTVDama,quantileSize,False,True)
+    (joinsTVDamp,   valsTVDamp,   numsTVDamp)   = dict2lists(dictTVDamp,quantileSize,False,True)
+    (joinsTVFree,   valsTVFree,   numsTVFree)   = dict2lists(dictTVFree,quantileSize,False,True)
+    (joinsTVRoll,   valsTVRoll,   numsTVRoll)   = dict2lists(dictTVRoll,quantileSize,False,True)
+    (joinsTVOnep,   valsTVOnep,   numsTVOnep)   = dict2lists(dictTVOnep,quantileSize,False,True)
+    (joinsTVOnepB,  valsTVOnepB,  numsTVOnepB)  = dict2lists(dictTVOnepB,quantileSize,False,True)
+    (joinsTVOnepC,  valsTVOnepC,  numsTVOnepC)  = dict2lists(dictTVOnepC,quantileSize,False,True)
+    (joinsTVOnepD,  valsTVOnepD,  numsTVOnepD)  = dict2lists(dictTVOnepD,quantileSize,False,True)
+    (joinsTVChBase, valsTVChBase, numsTVChBase) = dict2lists(dictTVChBase,quantileSize,False,True)
+    (joinsTVChComb, valsTVChComb, numsTVChComb) = dict2lists(dictTVChComb,quantileSize,False,True)
+
+    # latency-view
+    (joinsLVBase,   valsLVBase,   numsLVBase)   = dict2lists(dictLVBase,quantileSize,False,True)
+    (joinsLVCheap,  valsLVCheap,  numsLVCheap)  = dict2lists(dictLVCheap,quantileSize,False,True)
+    (joinsLVQuick,  valsLVQuick,  numsLVQuick)  = dict2lists(dictLVQuick,quantileSize,False,True)
+    (joinsLVDamq,   valsLVDamq,   numsLVDamq)   = dict2lists(dictLVDamq,quantileSize,False,True)
+    (joinsLVComb,   valsLVComb,   numsLVComb)   = dict2lists(dictLVComb,quantileSize,False,True)
+    (joinsLVDamr,   valsLVDamr,   numsLVDamr)   = dict2lists(dictLVDamr,quantileSize,False,True)
+    (joinsLVDama,   valsLVDama,   numsLVDama)   = dict2lists(dictLVDama,quantileSize,False,True)
+    (joinsLVDamp,   valsLVDamp,   numsLVDamp)   = dict2lists(dictLVDamp,quantileSize,False,True)
+    (joinsLVFree,   valsLVFree,   numsLVFree)   = dict2lists(dictLVFree,quantileSize,False,True)
+    (joinsLVRoll,   valsLVRoll,   numsLVRoll)   = dict2lists(dictLVRoll,quantileSize,False,True)
+    (joinsLVOnep,   valsLVOnep,   numsLVOnep)   = dict2lists(dictLVOnep,quantileSize,False,True)
+    (joinsLVOnepB,  valsLVOnepB,  numsLVOnepB)  = dict2lists(dictLVOnepB,quantileSize,False,True)
+    (joinsLVOnepC,  valsLVOnepC,  numsLVOnepC)  = dict2lists(dictLVOnepC,quantileSize,False,True)
+    (joinsLVOnepD,  valsLVOnepD,  numsLVOnepD)  = dict2lists(dictLVOnepD,quantileSize,False,True)
+    (joinsLVChBase, valsLVChBase, numsLVChBase) = dict2lists(dictLVChBase,quantileSize,False,True)
+    (joinsLVChComb, valsLVChComb, numsLVChComb) = dict2lists(dictLVChComb,quantileSize,False,True)
+
+    # handle
+    (joinsHBase,   valsHBase,   numsHBase)   = dict2lists(dictHBase,quantileSize1,False,True)
+    (joinsHCheap,  valsHCheap,  numsHCheap)  = dict2lists(dictHCheap,quantileSize1,False,True)
+    (joinsHQuick,  valsHQuick,  numsHQuick)  = dict2lists(dictHQuick,quantileSize1,False,True)
+    (joinsHDamq,   valsHDamq,   numsHDamq)   = dict2lists(dictHDamq,quantileSize1,False,True)
+    (joinsHComb,   valsHComb,   numsHComb)   = dict2lists(dictHComb,quantileSize1,False,True)
+    (joinsHDamr,   valsHDamr,   numsHDamr)   = dict2lists(dictHDamr,quantileSize1,False,True)
+    (joinsHDama,   valsHDama,   numsHDama)   = dict2lists(dictHDama,quantileSize1,False,True)
+    (joinsHDamp,   valsHDamp,   numsHDamp)   = dict2lists(dictHDamp,quantileSize1,False,True)
+    (joinsHFree,   valsHFree,   numsHFree)   = dict2lists(dictHFree,quantileSize1,False,True)
+    (joinsHRoll,   valsHRoll,   numsHRoll)   = dict2lists(dictHRoll,quantileSize1,False,True)
+    (joinsHOnep,   valsHOnep,   numsHOnep)   = dict2lists(dictHOnep,quantileSize1,False,True)
+    (joinsHOnepB,  valsHOnepB,  numsHOnepB)  = dict2lists(dictHOnepB,quantileSize1,False,True)
+    (joinsHOnepC,  valsHOnepC,  numsHOnepC)  = dict2lists(dictHOnepC,quantileSize1,False,True)
+    (joinsHOnepD,  valsHOnepD,  numsHOnepD)  = dict2lists(dictHOnepD,quantileSize1,False,True)
+    (joinsHChBase, valsHChBase, numsHChBase) = dict2lists(dictHChBase,quantileSize1,False,True)
+    (joinsHChComb, valsHChComb, numsHChComb) = dict2lists(dictHChComb,quantileSize1,False,True)
+
+    # timeouts
+    (joinsTOBase,   valsTOBase,   numsTOBase)   = dict2lists(dictTOBase,0,False,True)
+    (joinsTOCheap,  valsTOCheap,  numsTOCheap)  = dict2lists(dictTOCheap,0,False,True)
+    (joinsTOQuick,  valsTOQuick,  numsTOQuick)  = dict2lists(dictTOQuick,0,False,True)
+    (joinsTODamq,   valsTODamq,   numsTODamq)   = dict2lists(dictTODamq,0,False,True)
+    (joinsTOComb,   valsTOComb,   numsTOComb)   = dict2lists(dictTOComb,0,False,True)
+    (joinsTODamr,   valsTODamr,   numsTODamr)   = dict2lists(dictTODamr,0,False,True)
+    (joinsTODama,   valsTODama,   numsTODama)   = dict2lists(dictTODama,0,False,True)
+    (joinsTODamp,   valsTODamp,   numsTODamp)   = dict2lists(dictTODamp,0,False,True)
+    (joinsTOFree,   valsTOFree,   numsTOFree)   = dict2lists(dictTOFree,0,False,True)
+    (joinsTORoll,   valsTORoll,   numsTORoll)   = dict2lists(dictTORoll,0,False,True)
+    (joinsTOOnep,   valsTOOnep,   numsTOOnep)   = dict2lists(dictTOOnep,0,False,True)
+    (joinsTOOnepB,  valsTOOnepB,  numsTOOnepB)  = dict2lists(dictTOOnepB,0,False,True)
+    (joinsTOOnepC,  valsTOOnepC,  numsTOOnepC)  = dict2lists(dictTOOnepC,0,False,True)
+    (joinsTOOnepD,  valsTOOnepD,  numsTOOnepD)  = dict2lists(dictTOOnepD,0,False,True)
+    (joinsTOChBase, valsTOChBase, numsTOChBase) = dict2lists(dictTOChBase,0,False,True)
+    (joinsTOChComb, valsTOChComb, numsTOChComb) = dict2lists(dictTOChComb,0,False,True)
+
+    # onepbs
+    (joinsPBBase,   valsPBBase,   numsPBBase)   = dict2lists(dictPBBase,0,False,True)
+    (joinsPBCheap,  valsPBCheap,  numsPBCheap)  = dict2lists(dictPBCheap,0,False,True)
+    (joinsPBQuick,  valsPBQuick,  numsPBQuick)  = dict2lists(dictPBQuick,0,False,True)
+    (joinsPBDamq,   valsPBDamq,   numsPBDamq)   = dict2lists(dictPBDamq,0,False,True)
+    (joinsPBComb,   valsPBComb,   numsPBComb)   = dict2lists(dictPBComb,0,False,True)
+    (joinsPBDamr,   valsPBDamr,   numsPBDamr)   = dict2lists(dictPBDamr,0,False,True)
+    (joinsPBDama,   valsPBDama,   numsPBDama)   = dict2lists(dictPBDama,0,False,True)
+    (joinsPBDamp,   valsPBDamp,   numsPBDamp)   = dict2lists(dictPBDamp,0,False,True)
+    (joinsPBFree,   valsPBFree,   numsPBFree)   = dict2lists(dictPBFree,0,False,True)
+    (joinsPBRoll,   valsPBRoll,   numsPBRoll)   = dict2lists(dictPBRoll,0,False,True)
+    (joinsPBOnep,   valsPBOnep,   numsPBOnep)   = dict2lists(dictPBOnep,0,False,True)
+    (joinsPBOnepB,  valsPBOnepB,  numsPBOnepB)  = dict2lists(dictPBOnepB,0,False,True)
+    (joinsPBOnepC,  valsPBOnepC,  numsPBOnepC)  = dict2lists(dictPBOnepC,0,False,True)
+    (joinsPBOnepD,  valsPBOnepD,  numsPBOnepD)  = dict2lists(dictPBOnepD,0,False,True)
+    (joinsPBChBase, valsPBChBase, numsPBChBase) = dict2lists(dictPBChBase,0,False,True)
+    (joinsPBChComb, valsPBChComb, numsPBChComb) = dict2lists(dictPBChComb,0,False,True)
+
+    # onepcs
+    (joinsPCBase,   valsPCBase,   numsPCBase)   = dict2lists(dictPCBase,0,False,True)
+    (joinsPCCheap,  valsPCCheap,  numsPCCheap)  = dict2lists(dictPCCheap,0,False,True)
+    (joinsPCQuick,  valsPCQuick,  numsPCQuick)  = dict2lists(dictPCQuick,0,False,True)
+    (joinsPCDamq,   valsPCDamq,   numsPCDamq)   = dict2lists(dictPCDamq,0,False,True)
+    (joinsPCComb,   valsPCComb,   numsPCComb)   = dict2lists(dictPCComb,0,False,True)
+    (joinsPCDamr,   valsPCDamr,   numsPCDamr)   = dict2lists(dictPCDamr,0,False,True)
+    (joinsPCDama,   valsPCDama,   numsPCDama)   = dict2lists(dictPCDama,0,False,True)
+    (joinsPCDamp,   valsPCDamp,   numsPCDamp)   = dict2lists(dictPCDamp,0,False,True)
+    (joinsPCFree,   valsPCFree,   numsPCFree)   = dict2lists(dictPCFree,0,False,True)
+    (joinsPCRoll,   valsPCRoll,   numsPCRoll)   = dict2lists(dictPCRoll,0,False,True)
+    (joinsPCOnep,   valsPCOnep,   numsPCOnep)   = dict2lists(dictPCOnep,0,False,True)
+    (joinsPCOnepB,  valsPCOnepB,  numsPCOnepB)  = dict2lists(dictPCOnepB,0,False,True)
+    (joinsPCOnepC,  valsPCOnepC,  numsPCOnepC)  = dict2lists(dictPCOnepC,0,False,True)
+    (joinsPCOnepD,  valsPCOnepD,  numsPCOnepD)  = dict2lists(dictPCOnepD,0,False,True)
+    (joinsPCChBase, valsPCChBase, numsPCChBase) = dict2lists(dictPCChBase,0,False,True)
+    (joinsPCChComb, valsPCChComb, numsPCChComb) = dict2lists(dictPCChComb,0,False,True)
+
+    # crypto-sign
+    (joinsCSBase,   valsCSBase,   numsCSBase)   = dict2lists(dictCSBase,quantileSize2,False,True)
+    (joinsCSCheap,  valsCSCheap,  numsCSCheap)  = dict2lists(dictCSCheap,quantileSize2,False,True)
+    (joinsCSQuick,  valsCSQuick,  numsCSQuick)  = dict2lists(dictCSQuick,quantileSize2,False,True)
+    (joinsCSDamq,   valsCSDamq,   numsCSDamq)   = dict2lists(dictCSDamq,quantileSize2,False,True)
+    (joinsCSComb,   valsCSComb,   numsCSComb)   = dict2lists(dictCSComb,quantileSize2,False,True)
+    (joinsCSDamr,   valsCSDamr,   numsCSDamr)   = dict2lists(dictCSDamr,quantileSize2,False,True)
+    (joinsCSDama,   valsCSDama,   numsCSDama)   = dict2lists(dictCSDama,quantileSize2,False,True)
+    (joinsCSDamp,   valsCSDamp,   numsCSDamp)   = dict2lists(dictCSDamp,quantileSize2,False,True)
+    (joinsCSFree,   valsCSFree,   numsCSFree)   = dict2lists(dictCSFree,quantileSize2,False,True)
+    (joinsCSRoll,   valsCSRoll,   numsCSRoll)   = dict2lists(dictCSRoll,quantileSize2,False,True)
+    (joinsCSOnep,   valsCSOnep,   numsCSOnep)   = dict2lists(dictCSOnep,quantileSize2,False,True)
+    (joinsCSOnepB,  valsCSOnepB,  numsCSOnepB)  = dict2lists(dictCSOnepB,quantileSize2,False,True)
+    (joinsCSOnepC,  valsCSOnepC,  numsCSOnepC)  = dict2lists(dictCSOnepC,quantileSize2,False,True)
+    (joinsCSOnepD,  valsCSOnepD,  numsCSOnepD)  = dict2lists(dictCSOnepD,quantileSize2,False,True)
+    (joinsCSChBase, valsCSChBase, numsCSChBase) = dict2lists(dictCSChBase,quantileSize2,False,True)
+    (joinsCSChComb, valsCSChComb, numsCSChComb) = dict2lists(dictCSChComb,quantileSize2,False,True)
+
+    # crypto-verif
+    (joinsCVBase,   valsCVBase,   numsCVBase)   = dict2lists(dictCVBase,quantileSize2,False,True)
+    (joinsCVCheap,  valsCVCheap,  numsCVCheap)  = dict2lists(dictCVCheap,quantileSize2,False,True)
+    (joinsCVQuick,  valsCVQuick,  numsCVQuick)  = dict2lists(dictCVQuick,quantileSize2,False,True)
+    (joinsCVDamq,   valsCVDamq,   numsCVDamq)   = dict2lists(dictCVDamq,quantileSize2,False,True)
+    (joinsCVComb,   valsCVComb,   numsCVComb)   = dict2lists(dictCVComb,quantileSize2,False,True)
+    (joinsCVDamr,   valsCVDamr,   numsCVDamr)   = dict2lists(dictCVDamr,quantileSize2,False,True)
+    (joinsCVDama,   valsCVDama,   numsCVDama)   = dict2lists(dictCVDama,quantileSize2,False,True)
+    (joinsCVDamp,   valsCVDamp,   numsCVDamp)   = dict2lists(dictCVDamp,quantileSize2,False,True)
+    (joinsCVFree,   valsCVFree,   numsCVFree)   = dict2lists(dictCVFree,quantileSize2,False,True)
+    (joinsCVRoll,   valsCVRoll,   numsCVRoll)   = dict2lists(dictCVRoll,quantileSize2,False,True)
+    (joinsCVOnep,   valsCVOnep,   numsCVOnep)   = dict2lists(dictCVOnep,quantileSize2,False,True)
+    (joinsCVOnepB,  valsCVOnepB,  numsCVOnepB)  = dict2lists(dictCVOnepB,quantileSize2,False,True)
+    (joinsCVOnepC,  valsCVOnepC,  numsCVOnepC)  = dict2lists(dictCVOnepC,quantileSize2,False,True)
+    (joinsCVOnepD,  valsCVOnepD,  numsCVOnepD)  = dict2lists(dictCVOnepD,quantileSize2,False,True)
+    (joinsCVChBase, valsCVChBase, numsCVChBase) = dict2lists(dictCVChBase,quantileSize2,False,True)
+    (joinsCVChComb, valsCVChComb, numsCVChComb) = dict2lists(dictCVChComb,quantileSize2,False,True)
+
+    print("== faults/throughputs(val+num)/latencies(val+num)/cypto-verif(val+num)/cypto-sign(val+num)")
+    if len(joinsTVBase):
+        print("base",   (joinsTVBase,   (valsTVBase,   numsTVBase),   (valsLVBase,   numsLVBase),   (valsCVBase,   numsCVBase),   (valsCSBase,   numsCSBase),    (valsTOBase,   numsTOBase)))
+    if len(joinsTVCheap):
+        print("cheap",  (joinsTVCheap,  (valsTVCheap,  numsTVCheap),  (valsLVCheap,  numsLVCheap),  (valsCVCheap,  numsCVCheap),  (valsCSCheap,  numsCSCheap),   (valsTOCheap,  numsTOCheap)))
+    if len(joinsTVQuick):
+        print("quick",  (joinsTVQuick,  (valsTVQuick,  numsTVQuick),  (valsLVQuick,  numsLVQuick),  (valsCVQuick,  numsCVQuick),  (valsCSQuick,  numsCSQuick),   (valsTOQuick,  numsTOQuick)))
+    if len(joinsTVDamq):
+        print("damq",   (joinsTVDamq,   (valsTVDamq,   numsTVDamq),   (valsLVDamq,   numsLVDamq),   (valsCVDamq,   numsCVDamq),   (valsCSDamq,   numsCSDamq),    (valsTODamq,   numsTODamq)))
+    if len(joinsTVComb):
+        print("comb",   (joinsTVComb,   (valsTVComb,   numsTVComb),   (valsLVComb,   numsLVComb),   (valsCVComb,   numsCVComb),   (valsCSComb,   numsCSComb),    (valsTOComb,   numsTOComb)))
+    if len(joinsTVDamr):
+        print("damr",   (joinsTVDamr,   (valsTVDamr,   numsTVDamr),   (valsLVDamr,   numsLVDamr),   (valsCVDamr,   numsCVDamr),   (valsCSDamr,   numsCSDamr),    (valsTODamr,   numsTODamr)))
+    if len(joinsTVDama):
+        print("dama",   (joinsTVDama,   (valsTVDama,   numsTVDama),   (valsLVDama,   numsLVDama),   (valsCVDama,   numsCVDama),   (valsCSDama,   numsCSDama),    (valsTODama,   numsTODama)))
+    if len(joinsTVDamp):
+        print("damp",   (joinsTVDamp,   (valsTVDamp,   numsTVDamp),   (valsLVDamp,   numsLVDamp),   (valsCVDamp,   numsCVDamp),   (valsCSDamp,   numsCSDamp),    (valsTODamp,   numsTODamp)))
+    if len(joinsTVFree):
+        print("free",   (joinsTVFree,   (valsTVFree,   numsTVFree),   (valsLVFree,   numsLVFree),   (valsCVFree,   numsCVFree),   (valsCSFree,   numsCSFree),    (valsTOFree,   numsTOFree)))
+    if len(joinsTVRoll):
+        print("roll",   (joinsTVRoll,   (valsTVRoll,   numsTVRoll),   (valsLVRoll,   numsLVRoll),   (valsCVRoll,   numsCVRoll),   (valsCSRoll,   numsCSRoll),    (valsTORoll,   numsTORoll)))
+    if len(joinsTVOnep):
+        print("onep",   (joinsTVOnep,   (valsTVOnep,   numsTVOnep),   (valsLVOnep,   numsLVOnep),   (valsCVOnep,   numsCVOnep),   (valsCSOnep,   numsCSOnep),    (valsTOOnep,   numsTOOnep), (valsPBOnep, numsPBOnep), (valsPCOnep, numsPCOnep)))
+    if len(joinsTVOnepB):
+        print("onepb",  (joinsTVOnepB,  (valsTVOnepB,  numsTVOnepB),  (valsLVOnepB,  numsLVOnepB),  (valsCVOnepB,  numsCVOnepB),  (valsCSOnepB,  numsCSOnepB),   (valsTOOnepB,  numsTOOnepB)))
+    if len(joinsTVOnepC):
+        print("onepc",  (joinsTVOnepC,  (valsTVOnepC,  numsTVOnepC),  (valsLVOnepC,  numsLVOnepC),  (valsCVOnepC,  numsCVOnepC),  (valsCSOnepC,  numsCSOnepC),   (valsTOOnepC,  numsTOOnepC)))
+    if len(joinsTVOnepD):
+        print("onepd",  (joinsTVOnepD,  (valsTVOnepD,  numsTVOnepD),  (valsLVOnepD,  numsLVOnepD),  (valsCVOnepD,  numsCVOnepD),  (valsCSOnepD,  numsCSOnepD),   (valsTOOnepD,  numsTOOnepD)))
+    if len(joinsTVChBase):
+        print("chbase", (joinsTVChBase, (valsTVChBase, numsTVChBase), (valsLVChBase, numsLVChBase), (valsCVChBase, numsCVChBase), (valsCSChBase, numsCSChBase),  (valsTOChBase, numsTOChBase)))
+    if len(joinsTVChComb):
+        print("chcomb", (joinsTVChComb, (valsTVChComb, numsTVChComb), (valsLVChComb, numsLVChComb), (valsCVChComb, numsCVChComb), (valsCSChComb, numsCSChComb),  (valsTOChComb, numsTOChComb)))
+
+    LW = 1 # linewidth
+    MS = 5 # markersize
+    XYT = (0,5)
+
+    #plt.figure(figsize=(2, 6))
+    #, dpi=80)
+
+    global plotThroughput
+    global plotLatency
+
+    if (plotHandle or plotCrypto) and not plotView:
+        plotThroughput = False
+        plotLatency    = True
+
+    numPlots=2
+    if (plotThroughput and not plotLatency) or (not plotThroughput and plotLatency):
+        numPlots=1
+
+    ## Plotting
+    print("plotting",numPlots,"plot(s)")
+    fig, axs = plt.subplots(numPlots,1)
+    if numPlots == 1:
+        x = axs
+        axs = [x]
+    #,figsize=(4, 10)
+    if showTitle:
+        if debugPlot:
+            info = "file="+pFile
+            info += "; cpus="+str(dockerCpu)
+            info += "; mem="+str(dockerMem)
+            info += "; lat="+str(networkLat)
+            info += "; payload="+str(payloadSize)
+            info += "; repeats1="+str(repeats)
+            info += "; repeats2="+str(repeatsL2)
+            info += "; #views="+str(numViews)
+            info += "; #joiners="+str(numJoiners)
+            info += "; regions="+regions[0]
+            fig.suptitle("Throughputs (top) & Latencies (bottom)\n("+info+")")
+#        else:
+#            fig.suptitle("Throughputs (top) & Latencies (bottom)")
+
+    adjustFigAspect(fig,aspect=0.9)
+    #adjustFigAspect(fig,aspect=0.9)
+    if numPlots == 2:
+        fig.set_figheight(6)
+    else: # == 1
+        fig.set_figheight(3)
+    #fig.set_figwidth(4)
+
+    if plotThroughput:
+        xs = []
+        # naming the x/y axis
+        #axs[0].set(xlabel="#faults", ylabel="throughput")
+        if showYlabel:
+            axs[0].set(ylabel="throughput (Kops/s)")
+        if logScale:
+            axs[0].set_yscale('log')
+        if whichExp == "EUexp1":
+            axs[0].set_yticks((0.5,1,10,20,70))
+            axs[0].set_ylim([0.5,70])
+            axs[0].get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+        elif whichExp == "ALLexp1":
+            axs[0].set_yticks((0.3,1,6))
+            axs[0].set_ylim([0.3,6])
+            axs[0].get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+        # giving a title to my graph
+        #axs[0].set_title("throughputs")
+        # plotting the points
+        if plotView:
+            if len(joinsTVBase) > 0:
+                axs[0].plot(joinsTVBase,   valsTVBase,   color=baseCOL,   linewidth=LW, marker=baseMRK,   markersize=MS, linestyle=baseLS,   label=baseHS)
+                xs = list(set(xs) | set(joinsTVBase))
+            if len(joinsTVCheap) > 0:
+                axs[0].plot(joinsTVCheap,  valsTVCheap,  color=cheapCOL,  linewidth=LW, marker=cheapMRK,  markersize=MS, linestyle=cheapLS,  label=cheapHS)
+                xs = list(set(xs) | set(joinsTVCheap))
+            if len(joinsTVQuick) > 0:
+                axs[0].plot(joinsTVQuick,  valsTVQuick,  color=quickCOL,  linewidth=LW, marker=quickMRK,  markersize=MS, linestyle=quickLS,  label=quickHS)
+                xs = list(set(xs) | set(joinsTVQuick))
+            if len(joinsTVDamq) > 0:
+                axs[0].plot(joinsTVDamq,   valsTVDamq,   color=damqCOL,   linewidth=LW, marker=damqMRK,   markersize=MS, linestyle=damqLS,   label=damqHS)
+                xs = list(set(xs) | set(joinsTVDamq))
+            if plotComb and len(joinsTVComb) > 0:
+                axs[0].plot(joinsTVComb,   valsTVComb,   color=combCOL,   linewidth=LW, marker=combMRK,   markersize=MS, linestyle=combLS,   label=combHS)
+                xs = list(set(xs) | set(joinsTVComb))
+            if len(joinsTVDamr) > 0:
+                axs[0].plot(joinsTVDamr,   valsTVDamr,   color=damrCOL,   linewidth=LW, marker=damrMRK,   markersize=MS, linestyle=damrLS,   label=damrHS)
+                xs = list(set(xs) | set(joinsTVDamr))
+            if len(joinsTVDama) > 0:
+                axs[0].plot(joinsTVDama,   valsTVDama,   color=damaCOL,   linewidth=LW, marker=damaMRK,   markersize=MS, linestyle=damaLS,   label=damaHS)
+                xs = list(set(xs) | set(joinsTVDama))
+            if len(joinsTVDamp) > 0:
+                axs[0].plot(joinsTVDamp,   valsTVDamp,   color=dampCOL,   linewidth=LW, marker=dampMRK,   markersize=MS, linestyle=dampLS,   label=dampHS)
+                xs = list(set(xs) | set(joinsTVDamp))
+            if len(joinsTVFree) > 0:
+                axs[0].plot(joinsTVFree,   valsTVFree,   color=freeCOL,   linewidth=LW, marker=freeMRK,   markersize=MS, linestyle=freeLS,   label=freeHS)
+                xs = list(set(xs) | set(joinsTVFree))
+            if len(joinsTVRoll) > 0:
+                axs[0].plot(joinsTVRoll,   valsTVRoll,   color=rollCOL,   linewidth=LW, marker=rollMRK,   markersize=MS, linestyle=rollLS,   label=rollHS)
+                xs = list(set(xs) | set(joinsTVRoll))
+            if len(joinsTVOnep) > 0:
+                axs[0].plot(joinsTVOnep,   valsTVOnep,   color=onepCOL,   linewidth=LW, marker=onepMRK,   markersize=MS, linestyle=onepLS,   label=onepHS)
+                xs = list(set(xs) | set(joinsTVOnep))
+            if len(joinsTVOnepB) > 0:
+                axs[0].plot(joinsTVOnepB,  valsTVOnepB,  color=onepbCOL,  linewidth=LW, marker=onepbMRK,  markersize=MS, linestyle=onepbLS,  label=onepbHS)
+                xs = list(set(xs) | set(joinsTVOnepB))
+            if len(joinsTVOnepC) > 0:
+                axs[0].plot(joinsTVOnepC,  valsTVOnepC,  color=onepcCOL,  linewidth=LW, marker=onepcMRK,  markersize=MS, linestyle=onepcLS,  label=onepcHS)
+                xs = list(set(xs) | set(joinsTVOnepC))
+            if len(joinsTVOnepD) > 0:
+                axs[0].plot(joinsTVOnepD,  valsTVOnepD,  color=onepdCOL,  linewidth=LW, marker=onepdMRK,  markersize=MS, linestyle=onepdLS,  label=onepdHS)
+                xs = list(set(xs) | set(joinsTVOnepD))
+            if debugPlot:
+                for x,y,z in zip(joinsTVBase, valsTVBase, numsTVBase):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVCheap, valsTVCheap, numsTVCheap):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVQuick, valsTVQuick, numsTVQuick):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVDamq, valsTVDamq, numsTVDamq):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVComb, valsTVComb, numsTVComb):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVDamr, valsTVDamr, numsTVDamr):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVDama, valsTVDama, numsTVDama):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVDamp, valsTVDamp, numsTVDamp):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVFree, valsTVFree, numsTVFree):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVRoll, valsTVRoll, numsTVRoll):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVOnep, valsTVOnep, numsTVOnep):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVOnepB, valsTVOnepB, numsTVOnepB):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVOnepC, valsTVOnepC, numsTVOnepC):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsTVOnepD, valsTVOnepD, numsTVOnepD):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+        axs[0].set_xticks(xs)
+        # legend
+        if showLegend1:
+            axs[0].legend(ncol=2,prop={'size': 9})
+
+    if plotLatency:
+        xs = []
+        ax=axs[0]
+        if plotThroughput:
+            ax=axs[1]
+        # naming the x/y axis
+        if showYlabel:
+            ax.set(xlabel="#rejoiners", ylabel="latency (ms)")
+        else:
+            ax.set(xlabel="#rejoiners")
+        if logScale:
+            ax.set_yscale('log')
+        if whichExp == "EUexp1":
+            ax.set_yticks((5,100,600))
+            ax.set_ylim([5,600])
+            ax.get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+        elif whichExp == "ALLexp1":
+            ax.set_yticks((60,100,1000))
+            ax.set_ylim([60,1000])
+            ax.get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+        # giving a title to my graph
+        #ax.set_title("latencies")
+        # plotting the points
+        if plotView:
+            if len(joinsLVBase) > 0: #and not runBase:
+                ax.plot(joinsLVBase,   valsLVBase,   color=baseCOL,   linewidth=LW, marker=baseMRK,   markersize=MS, linestyle=baseLS,   label=baseHS)
+                xs = list(set(xs) | set(joinsLVBase))
+            if len(joinsLVCheap) > 0: #and not runCheap:
+                ax.plot(joinsLVCheap,  valsLVCheap,  color=cheapCOL,  linewidth=LW, marker=cheapMRK,  markersize=MS, linestyle=cheapLS,  label=cheapHS)
+                xs = list(set(xs) | set(joinsLVCheap))
+            if len(joinsLVQuick) > 0: #and not runQuick:
+                ax.plot(joinsLVQuick,  valsLVQuick,  color=quickCOL,  linewidth=LW, marker=quickMRK,  markersize=MS, linestyle=quickLS,  label=quickHS)
+                xs = list(set(xs) | set(joinsLVQuick))
+            if len(joinsLVDamq) > 0: #and not runDamq:
+                ax.plot(joinsLVDamq,   valsLVDamq,   color=damqCOL,   linewidth=LW, marker=damqMRK,   markersize=MS, linestyle=damqLS,   label=damqHS)
+                xs = list(set(xs) | set(joinsLVDamq))
+            if plotComb and len(joinsLVComb) > 0: #and not runComb:
+                ax.plot(joinsLVComb,   valsLVComb,   color=combCOL,   linewidth=LW, marker=combMRK,   markersize=MS, linestyle=combLS,   label=combHS)
+                xs = list(set(xs) | set(joinsLVComb))
+            if len(joinsLVDamr) > 0: #and not runDamr:
+                ax.plot(joinsLVDamr,   valsLVDamr,   color=damrCOL,   linewidth=LW, marker=damrMRK,   markersize=MS, linestyle=damrLS,   label=damrHS)
+                xs = list(set(xs) | set(joinsLVDamr))
+            if len(joinsLVDama) > 0: #and not runDamr:
+                ax.plot(joinsLVDama,   valsLVDama,   color=damaCOL,   linewidth=LW, marker=damaMRK,   markersize=MS, linestyle=damaLS,   label=damaHS)
+                xs = list(set(xs) | set(joinsLVDama))
+            if len(joinsLVDamp) > 0: #and not runDamp:
+                ax.plot(joinsLVDamp,   valsLVDamp,   color=dampCOL,   linewidth=LW, marker=dampMRK,   markersize=MS, linestyle=dampLS,   label=dampHS)
+                xs = list(set(xs) | set(joinsLVDamp))
+            if len(joinsLVFree) > 0: #and not runFree:
+                ax.plot(joinsLVFree,   valsLVFree,   color=freeCOL,   linewidth=LW, marker=freeMRK,   markersize=MS, linestyle=freeLS,   label=freeHS)
+                xs = list(set(xs) | set(joinsLVFree))
+            if len(joinsLVRoll) > 0: #and not runRoll:
+                ax.plot(joinsLVRoll,   valsLVRoll,   color=rollCOL,   linewidth=LW, marker=rollMRK,   markersize=MS, linestyle=rollLS,   label=rollHS)
+                xs = list(set(xs) | set(joinsLVRoll))
+            if len(joinsLVOnep) > 0: #and not runOnep:
+                ax.plot(joinsLVOnep,   valsLVOnep,   color=onepCOL,   linewidth=LW, marker=onepMRK,   markersize=MS, linestyle=onepLS,   label=onepHS)
+                xs = list(set(xs) | set(joinsLVOnep))
+            if len(joinsLVOnepB) > 0: #and not runOnepB:
+                ax.plot(joinsLVOnepB,  valsLVOnepB,  color=onepbCOL,  linewidth=LW, marker=onepbMRK,  markersize=MS, linestyle=onepbLS,  label=onepbHS)
+                xs = list(set(xs) | set(joinsLVOnepB))
+            if len(joinsLVOnepC) > 0: #and not runOnepC:
+                ax.plot(joinsLVOnepC,  valsLVOnepC,  color=onepcCOL,  linewidth=LW, marker=onepcMRK,  markersize=MS, linestyle=onepcLS,  label=onepcHS)
+                xs = list(set(xs) | set(joinsLVOnepC))
+            if len(joinsLVOnepD) > 0: #and not runOnepD:
+                ax.plot(joinsLVOnepD,  valsLVOnepD,  color=onepdCOL,  linewidth=LW, marker=onepdMRK,  markersize=MS, linestyle=onepdLS,  label=onepdHS)
+                xs = list(set(xs) | set(joinsLVOnepD))
+            if debugPlot:
+                for x,y,z in zip(joinsLVBase, valsLVBase, numsLVBase):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVCheap, valsLVCheap, numsLVCheap):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVQuick, valsLVQuick, numsLVQuick):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVDamq, valsLVDamq, numsLVDamq):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVComb, valsLVComb, numsLVComb):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVDamr, valsLVDamr, numsLVDamr):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVDama, valsLVDama, numsLVDama):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVDamp, valsLVDamp, numsLVDamp):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVFree, valsLVFree, numsLVFree):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVRoll, valsLVRoll, numsLVRoll):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVOnep, valsLVOnep, numsLVOnep):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVOnepB, valsLVOnepB, numsLVOnepB):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVOnepC, valsLVOnepC, numsLVOnepC):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLVOnepD, valsLVOnepD, numsLVOnepD):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+        ax.set_xticks(xs)
+        # legend
+        if showLegend2 or (showLegend1 and not plotThroughput):
+            ax.legend(prop={'size': 9})
+
+    #fig.subplots_adjust(hspace=0.5)
+    fig.savefig(plotFile, bbox_inches='tight', pad_inches=0.05)
+    print("view-times are in", timesFile)
+    print("points are in", pFile)
+    print("plot is in", plotFile)
+    if displayPlot:
+        try:
+            subprocess.call([displayApp, plotFile])
+        except:
+            print("couldn't display the plot using '" + displayApp + "'. Consider changing the 'displayApp' variable.")
+    return (dictTVBase, dictTVCheap, dictTVQuick, dictTVDamq, dictTVComb, dictTVDamr, dictTVDama, dictTVDamp, dictTVFree, dictTVRoll, dictTVOnep, dictTVOnepB, dictTVOnepC, dictTVOnepD, dictTVChBase, dictTVChComb,
+            dictLVBase, dictLVCheap, dictLVQuick, dictLVDamq, dictLVComb, dictLVDamr, dictLVDama, dictLVDamp, dictLVFree, dictLVRoll, dictLVOnep, dictLVOnepB, dictLVOnepC, dictLVOnepD, dictLVChBase, dictLVChComb)
+# End of createPlotJoin
+
+
+## Alternative versions that generates event plots instead of averages
+def createPlotJoin2(pFile):
+    dictTV = {} # throughput-view
+    dictLV = {} # latency-view
+    dictH  = {} # handle
+    dictTO = {} # timeouts
+    dictPB = {} # onepbs
+    dictPC = {} # onepcs
+    dictCS = {} # crypto-sign
+    dictCV = {} # crypto-verif
+
+    global dockerCpu, dockerMem, networkLat, payloadSize, repeats, repeatsL2, numViews, rateMbit
+
+    # We accumulate all the points in dictionaries
+    print("reading points from:", pFile)
+    f = open(pFile,'r')
+    for line in f.readlines():
+        if line.startswith("##params"):
+            args = line.split(" ")
+            cpu     = "cpus=0"
+            mem     = "mem=0"
+            lat     = "lat=0"
+            rate    = "rate=0"
+            payload = "payload=0"
+            rep1    = "repeats1=0"
+            rep2    = "repeats2=0"
+            views   = "views=0"
+            regs    = "regions=one"
+            if len(args) == 9:
+                [hdr,cpu,mem,lat,payload,rep1,rep2,views,regs] = args
+            elif len(args) == 10:
+                [hdr,cpu,mem,lat,rate,payload,rep1,rep2,views,regs] = args
+            else:
+                print("WRONG ARGUMENTS in ##params comment")
+            [cpuTag,cpuVal] = cpu.split("=")
+            dockerCpu = float(cpuVal)
+            [memTag,memVal] = mem.split("=")
+            dockerMem = int(memVal)
+            [latTag,latVal] = lat.split("=")
+            networkLat = float(latVal)
+            [rateTag,rateVal] = rate.split("=")
+            rateMbit = float(rateVal)
+            [payloadTag,payloadVal] = payload.split("=")
+            payloadSize = int(payloadVal)
+            [rep1Tag,rep1Val] = rep1.split("=")
+            repeats = int(rep1Val)
+            [rep2Tag,rep2Val] = rep2.split("=")
+            repeatsL2 = int(rep2Val)
+            [viewsTag,viewsVal] = views.split("=")
+            numViews = int(viewsVal)
+            [regsTag,regsVal] = regs.split("=")
+            setRegion(regsVal)
+
+        if line.startswith("protocol"):
+            l = line.split(" ")
+            prot   = "protocol=BASIC_BASELINE"
+            faults = "faults=1"
+            joins  = "joiners=0"
+            deads  = "deads=0"
+            point  = "throughput-view=0.0"
+            if len(l) == 3:
+                [prot,faults,point] = l
+            elif len(l) == 4:
+                [prot,faults,deads,point] = l
+            elif len(l) == 5:
+                [prot,faults,joins,dead,point] = l
+            else:
+                print("WRONG ARGUMENTS in point line: " + line)
+            [protTag,protVal]     = prot.split("=")
+            [faultsTag,faultsVal] = faults.split("=")
+            [joinsTag,joinsVal]   = joins.split("=")
+            [deadsTag,deadsVal]   = deads.split("=")
+            [pointTag,pointVal]   = point.split("=")
+            numFaults=int(faultsVal)
+            numJoins=int(joinsVal)
+            numDeads=int(deadsVal)
+            if float(pointVal) < float('inf'):
+                # Throughputs-view
+                if pointTag == "throughput-view":
+                    updateDictionary(numJoins,pointVal,dictTV)
+                # Latencies-view
+                if pointTag == "latency-view":
+                    updateDictionary(numJoins,pointVal,dictLV)
+                # handle
+                if (pointTag == "handle" or pointTag == "latency-handle"):
+                    updateDictionary(numJoins,pointVal,dictH)
+                # timeouts
+                if pointTag == "timeouts":
+                    updateDictionary(numJoins,pointVal,dictTO)
+                # onepbs
+                if pointTag == "onepbs":
+                    updateDictionary(numJoins,pointVal,dictPB)
+                # onepcs
+                if pointTag == "onepcs":
+                    updateDictionary(numJoins,pointVal,dictPC)
+                # crypto-sign
+                if pointTag == "crypto-sign":
+                    updateDictionary(numJoins,pointVal,dictCS)
+                # crypto-verif
+                if pointTag == "crypto-verif":
+                    updateDictionary(numJoins,pointVal,dictCV)
+    f.close()
+
+    quantileSize  = 20
+    quantileSize1 = 20
+    quantileSize2 = 20
+
+    # We convert the dictionaries to lists
+    (joinsTV,   valsTV,   numsTV)   = dict2lists(dictTV,quantileSize,True,False)  # throughput-view
+    (joinsLV,   valsLV,   numsLV)   = dict2lists(dictLV,quantileSize,True,False)  # latency-view
+    (joinsH,    valsH,    numsH)    = dict2lists(dictH,quantileSize1,False,False) # handle
+    (joinsTO,   valsTO,   numsTO)   = dict2lists(dictTO,0,False,False) # timeouts
+    (joinsPB,   valsPB,   numsPB)   = dict2lists(dictPB,0,False,False) # onepbs
+    (joinsPC,   valsPC,   numsPC)   = dict2lists(dictPC,0,False,False) # onepcs
+    (joinsCS,   valsCS,   numsCS)   = dict2lists(dictCS,quantileSize2,False,False) # crypto-sign
+    (joinsCV,   valsCV,   numsCV)   = dict2lists(dictCV,quantileSize2,False,False) # crypto-verif
+
+    print("== faults/throughputs(val+num)/latencies(val+num)/cypto-verif(val+num)/cypto-sign(val+num)")
+    if len(joinsTV):
+        print((joinsTV,   (valsTV,   numsTV),   (valsLV,   numsLV),   (valsCV,   numsCV),   (valsCS,   numsCS),    (valsTO,   numsTO)))
+
+    LW = 1 # linewidth
+    MS = 5 # markersize
+    XYT = (0,5)
+
+    #plt.figure(figsize=(2, 6))
+    #, dpi=80)
+
+    global plotThroughput
+    global plotLatency
+
+    if (plotHandle or plotCrypto) and not plotView:
+        plotThroughput = False
+        plotLatency    = True
+
+    numPlots=2
+    if (plotThroughput and not plotLatency) or (not plotThroughput and plotLatency):
+        numPlots=1
+
+    ## Plotting
+    print("plotting",numPlots,"plot(s)")
+    fig, axs = plt.subplots(numPlots,1)
+    if numPlots == 1:
+        x = axs
+        axs = [x]
+    #,figsize=(4, 10)
+    if showTitle:
+        if debugPlot:
+            info = "file="+pFile
+            info += "; cpus="+str(dockerCpu)
+            info += "; mem="+str(dockerMem)
+            info += "; lat="+str(networkLat)
+            info += "; payload="+str(payloadSize)
+            info += "; repeats1="+str(repeats)
+            info += "; repeats2="+str(repeatsL2)
+            info += "; #views="+str(numViews)
+            info += "; #joiners="+str(numJoiners)
+            info += "; regions="+regions[0]
+            fig.suptitle("Throughputs (top) & Latencies (bottom)\n("+info+")")
+#        else:
+#            fig.suptitle("Throughputs (top) & Latencies (bottom)")
 
     adjustFigAspect(fig,aspect=0.9)
     #adjustFigAspect(fig,aspect=0.9)
@@ -2542,56 +4365,12 @@ def createPlot(pFile):
         #axs[0].set_title("throughputs")
         # plotting the points
         if plotView:
-            if plotBasic:
-                if len(faultsTVBase) > 0:
-                    axs[0].plot(faultsTVBase,   valsTVBase,   color=baseCOL,   linewidth=LW, marker=baseMRK,   markersize=MS, linestyle=baseLS,   label=baseHS)
-                if len(faultsTVCheap) > 0:
-                    axs[0].plot(faultsTVCheap,  valsTVCheap,  color=cheapCOL,  linewidth=LW, marker=cheapMRK,  markersize=MS, linestyle=cheapLS,  label=cheapHS)
-                if len(faultsTVQuick) > 0:
-                    axs[0].plot(faultsTVQuick,  valsTVQuick,  color=quickCOL,  linewidth=LW, marker=quickMRK,  markersize=MS, linestyle=quickLS,  label=quickHS)
-                if len(faultsTVComb) > 0:
-                    axs[0].plot(faultsTVComb,   valsTVComb,   color=combCOL,   linewidth=LW, marker=combMRK,   markersize=MS, linestyle=combLS,   label=combHS)
-                if len(faultsTVFree) > 0:
-                    axs[0].plot(faultsTVFree,   valsTVFree,   color=freeCOL,   linewidth=LW, marker=freeMRK,   markersize=MS, linestyle=freeLS,   label=freeHS)
-                if len(faultsTVOnep) > 0:
-                    axs[0].plot(faultsTVOnep,   valsTVOnep,   color=onepCOL,   linewidth=LW, marker=onepMRK,   markersize=MS, linestyle=onepLS,   label=onepHS)
-                if len(faultsTVOnepB) > 0:
-                    axs[0].plot(faultsTVOnepB,  valsTVOnepB,  color=onepbCOL,  linewidth=LW, marker=onepbMRK,  markersize=MS, linestyle=onepbLS,  label=onepbHS)
-                if len(faultsTVOnepC) > 0:
-                    axs[0].plot(faultsTVOnepC,  valsTVOnepC,  color=onepcCOL,  linewidth=LW, marker=onepcMRK,  markersize=MS, linestyle=onepcLS,  label=onepcHS)
-                if len(faultsTVOnepD) > 0:
-                    axs[0].plot(faultsTVOnepD,  valsTVOnepD,  color=onepdCOL,  linewidth=LW, marker=onepdMRK,  markersize=MS, linestyle=onepdLS,  label=onepdHS)
-            if plotChained:
-                if len(faultsTVChBase) > 0:
-                    axs[0].plot(faultsTVChBase, valsTVChBase, color=baseChCOL, linewidth=LW, marker=baseChMRK, markersize=MS, linestyle=baseChLS, label=baseChHS)
-                if len(faultsTVChComb) > 0:
-                    axs[0].plot(faultsTVChComb, valsTVChComb, color=combChCOL, linewidth=LW, marker=combChMRK, markersize=MS, linestyle=combChLS, label=combChHS)
+            if len(joinsTV) > 0:
+                axs[0].eventplot(valsTV, orientation="vertical", lineoffsets=joinsTV, linewidth=0.2)
+                #color=rollCOL, linewidth=LW, marker=rollMRK, markersize=MS, linestyle=rollLS, label=rollHS
             if debugPlot:
-                if plotBasic:
-                    for x,y,z in zip(faultsTVBase, valsTVBase, numsTVBase):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsTVCheap, valsTVCheap, numsTVCheap):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsTVQuick, valsTVQuick, numsTVQuick):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsTVComb, valsTVComb, numsTVComb):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsTVFree, valsTVFree, numsTVFree):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsTVOnep, valsTVOnep, numsTVOnep):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsTVOnepB, valsTVOnepB, numsTVOnepB):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsTVOnepC, valsTVOnepC, numsTVOnepC):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsTVOnepD, valsTVOnepD, numsTVOnepD):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                if plotChained:
-                    for x,y,z in zip(faultsTVChBase, valsTVChBase, numsTVChBase):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsTVChComb, valsTVChComb, numsTVChComb):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-
+                for x,y,z in zip(joinsTV, valsTV, numsTV):
+                    axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
         # legend
         if showLegend1:
             axs[0].legend(ncol=2,prop={'size': 9})
@@ -2602,18 +4381,9 @@ def createPlot(pFile):
             ax=axs[1]
         # naming the x/y axis
         if showYlabel:
-            if plotHandle and not plotView:
-                if deadNodes:
-                    ax.set(xlabel="#nodes", ylabel="handling time (ms)")
-                else:
-                    ax.set(xlabel="#faults", ylabel="handling time (ms)")
-            else:
-                if deadNodes:
-                    ax.set(xlabel="#nodes", ylabel="latency (ms)")
-                else:
-                    ax.set(xlabel="#faults", ylabel="latency (ms)")
+            ax.set(xlabel="#rejoiners", ylabel="latency (ms)")
         else:
-            ax.set(xlabel="#faults")
+            ax.set(xlabel="#rejoiners")
         if logScale:
             ax.set_yscale('log')
         if whichExp == "EUexp1":
@@ -2628,211 +4398,19 @@ def createPlot(pFile):
         #ax.set_title("latencies")
         # plotting the points
         if plotView:
-            if plotBasic:
-                if len(faultsLVBase) > 0: #and not runBase:
-                    ax.plot(faultsLVBase,   valsLVBase,   color=baseCOL,   linewidth=LW, marker=baseMRK,   markersize=MS, linestyle=baseLS,   label=baseHS)
-                if len(faultsLVCheap) > 0: #and not runCheap:
-                    ax.plot(faultsLVCheap,  valsLVCheap,  color=cheapCOL,  linewidth=LW, marker=cheapMRK,  markersize=MS, linestyle=cheapLS,  label=cheapHS)
-                if len(faultsLVQuick) > 0: #and not runQuick:
-                    ax.plot(faultsLVQuick,  valsLVQuick,  color=quickCOL,  linewidth=LW, marker=quickMRK,  markersize=MS, linestyle=quickLS,  label=quickHS)
-                if len(faultsLVComb) > 0: #and not runComb:
-                    ax.plot(faultsLVComb,   valsLVComb,   color=combCOL,   linewidth=LW, marker=combMRK,   markersize=MS, linestyle=combLS,   label=combHS)
-                if len(faultsLVFree) > 0: #and not runFree:
-                    ax.plot(faultsLVFree,   valsLVFree,   color=freeCOL,   linewidth=LW, marker=freeMRK,   markersize=MS, linestyle=freeLS,   label=freeHS)
-                if len(faultsLVOnep) > 0: #and not runOnep:
-                    ax.plot(faultsLVOnep,   valsLVOnep,   color=onepCOL,   linewidth=LW, marker=onepMRK,   markersize=MS, linestyle=onepLS,   label=onepHS)
-                if len(faultsLVOnepB) > 0: #and not runOnepB:
-                    ax.plot(faultsLVOnepB,  valsLVOnepB,  color=onepbCOL,  linewidth=LW, marker=onepbMRK,  markersize=MS, linestyle=onepbLS,  label=onepbHS)
-                if len(faultsLVOnepC) > 0: #and not runOnepC:
-                    ax.plot(faultsLVOnepC,  valsLVOnepC,  color=onepcCOL,  linewidth=LW, marker=onepcMRK,  markersize=MS, linestyle=onepcLS,  label=onepcHS)
-                if len(faultsLVOnepD) > 0: #and not runOnepD:
-                    ax.plot(faultsLVOnepD,  valsLVOnepD,  color=onepdCOL,  linewidth=LW, marker=onepdMRK,  markersize=MS, linestyle=onepdLS,  label=onepdHS)
-            if plotChained:
-                if len(faultsLVChBase) > 0:
-                    ax.plot(faultsLVChBase, valsLVChBase, color=baseChCOL, linewidth=LW, marker=baseChMRK, markersize=MS, linestyle=baseChLS, label=baseChHS)
-                if len(faultsLVChComb) > 0:
-                    ax.plot(faultsLVChComb, valsLVChComb, color=combChCOL, linewidth=LW, marker=combChMRK, markersize=MS, linestyle=combChLS, label=combChHS)
+            if len(joinsLV) > 0:
+                ax.eventplot(valsLV, orientation="vertical", lineoffsets=joinsLV, linewidth=0.2)
+                # color=rollCOL, linewidth=LW, marker=rollMRK, markersize=MS, linestyle=rollLS, label=rollHS
             if debugPlot:
-                if plotBasic:
-                    for x,y,z in zip(faultsLVBase, valsLVBase, numsLVBase):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsLVCheap, valsLVCheap, numsLVCheap):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsLVQuick, valsLVQuick, numsLVQuick):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsLVComb, valsLVComb, numsLVComb):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsLVFree, valsLVFree, numsLVFree):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsLVOnep, valsLVOnep, numsLVOnep):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsLVOnepB, valsLVOnepB, numsLVOnepB):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsLVOnepC, valsLVOnepC, numsLVOnepC):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsLVOnepD, valsLVOnepD, numsLVOnepD):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                if plotChained:
-                    for x,y,z in zip(faultsLVChBase, valsLVChBase, numsLVChBase):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsLVChComb, valsLVChComb, numsLVChComb):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-        if plotHandle:
-            if plotBasic:
-                if len(faultsHBase) > 0:
-                    ax.plot(faultsHBase,   valsHBase,   color=baseCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=baseLS,   label=baseHS+"")
-                if len(faultsHCheap) > 0:
-                    ax.plot(faultsHCheap,  valsHCheap,  color=cheapCOL,  linewidth=LW, marker="+", markersize=MS, linestyle=cheapLS,  label=cheapHS+"")
-                if len(faultsHQuick) > 0:
-                    ax.plot(faultsHQuick,  valsHQuick,  color=quickCOL,  linewidth=LW, marker="+", markersize=MS, linestyle=quickLS,  label=quickHS+"")
-                if len(faultsHComb) > 0:
-                    ax.plot(faultsHComb,   valsHComb,   color=combCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=combLS,   label=combHS+"")
-                if len(faultsHFree) > 0:
-                    ax.plot(faultsHFree,   valsHFree,   color=freeCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=freeLS,   label=freeHS+"")
-                if len(faultsHOnep) > 0:
-                    ax.plot(faultsHOnep,   valsHOnep,   color=onepCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=onepLS,   label=onepHS+"")
-                if len(faultsHOnepB) > 0:
-                    ax.plot(faultsHOnepB,  valsHOnepB,  color=onepbCOL,  linewidth=LW, marker="+", markersize=MS, linestyle=onepbLS,  label=onepbHS+"")
-                if len(faultsHOnepC) > 0:
-                    ax.plot(faultsHOnepC,  valsHOnepC,  color=onepcCOL,  linewidth=LW, marker="+", markersize=MS, linestyle=onepcLS,  label=onepcHS+"")
-                if len(faultsHOnepD) > 0:
-                    ax.plot(faultsHOnepD,  valsHOnepD,  color=onepdCOL,  linewidth=LW, marker="+", markersize=MS, linestyle=onepdLS,  label=onepdHS+"")
-            if plotChained:
-                if len(faultsHChBase) > 0:
-                    ax.plot(faultsHChBase, valsHChBase, color=baseChCOL, linewidth=LW, marker="+", markersize=MS, linestyle=baseChLS, label=baseChHS+"")
-                if len(faultsHChComb) > 0:
-                    ax.plot(faultsHChComb, valsHChComb, color=combChCOL, linewidth=LW, marker="+", markersize=MS, linestyle=combChLS, label=combChHS+"")
-            if debugPlot:
-                if plotBasic:
-                    for x,y,z in zip(faultsHBase, valsHBase, numsHBase):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsHCheap, valsHCheap, numsHCheap):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsHQuick, valsHQuick, numsHQuick):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsHComb, valsHComb, numsHComb):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsHFree, valsHFree, numsHFree):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsHOnep, valsHOnep, numsHOnep):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsHOnepB, valsHOnepB, numsHOnepB):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsHOnepC, valsHOnepC, numsHOnepC):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsHOnepD, valsHOnepD, numsHOnepD):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                if plotChained:
-                    for x,y,z in zip(faultsHChBase, valsHChBase, numsHChBase):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsHChComb, valsHChComb, numsHChComb):
-                        ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-        if plotCrypto: # Sign
-            if plotBasic:
-                if len(faultsCSBase) > 0:
-                    axs[0].plot(faultsCSBase,   valsCSBase,   color=baseCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=baseLS,   label=baseHS+" (crypto-sign)")
-                if len(faultsCSCheap) > 0:
-                    axs[0].plot(faultsCSCheap,  valsCSCheap,  color=cheapCOL,  linewidth=LW, marker="1", markersize=MS, linestyle=cheapLS,  label=cheapHS+" (crypto-sign)")
-                if len(faultsCSQuick) > 0:
-                    axs[0].plot(faultsCSQuick,  valsCSQuick,  color=quickCOL,  linewidth=LW, marker="1", markersize=MS, linestyle=quickLS,  label=quickHS+" (crypto-sign)")
-                if len(faultsCSComb) > 0:
-                    axs[0].plot(faultsCSComb,   valsCSComb,   color=combCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=combLS,   label=combHS+" (crypto-sign)")
-                if len(faultsCSFree) > 0:
-                    axs[0].plot(faultsCSFree,   valsCSFree,   color=freeCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=freeLS,   label=freeHS+" (crypto-sign)")
-                if len(faultsCSOnep) > 0:
-                    axs[0].plot(faultsCSOnep,   valsCSOnep,   color=onepCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=onepLS,   label=onepHS+" (crypto-sign)")
-                if len(faultsCSOnepB) > 0:
-                    axs[0].plot(faultsCSOnepB,  valsCSOnepB,  color=onepbCOL,  linewidth=LW, marker="1", markersize=MS, linestyle=onepbLS,  label=onepbHS+" (crypto-sign)")
-                if len(faultsCSOnepC) > 0:
-                    axs[0].plot(faultsCSOnepC,  valsCSOnepC,  color=onepcCOL,  linewidth=LW, marker="1", markersize=MS, linestyle=onepcLS,  label=onepcHS+" (crypto-sign)")
-                if len(faultsCSOnepD) > 0:
-                    axs[0].plot(faultsCSOnepD,  valsCSOnepD,  color=onepdCOL,  linewidth=LW, marker="1", markersize=MS, linestyle=onepdLS,  label=onepdHS+" (crypto-sign)")
-            if plotChained:
-                if len(faultsCSChBase) > 0:
-                    axs[0].plot(faultsCSChBase, valsCSChBase, color=baseChCOL, linewidth=LW, marker="1", markersize=MS, linestyle=baseChLS, label=baseChHS+" (crypto-sign)")
-                if len(faultsCSChComb) > 0:
-                    axs[0].plot(faultsCSChComb, valsCSChComb, color=combChCOL, linewidth=LW, marker="1", markersize=MS, linestyle=combChLS, label=combChHS+" (crypto-sign)")
-            if debugPlot:
-                if plotBasic:
-                    for x,y,z in zip(faultsCSBase, valsCSBase, numsCSBase):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCSCheap, valsCSCheap, numsCSCheap):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCSQuick, valsCSQuick, numsCSQuick):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCSComb, valsCSComb, numsCSComb):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCSFree, valsCSFree, numsCSFree):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCSOnep, valsCSOnep, numsCSOnep):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCSOnepB, valsCSOnepB, numsCSOnepB):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCSOnepC, valsCSOnepC, numsCSOnepC):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCSOnepD, valsCSOnepD, numsCSOnepD):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                if plotChained:
-                    for x,y,z in zip(faultsCSChBase, valsCSChBase, numsCSChBase):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCSChComb, valsCSChComb, numsCSChComb):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-        if plotCrypto: # Verif
-            if plotBasic:
-                if len(faultsCVBase) > 0:
-                    axs[0].plot(faultsCVBase,   valsCVBase,   color=baseCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=baseLS,   label=baseHS+" (crypto-verif)")
-                if len(faultsCVCheap) > 0:
-                    axs[0].plot(faultsCVCheap,  valsCVCheap,  color=cheapCOL,  linewidth=LW, marker="2", markersize=MS, linestyle=cheapLS,  label=cheapHS+" (crypto-verif)")
-                if len(faultsCVQuick) > 0:
-                    axs[0].plot(faultsCVQuick,  valsCVQuick,  color=quickCOL,  linewidth=LW, marker="2", markersize=MS, linestyle=quickLS,  label=quickHS+" (crypto-verif)")
-                if len(faultsCVComb) > 0:
-                    axs[0].plot(faultsCVComb,   valsCVComb,   color=combCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=combLS,   label=combHS+" (crypto-verif)")
-                if len(faultsCVFree) > 0:
-                    axs[0].plot(faultsCVFree,   valsCVFree,   color=freeCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=freeLS,   label=freeHS+" (crypto-verif)")
-                if len(faultsCVOnep) > 0:
-                    axs[0].plot(faultsCVOnep,   valsCVOnep,   color=onepCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=onepLS,   label=onepHS+" (crypto-verif)")
-                if len(faultsCVOnepB) > 0:
-                    axs[0].plot(faultsCVOnepB,  valsCVOnepB,  color=onepbCOL,  linewidth=LW, marker="2", markersize=MS, linestyle=onepbLS,  label=onepbHS+" (crypto-verif)")
-                if len(faultsCVOnepC) > 0:
-                    axs[0].plot(faultsCVOnepC,  valsCVOnepC,  color=onepcCOL,  linewidth=LW, marker="2", markersize=MS, linestyle=onepcLS,  label=onepcHS+" (crypto-verif)")
-                if len(faultsCVOnepD) > 0:
-                    axs[0].plot(faultsCVOnepD,  valsCVOnepD,  color=onepdCOL,  linewidth=LW, marker="2", markersize=MS, linestyle=onepdLS,  label=onepdHS+" (crypto-verif)")
-            if plotChained:
-                if len(faultsCVChBase) > 0:
-                    axs[0].plot(faultsCVChBase, valsCVChBase, color=baseChCOL, linewidth=LW, marker="2", markersize=MS, linestyle=baseChLS, label=baseChHS+" (crypto-verif)")
-                if len(faultsCVChComb) > 0:
-                    axs[0].plot(faultsCVChComb, valsCVChComb, color=combChCOL, linewidth=LW, marker="2", markersize=MS, linestyle=combChLS, label=combChHS+" (crypto-verif)")
-            if debugPlot:
-                if plotBasic:
-                    for x,y,z in zip(faultsCVBase, valsCVBase, numsCVBase):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCVCheap, valsCVCheap, numsCVCheap):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCVQuick, valsCVQuick, numsCVQuick):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCVComb, valsCVComb, numsCVComb):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCVFree, valsCVFree, numsCVFree):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCVOnep, valsCVOnep, numsCVOnep):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCVOnepB, valsCVOnepB, numsCVOnepB):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCVOnepC, valsCVOnepC, numsCVOnepC):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCVOnepD, valsCVOnepD, numsCVOnepD):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                if plotChained:
-                    for x,y,z in zip(faultsCVChBase, valsCVChBase, numsCVChBase):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
-                    for x,y,z in zip(faultsCVChComb, valsCVChComb, numsCVChComb):
-                        axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                for x,y,z in zip(joinsLV, valsLV, numsLV):
+                    ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
         # legend
         if showLegend2 or (showLegend1 and not plotThroughput):
             ax.legend(prop={'size': 9})
 
     #fig.subplots_adjust(hspace=0.5)
     fig.savefig(plotFile, bbox_inches='tight', pad_inches=0.05)
+    print("view-times are in", timesFile)
     print("points are in", pFile)
     print("plot is in", plotFile)
     if displayPlot:
@@ -2840,10 +4418,8 @@ def createPlot(pFile):
             subprocess.call([displayApp, plotFile])
         except:
             print("couldn't display the plot using '" + displayApp + "'. Consider changing the 'displayApp' variable.")
-    return (dictTVBase, dictTVCheap, dictTVQuick, dictTVComb, dictTVFree, dictTVOnep, dictTVOnepB, dictTVOnepC, dictTVOnepD, dictTVChBase, dictTVChComb,
-            dictLVBase, dictLVCheap, dictLVQuick, dictLVComb, dictLVFree, dictLVOnep, dictLVOnepB, dictLVOnepC, dictLVOnepD, dictLVChBase, dictLVChComb)
-# End of createPlot
-
+    return (dictTV, dictLV)
+# End of createPlotJoin2
 
 
 def createPlotPayloadAux(pFile):
@@ -2851,56 +4427,85 @@ def createPlotPayloadAux(pFile):
     dictTVBase   = {}
     dictTVCheap  = {}
     dictTVQuick  = {}
+    dictTVDamq   = {}
     dictTVComb   = {}
+    dictTVDamr   = {}
+    dictTVDama   = {}
+    dictTVDamp   = {}
     dictTVFree   = {}
+    dictTVRoll   = {}
     dictTVOnep   = {}
     dictTVOnepB  = {}
     dictTVOnepC  = {}
     dictTVOnepD  = {}
     dictTVChBase = {}
     dictTVChComb = {}
+
     # latency-view
     dictLVBase   = {}
     dictLVCheap  = {}
     dictLVQuick  = {}
+    dictLVDamq   = {}
     dictLVComb   = {}
+    dictLVDamr   = {}
+    dictLVDama   = {}
+    dictLVDamp   = {}
     dictLVFree   = {}
+    dictLVRoll   = {}
     dictLVOnep   = {}
     dictLVOnepB  = {}
     dictLVOnepC  = {}
     dictLVOnepD  = {}
     dictLVChBase = {}
     dictLVChComb = {}
+
     # handle
     dictHBase   = {}
     dictHCheap  = {}
     dictHQuick  = {}
+    dictHDamq   = {}
     dictHComb   = {}
+    dictHDamr   = {}
+    dictHDama   = {}
+    dictHDamp   = {}
     dictHFree   = {}
+    dictHRoll   = {}
     dictHOnep   = {}
     dictHOnepB  = {}
     dictHOnepC  = {}
     dictHOnepD  = {}
     dictHChBase = {}
     dictHChComb = {}
+
     # crypto-sign
     dictCSBase   = {}
     dictCSCheap  = {}
     dictCSQuick  = {}
+    dictCSDamq   = {}
     dictCSComb   = {}
+    dictCSDamr   = {}
+    dictCSDama   = {}
+    dictCSDamp   = {}
     dictCSFree   = {}
+    dictCSRoll   = {}
     dictCSOnep   = {}
     dictCSOnepB  = {}
     dictCSOnepC  = {}
     dictCSOnepD  = {}
     dictCSChBase = {}
     dictCSChComb = {}
+
     # crypto-verif
     dictCVBase   = {}
     dictCVCheap  = {}
     dictCVQuick  = {}
+    dictCVDamq   = {}
     dictCVComb   = {}
+    dictCVDamr   = {}
+    dictCVDama   = {}
+    dictCVDamp   = {}
     dictCVFree   = {}
+    dictCVRoll   = {}
     dictCVOnep   = {}
     dictCVOnepB  = {}
     dictCVOnepC  = {}
@@ -2978,10 +4583,30 @@ def createPlotPayloadAux(pFile):
                     (val,num) = dictTVComb.get(payloadSize,([],0))
                     val.append(float(pointVal))
                     dictTVComb.update({payloadSize:(val,num+1)})
+                if pointTag == "throughput-view" and protVal == "BASIC_DAMYSUS_ROTE":
+                    (val,num) = dictTVDamr.get(payloadSize,([],0))
+                    val.append(float(pointVal))
+                    dictTVDamr.update({payloadSize:(val,num+1)})
+                if pointTag == "throughput-view" and protVal == "BASIC_DAMYSUS_ACHILLES":
+                    (val,num) = dictTVDama.get(payloadSize,([],0))
+                    val.append(float(pointVal))
+                    dictTVDama.update({payloadSize:(val,num+1)})
+                if pointTag == "throughput-view" and protVal == "BASIC_DAMYSUS_PACEMAKER":
+                    (val,num) = dictTVDamp.get(payloadSize,([],0))
+                    val.append(float(pointVal))
+                    dictTVDamp.update({payloadSize:(val,num+1)})
+                if pointTag == "throughput-view" and protVal == "BASIC_DAMYSUS3_PACEMAKER":
+                    (val,num) = dictTVDamq.get(payloadSize,([],0))
+                    val.append(float(pointVal))
+                    dictTVDamq.update({payloadSize:(val,num+1)})
                 if pointTag == "throughput-view" and protVal == "BASIC_FREE":
                     (val,num) = dictTVFree.get(payloadSize,([],0))
                     val.append(float(pointVal))
                     dictTVFree.update({payloadSize:(val,num+1)})
+                if pointTag == "throughput-view" and protVal == "BASIC_ROLL":
+                    (val,num) = dictTVRoll.get(payloadSize,([],0))
+                    val.append(float(pointVal))
+                    dictTVRoll.update({payloadSize:(val,num+1)})
                 if pointTag == "throughput-view" and protVal == "BASIC_ONEP":
                     (val,num) = dictTVOnep.get(payloadSize,([],0))
                     val.append(float(pointVal))
@@ -3019,10 +4644,30 @@ def createPlotPayloadAux(pFile):
                     (val,num) = dictLVComb.get(payloadSize,([],0))
                     val.append(float(pointVal))
                     dictLVComb.update({payloadSize:(val,num+1)})
+                if pointTag == "latency-view" and protVal == "BASIC_DAMYSUS_ROTE":
+                    (val,num) = dictLVDamr.get(payloadSize,([],0))
+                    val.append(float(pointVal))
+                    dictLVDamr.update({payloadSize:(val,num+1)})
+                if pointTag == "latency-view" and protVal == "BASIC_DAMYSUS_ACHILLES":
+                    (val,num) = dictLVDama.get(payloadSize,([],0))
+                    val.append(float(pointVal))
+                    dictLVDama.update({payloadSize:(val,num+1)})
+                if pointTag == "latency-view" and protVal == "BASIC_DAMYSUS_PACEMAKER":
+                    (val,num) = dictLVDamp.get(payloadSize,([],0))
+                    val.append(float(pointVal))
+                    dictLVDamp.update({payloadSize:(val,num+1)})
+                if pointTag == "latency-view" and protVal == "BASIC_DAMYSUS3_PACEMAKER":
+                    (val,num) = dictLVDamq.get(payloadSize,([],0))
+                    val.append(float(pointVal))
+                    dictLVDamq.update({payloadSize:(val,num+1)})
                 if pointTag == "latency-view" and protVal == "BASIC_FREE":
                     (val,num) = dictLVFree.get(payloadSize,([],0))
                     val.append(float(pointVal))
                     dictLVFree.update({payloadSize:(val,num+1)})
+                if pointTag == "latency-view" and protVal == "BASIC_ROLL":
+                    (val,num) = dictLVRoll.get(payloadSize,([],0))
+                    val.append(float(pointVal))
+                    dictLVRoll.update({payloadSize:(val,num+1)})
                 if pointTag == "latency-view" and protVal == "BASIC_ONEP":
                     (val,num) = dictLVOnep.get(payloadSize,([],0))
                     val.append(float(pointVal))
@@ -3060,10 +4705,30 @@ def createPlotPayloadAux(pFile):
                     (val,num) = dictHComb.get(payloadSize,([],0))
                     val.append(float(pointVal) / numViews)
                     dictHComb.update({payloadSize:(val,num+1)})
+                if (pointTag == "handle" or pointTag == "latency-handle") and protVal == "BASIC_DAMYSUS_ROTE":
+                    (val,num) = dictHDamr.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictHDamr.update({payloadSize:(val,num+1)})
+                if (pointTag == "handle" or pointTag == "latency-handle") and protVal == "BASIC_DAMYSUS_ACHILLES":
+                    (val,num) = dictHDama.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictHDama.update({payloadSize:(val,num+1)})
+                if (pointTag == "handle" or pointTag == "latency-handle") and protVal == "BASIC_DAMYSUS_PACEMAKER":
+                    (val,num) = dictHDamp.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictHDamp.update({payloadSize:(val,num+1)})
+                if (pointTag == "handle" or pointTag == "latency-handle") and protVal == "BASIC_DAMYSUS3_PACEMAKER":
+                    (val,num) = dictHDamq.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictHDamq.update({payloadSize:(val,num+1)})
                 if (pointTag == "handle" or pointTag == "latency-handle") and protVal == "BASIC_FREE":
                     (val,num) = dictHFree.get(payloadSize,([],0))
                     val.append(float(pointVal) / numViews)
                     dictHFree.update({payloadSize:(val,num+1)})
+                if (pointTag == "handle" or pointTag == "latency-handle") and protVal == "BASIC_ROLL":
+                    (val,num) = dictHRoll.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictHRoll.update({payloadSize:(val,num+1)})
                 if (pointTag == "handle" or pointTag == "latency-handle") and protVal == "BASIC_ONEP":
                     (val,num) = dictHOnep.get(payloadSize,([],0))
                     val.append(float(pointVal) / numViews)
@@ -3101,10 +4766,30 @@ def createPlotPayloadAux(pFile):
                     (val,num) = dictCSComb.get(payloadSize,([],0))
                     val.append(float(pointVal) / numViews)
                     dictCSComb.update({payloadSize:(val,num+1)})
+                if pointTag == "crypto-sign" and protVal == "BASIC_DAMYSUS_ROTE":
+                    (val,num) = dictCSDamr.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictCSDamr.update({payloadSize:(val,num+1)})
+                if pointTag == "crypto-sign" and protVal == "BASIC_DAMYSUS_ACHILLES":
+                    (val,num) = dictCSDama.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictCSDama.update({payloadSize:(val,num+1)})
+                if pointTag == "crypto-sign" and protVal == "BASIC_DAMYSUS_PACEMAKER":
+                    (val,num) = dictCSDamp.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictCSDamp.update({payloadSize:(val,num+1)})
+                if pointTag == "crypto-sign" and protVal == "BASIC_DAMYSUS3_PACEMAKER":
+                    (val,num) = dictCSDamq.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictCSDamq.update({payloadSize:(val,num+1)})
                 if pointTag == "crypto-sign" and protVal == "BASIC_FREE":
                     (val,num) = dictCSFree.get(payloadSize,([],0))
                     val.append(float(pointVal) / numViews)
                     dictCSFree.update({payloadSize:(val,num+1)})
+                if pointTag == "crypto-sign" and protVal == "BASIC_ROLL":
+                    (val,num) = dictCSRoll.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictCSRoll.update({payloadSize:(val,num+1)})
                 if pointTag == "crypto-sign" and protVal == "BASIC_ONEP":
                     (val,num) = dictCSOnep.get(payloadSize,([],0))
                     val.append(float(pointVal) / numViews)
@@ -3142,10 +4827,30 @@ def createPlotPayloadAux(pFile):
                     (val,num) = dictCVComb.get(payloadSize,([],0))
                     val.append(float(pointVal) / numViews)
                     dictCVComb.update({payloadSize:(val,num+1)})
+                if pointTag == "crypto-verif" and protVal == "BASIC_DAMSUS_ROTE":
+                    (val,num) = dictCVDamr.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictCVDamr.update({payloadSize:(val,num+1)})
+                if pointTag == "crypto-verif" and protVal == "BASIC_DAMSUS_ACHILLES":
+                    (val,num) = dictCVDama.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictCVDama.update({payloadSize:(val,num+1)})
+                if pointTag == "crypto-verif" and protVal == "BASIC_DAMSUS_PACEMAKER":
+                    (val,num) = dictCVDamp.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictCVDamp.update({payloadSize:(val,num+1)})
+                if pointTag == "crypto-verif" and protVal == "BASIC_DAMYSUS3_PACEMAKER":
+                    (val,num) = dictCVDamq.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictCVDamq.update({payloadSize:(val,num+1)})
                 if pointTag == "crypto-verif" and protVal == "BASIC_FREE":
                     (val,num) = dictCVFree.get(payloadSize,([],0))
                     val.append(float(pointVal) / numViews)
                     dictCVFree.update({payloadSize:(val,num+1)})
+                if pointTag == "crypto-verif" and protVal == "BASIC_ROLL":
+                    (val,num) = dictCVRoll.get(payloadSize,([],0))
+                    val.append(float(pointVal) / numViews)
+                    dictCVRoll.update({payloadSize:(val,num+1)})
                 if pointTag == "crypto-verif" and protVal == "BASIC_ONEP":
                     (val,num) = dictCVOnep.get(payloadSize,([],0))
                     val.append(float(pointVal) / numViews)
@@ -3170,57 +4875,87 @@ def createPlotPayloadAux(pFile):
 
     # We convert the dictionaries to lists
     # throughput-view
-    (payloadsTVBase,   valsTVBase,   numsTVBase)   = dict2lists(dictTVBase,quantileSize,False)
-    (payloadsTVCheap,  valsTVCheap,  numsTVCheap)  = dict2lists(dictTVCheap,quantileSize,False)
-    (payloadsTVQuick,  valsTVQuick,  numsTVQuick)  = dict2lists(dictTVQuick,quantileSize,False)
-    (payloadsTVComb,   valsTVComb,   numsTVComb)   = dict2lists(dictTVComb,quantileSize,False)
-    (payloadsTVFree,   valsTVFree,   numsTVFree)   = dict2lists(dictTVFree,quantileSize,False)
-    (payloadsTVOnep,   valsTVOnep,   numsTVOnep)   = dict2lists(dictTVOnep,quantileSize,False)
-    (payloadsTVChBase, valsTVChBase, numsTVChBase) = dict2lists(dictTVChBase,quantileSize,False)
-    (payloadsTVChComb, valsTVChComb, numsTVChComb) = dict2lists(dictTVChComb,quantileSize,False)
+    (payloadsTVBase,   valsTVBase,   numsTVBase)   = dict2lists(dictTVBase,quantileSize,False,True)
+    (payloadsTVCheap,  valsTVCheap,  numsTVCheap)  = dict2lists(dictTVCheap,quantileSize,False,True)
+    (payloadsTVQuick,  valsTVQuick,  numsTVQuick)  = dict2lists(dictTVQuick,quantileSize,False,True)
+    (payloadsTVDamq,   valsTVDamq,   numsTVDamq)   = dict2lists(dictTVDamq,quantileSize,False,True)
+    (payloadsTVComb,   valsTVComb,   numsTVComb)   = dict2lists(dictTVComb,quantileSize,False,True)
+    (payloadsTVDamr,   valsTVDamr,   numsTVDamr)   = dict2lists(dictTVDamr,quantileSize,False,True)
+    (payloadsTVDama,   valsTVDama,   numsTVDama)   = dict2lists(dictTVDama,quantileSize,False,True)
+    (payloadsTVDamp,   valsTVDamp,   numsTVDamp)   = dict2lists(dictTVDamp,quantileSize,False,True)
+    (payloadsTVFree,   valsTVFree,   numsTVFree)   = dict2lists(dictTVFree,quantileSize,False,True)
+    (payloadsTVRoll,   valsTVRoll,   numsTVRoll)   = dict2lists(dictTVRoll,quantileSize,False,True)
+    (payloadsTVOnep,   valsTVOnep,   numsTVOnep)   = dict2lists(dictTVOnep,quantileSize,False,True)
+    (payloadsTVChBase, valsTVChBase, numsTVChBase) = dict2lists(dictTVChBase,quantileSize,False,True)
+    (payloadsTVChComb, valsTVChComb, numsTVChComb) = dict2lists(dictTVChComb,quantileSize,False,True)
     # latency-view
-    (payloadsLVBase,   valsLVBase,   numsLVBase)   = dict2lists(dictLVBase,quantileSize,False)
-    (payloadsLVCheap,  valsLVCheap,  numsLVCheap)  = dict2lists(dictLVCheap,quantileSize,False)
-    (payloadsLVQuick,  valsLVQuick,  numsLVQuick)  = dict2lists(dictLVQuick,quantileSize,False)
-    (payloadsLVComb,   valsLVComb,   numsLVComb)   = dict2lists(dictLVComb,quantileSize,False)
-    (payloadsLVFree,   valsLVFree,   numsLVFree)   = dict2lists(dictLVFree,quantileSize,False)
-    (payloadsLVOnep,   valsLVOnep,   numsLVOnep)   = dict2lists(dictLVOnep,quantileSize,False)
-    (payloadsLVChBase, valsLVChBase, numsLVChBase) = dict2lists(dictLVChBase,quantileSize,False)
-    (payloadsLVChComb, valsLVChComb, numsLVChComb) = dict2lists(dictLVChComb,quantileSize,False)
+    (payloadsLVBase,   valsLVBase,   numsLVBase)   = dict2lists(dictLVBase,quantileSize,False,True)
+    (payloadsLVCheap,  valsLVCheap,  numsLVCheap)  = dict2lists(dictLVCheap,quantileSize,False,True)
+    (payloadsLVQuick,  valsLVQuick,  numsLVQuick)  = dict2lists(dictLVQuick,quantileSize,False,True)
+    (payloadsLVDamq,   valsLVDamq,   numsLVDamq)   = dict2lists(dictLVDamq,quantileSize,False,True)
+    (payloadsLVComb,   valsLVComb,   numsLVComb)   = dict2lists(dictLVComb,quantileSize,False,True)
+    (payloadsLVDamr,   valsLVDamr,   numsLVDamr)   = dict2lists(dictLVDamr,quantileSize,False,True)
+    (payloadsLVDama,   valsLVDama,   numsLVDama)   = dict2lists(dictLVDama,quantileSize,False,True)
+    (payloadsLVDamp,   valsLVDamp,   numsLVDamp)   = dict2lists(dictLVDamp,quantileSize,False,True)
+    (payloadsLVFree,   valsLVFree,   numsLVFree)   = dict2lists(dictLVFree,quantileSize,False,True)
+    (payloadsLVRoll,   valsLVRoll,   numsLVRoll)   = dict2lists(dictLVRoll,quantileSize,False,True)
+    (payloadsLVOnep,   valsLVOnep,   numsLVOnep)   = dict2lists(dictLVOnep,quantileSize,False,True)
+    (payloadsLVChBase, valsLVChBase, numsLVChBase) = dict2lists(dictLVChBase,quantileSize,False,True)
+    (payloadsLVChComb, valsLVChComb, numsLVChComb) = dict2lists(dictLVChComb,quantileSize,False,True)
     # handle
-    (payloadsHBase,   valsHBase,   numsHBase)   = dict2lists(dictHBase,quantileSize1,False)
-    (payloadsHCheap,  valsHCheap,  numsHCheap)  = dict2lists(dictHCheap,quantileSize1,False)
-    (payloadsHQuick,  valsHQuick,  numsHQuick)  = dict2lists(dictHQuick,quantileSize1,False)
-    (payloadsHComb,   valsHComb,   numsHComb)   = dict2lists(dictHComb,quantileSize1,False)
-    (payloadsHFree,   valsHFree,   numsHFree)   = dict2lists(dictHFree,quantileSize1,False)
-    (payloadsHOnep,   valsHOnep,   numsHOnep)   = dict2lists(dictHOnep,quantileSize1,False)
-    (payloadsHChBase, valsHChBase, numsHChBase) = dict2lists(dictHChBase,quantileSize1,False)
-    (payloadsHChComb, valsHChComb, numsHChComb) = dict2lists(dictHChComb,quantileSize1,False)
+    (payloadsHBase,   valsHBase,   numsHBase)   = dict2lists(dictHBase,quantileSize1,False,True)
+    (payloadsHCheap,  valsHCheap,  numsHCheap)  = dict2lists(dictHCheap,quantileSize1,False,True)
+    (payloadsHQuick,  valsHQuick,  numsHQuick)  = dict2lists(dictHQuick,quantileSize1,False,True)
+    (payloadsHDamq,   valsHDamq,   numsHDamq)   = dict2lists(dictHDamq,quantileSize1,False,True)
+    (payloadsHComb,   valsHComb,   numsHComb)   = dict2lists(dictHComb,quantileSize1,False,True)
+    (payloadsHDamr,   valsHDamr,   numsHDamr)   = dict2lists(dictHDamr,quantileSize1,False,True)
+    (payloadsHDama,   valsHDama,   numsHDama)   = dict2lists(dictHDama,quantileSize1,False,True)
+    (payloadsHDamp,   valsHDamp,   numsHDamp)   = dict2lists(dictHDamp,quantileSize1,False,True)
+    (payloadsHFree,   valsHFree,   numsHFree)   = dict2lists(dictHFree,quantileSize1,False,True)
+    (payloadsHRoll,   valsHRoll,   numsHRoll)   = dict2lists(dictHRoll,quantileSize1,False,True)
+    (payloadsHOnep,   valsHOnep,   numsHOnep)   = dict2lists(dictHOnep,quantileSize1,False,True)
+    (payloadsHChBase, valsHChBase, numsHChBase) = dict2lists(dictHChBase,quantileSize1,False,True)
+    (payloadsHChComb, valsHChComb, numsHChComb) = dict2lists(dictHChComb,quantileSize1,False,True)
     # crypto-sign
-    (payloadsCSBase,   valsCSBase,   numsCSBase)   = dict2lists(dictCSBase,quantileSize2,False)
-    (payloadsCSCheap,  valsCSCheap,  numsCSCheap)  = dict2lists(dictCSCheap,quantileSize2,False)
-    (payloadsCSQuick,  valsCSQuick,  numsCSQuick)  = dict2lists(dictCSQuick,quantileSize2,False)
-    (payloadsCSComb,   valsCSComb,   numsCSComb)   = dict2lists(dictCSComb,quantileSize2,False)
-    (payloadsCSFree,   valsCSFree,   numsCSFree)   = dict2lists(dictCSFree,quantileSize2,False)
-    (payloadsCSOnep,   valsCSOnep,   numsCSOnep)   = dict2lists(dictCSOnep,quantileSize2,False)
-    (payloadsCSChBase, valsCSChBase, numsCSChBase) = dict2lists(dictCSChBase,quantileSize2,False)
-    (payloadsCSChComb, valsCSChComb, numsCSChComb) = dict2lists(dictCSChComb,quantileSize2,False)
+    (payloadsCSBase,   valsCSBase,   numsCSBase)   = dict2lists(dictCSBase,quantileSize2,False,True)
+    (payloadsCSCheap,  valsCSCheap,  numsCSCheap)  = dict2lists(dictCSCheap,quantileSize2,False,True)
+    (payloadsCSQuick,  valsCSQuick,  numsCSQuick)  = dict2lists(dictCSQuick,quantileSize2,False,True)
+    (payloadsCSDamq,   valsCSDamq,   numsCSDamq)   = dict2lists(dictCSDamq,quantileSize2,False,True)
+    (payloadsCSComb,   valsCSComb,   numsCSComb)   = dict2lists(dictCSComb,quantileSize2,False,True)
+    (payloadsCSDamr,   valsCSDamr,   numsCSDamr)   = dict2lists(dictCSDamr,quantileSize2,False,True)
+    (payloadsCSDama,   valsCSDama,   numsCSDama)   = dict2lists(dictCSDama,quantileSize2,False,True)
+    (payloadsCSDamp,   valsCSDamp,   numsCSDamp)   = dict2lists(dictCSDamp,quantileSize2,False,True)
+    (payloadsCSFree,   valsCSFree,   numsCSFree)   = dict2lists(dictCSFree,quantileSize2,False,True)
+    (payloadsCSRoll,   valsCSRoll,   numsCSRoll)   = dict2lists(dictCSRoll,quantileSize2,False,True)
+    (payloadsCSOnep,   valsCSOnep,   numsCSOnep)   = dict2lists(dictCSOnep,quantileSize2,False,True)
+    (payloadsCSChBase, valsCSChBase, numsCSChBase) = dict2lists(dictCSChBase,quantileSize2,False,True)
+    (payloadsCSChComb, valsCSChComb, numsCSChComb) = dict2lists(dictCSChComb,quantileSize2,False,True)
     # crypto-verif
-    (payloadsCVBase,   valsCVBase,   numsCVBase)   = dict2lists(dictCVBase,quantileSize2,False)
-    (payloadsCVCheap,  valsCVCheap,  numsCVCheap)  = dict2lists(dictCVCheap,quantileSize2,False)
-    (payloadsCVQuick,  valsCVQuick,  numsCVQuick)  = dict2lists(dictCVQuick,quantileSize2,False)
-    (payloadsCVComb,   valsCVComb,   numsCVComb)   = dict2lists(dictCVComb,quantileSize2,False)
-    (payloadsCVFree,   valsCVFree,   numsCVFree)   = dict2lists(dictCVFree,quantileSize2,False)
-    (payloadsCVOnep,   valsCVOnep,   numsCVOnep)   = dict2lists(dictCVOnep,quantileSize2,False)
-    (payloadsCVChBase, valsCVChBase, numsCVChBase) = dict2lists(dictCVChBase,quantileSize2,False)
-    (payloadsCVChComb, valsCVChComb, numsCVChComb) = dict2lists(dictCVChComb,quantileSize2,False)
+    (payloadsCVBase,   valsCVBase,   numsCVBase)   = dict2lists(dictCVBase,quantileSize2,False,True)
+    (payloadsCVCheap,  valsCVCheap,  numsCVCheap)  = dict2lists(dictCVCheap,quantileSize2,False,True)
+    (payloadsCVQuick,  valsCVQuick,  numsCVQuick)  = dict2lists(dictCVQuick,quantileSize2,False,True)
+    (payloadsCVDamq,   valsCVDamq,   numsCVDamq)   = dict2lists(dictCVDamq,quantileSize2,False,True)
+    (payloadsCVComb,   valsCVComb,   numsCVComb)   = dict2lists(dictCVComb,quantileSize2,False,True)
+    (payloadsCVDamr,   valsCVDamr,   numsCVDamr)   = dict2lists(dictCVDamr,quantileSize2,False,True)
+    (payloadsCVDama,   valsCVDama,   numsCVDama)   = dict2lists(dictCVDama,quantileSize2,False,True)
+    (payloadsCVDamp,   valsCVDamp,   numsCVDamp)   = dict2lists(dictCVDamp,quantileSize2,False,True)
+    (payloadsCVFree,   valsCVFree,   numsCVFree)   = dict2lists(dictCVFree,quantileSize2,False,True)
+    (payloadsCVRoll,   valsCVRoll,   numsCVRoll)   = dict2lists(dictCVRoll,quantileSize2,False,True)
+    (payloadsCVOnep,   valsCVOnep,   numsCVOnep)   = dict2lists(dictCVOnep,quantileSize2,False,True)
+    (payloadsCVChBase, valsCVChBase, numsCVChBase) = dict2lists(dictCVChBase,quantileSize2,False,True)
+    (payloadsCVChComb, valsCVChComb, numsCVChComb) = dict2lists(dictCVChComb,quantileSize2,False,True)
 
-    print("payloads/throughputs(val+num)/latencies(val+num)/cypto-verif(val+num)/cypto-sign(val+num) for (baseline/cheap/quick/combined/free/onep/chained-baseline/chained-combined)")
+    print("payloads/throughputs(val+num)/latencies(val+num)/cypto-verif(val+num)/cypto-sign(val+num) for (baseline/cheap/quick/damq/combined/damysus+rote/free/roll/onep/chained-baseline/chained-combined)")
     print((payloadsTVBase,   (valsTVBase,   numsTVBase),   (valsLVBase,   numsLVBase),   (valsCVBase,   numsCVBase),   (valsCSBase,   numsCSBase)))
     print((payloadsTVCheap,  (valsTVCheap,  numsTVCheap),  (valsLVCheap,  numsLVCheap),  (valsCVCheap,  numsCVCheap),  (valsCSCheap,  numsCSCheap)))
     print((payloadsTVQuick,  (valsTVQuick,  numsTVQuick),  (valsLVQuick,  numsLVQuick),  (valsCVQuick,  numsCVQuick),  (valsCSQuick,  numsCSQuick)))
+    print((payloadsTVDamq,   (valsTVDamq,   numsTVDamq),   (valsLVDamq,   numsLVDamq),   (valsCVDamq,   numsCVDamq),   (valsCSDamq,   numsCSDamq)))
     print((payloadsTVComb,   (valsTVComb,   numsTVComb),   (valsLVComb,   numsLVComb),   (valsCVComb,   numsCVComb),   (valsCSComb,   numsCSComb)))
+    print((payloadsTVDamr,   (valsTVDamr,   numsTVDamr),   (valsLVDamr,   numsLVDamr),   (valsCVDamr,   numsCVDamr),   (valsCSDamr,   numsCSDamr)))
+    print((payloadsTVDama,   (valsTVDama,   numsTVDama),   (valsLVDama,   numsLVDama),   (valsCVDama,   numsCVDama),   (valsCSDama,   numsCSDama)))
+    print((payloadsTVDamp,   (valsTVDamp,   numsTVDamp),   (valsLVDamp,   numsLVDamp),   (valsCVDamp,   numsCVDamp),   (valsCSDamp,   numsCSDamp)))
     print((payloadsTVFree,   (valsTVFree,   numsTVFree),   (valsLVFree,   numsLVFree),   (valsCVFree,   numsCVFree),   (valsCSFree,   numsCSFree)))
+    print((payloadsTVRoll,   (valsTVRoll,   numsTVRoll),   (valsLVRoll,   numsLVRoll),   (valsCVRoll,   numsCVRoll),   (valsCSRoll,   numsCSRoll)))
     print((payloadsTVOnep,   (valsTVOnep,   numsTVOnep),   (valsLVOnep,   numsLVOnep),   (valsCVOnep,   numsCVOnep),   (valsCSOnep,   numsCSOnep)))
     print((payloadsTVChBase, (valsTVChBase, numsTVChBase), (valsLVChBase, numsLVChBase), (valsCVChBase, numsCVChBase), (valsCSChBase, numsCSChBase)))
     print((payloadsTVChComb, (valsTVChComb, numsTVChComb), (valsLVChComb, numsLVChComb), (valsCVChComb, numsCVChComb), (valsCSChComb, numsCSChComb)))
@@ -3229,7 +4964,11 @@ def createPlotPayloadAux(pFile):
     # non-chained
     getPercentage(False,baseHS,payloadsTVBase,valsTVBase,cheapHS,payloadsTVCheap,valsTVCheap)
     getPercentage(False,baseHS,payloadsTVBase,valsTVBase,quickHS,payloadsTVQuick,valsTVQuick)
+    getPercentage(False,baseHS,payloadsTVBase,valsTVBase,damqHS, payloadsTVDamq, valsTVDamq)
     getPercentage(False,baseHS,payloadsTVBase,valsTVBase,combHS, payloadsTVComb, valsTVComb)
+    getPercentage(False,baseHS,payloadsTVBase,valsTVBase,damrHS, payloadsTVDamr, valsTVDamr)
+    getPercentage(False,baseHS,payloadsTVBase,valsTVBase,damaHS, payloadsTVDama, valsTVDama)
+    getPercentage(False,baseHS,payloadsTVBase,valsTVBase,dampHS, payloadsTVDamp, valsTVDamp)
     getPercentage(False,baseHS,payloadsTVBase,valsTVBase,freeHS, payloadsTVFree, valsTVFree)
     getPercentage(False,combHS,payloadsTVComb,valsTVComb,freeHS, payloadsTVFree, valsTVFree)
     getPercentage(False,baseHS,payloadsTVBase,valsTVBase,onepHS, payloadsTVOnep, valsTVOnep)
@@ -3241,7 +4980,11 @@ def createPlotPayloadAux(pFile):
     # non-chained
     getPercentage(True,baseHS,payloadsLVBase,valsLVBase,cheapHS,payloadsLVCheap,valsLVCheap)
     getPercentage(True,baseHS,payloadsLVBase,valsLVBase,quickHS,payloadsLVQuick,valsLVQuick)
+    getPercentage(True,baseHS,payloadsLVBase,valsLVBase,damqHS, payloadsLVDamq, valsLVDamq)
     getPercentage(True,baseHS,payloadsLVBase,valsLVBase,combHS, payloadsLVComb, valsLVComb)
+    getPercentage(True,baseHS,payloadsLVBase,valsLVBase,damrHS, payloadsLVDamr, valsLVDamr)
+    getPercentage(True,baseHS,payloadsLVBase,valsLVBase,damaHS, payloadsLVDama, valsLVDama)
+    getPercentage(True,baseHS,payloadsLVBase,valsLVBase,dampHS, payloadsLVDamp, valsLVDamp)
     getPercentage(True,baseHS,payloadsLVBase,valsLVBase,freeHS, payloadsLVFree, valsLVFree)
     getPercentage(True,combHS,payloadsLVComb,valsLVComb,freeHS, payloadsLVFree, valsLVFree)
     getPercentage(True,baseHS,payloadsLVBase,valsLVBase,onepHS, payloadsLVOnep, valsLVOnep)
@@ -3253,7 +4996,11 @@ def createPlotPayloadAux(pFile):
     # non-chained
     getPercentage(True,baseHS,payloadsHBase,valsHBase,cheapHS,payloadsHCheap,valsHCheap)
     getPercentage(True,baseHS,payloadsHBase,valsHBase,quickHS,payloadsHQuick,valsHQuick)
+    getPercentage(True,baseHS,payloadsHBase,valsHBase,damqHS, payloadsHDamq, valsHDamq)
     getPercentage(True,baseHS,payloadsHBase,valsHBase,combHS, payloadsHComb, valsHComb)
+    getPercentage(True,baseHS,payloadsHBase,valsHBase,damrHS, payloadsHDamr, valsHDamr)
+    getPercentage(True,baseHS,payloadsHBase,valsHBase,damaHS, payloadsHDama, valsHDama)
+    getPercentage(True,baseHS,payloadsHBase,valsHBase,dampHS, payloadsHDamp, valsHDamp)
     getPercentage(True,baseHS,payloadsHBase,valsHBase,freeHS, payloadsHFree, valsHFree)
     getPercentage(True,combHS,payloadsHComb,valsHComb,freeHS, payloadsHFree, valsHFree)
     getPercentage(True,baseHS,payloadsHBase,valsHBase,onepHS, payloadsHOnep, valsHOnep)
@@ -3266,8 +5013,13 @@ def createPlotPayloadAux(pFile):
             payloadsTVBase,   valsTVBase,   numsTVBase,
             payloadsTVCheap,  valsTVCheap,  numsTVCheap,
             payloadsTVQuick,  valsTVQuick,  numsTVQuick,
+            payloadsTVDamq,   valsTVDamq,   numsTVDamq,
             payloadsTVComb,   valsTVComb,   numsTVComb,
+            payloadsTVDamr,   valsTVDamr,   numsTVDamr,
+            payloadsTVDama,   valsTVDama,   numsTVDama,
+            payloadsTVDamp,   valsTVDamp,   numsTVDamp,
             payloadsTVFree,   valsTVFree,   numsTVFree,
+            payloadsTVRoll,   valsTVRoll,   numsTVRoll,
             payloadsTVOnep,   valsTVOnep,   numsTVOnep,
             payloadsTVChBase, valsTVChBase, numsTVChBase,
             payloadsTVChComb, valsTVChComb, numsTVChComb,
@@ -3275,8 +5027,13 @@ def createPlotPayloadAux(pFile):
             payloadsLVBase,   valsLVBase,   numsLVBase,
             payloadsLVCheap,  valsLVCheap,  numsLVCheap,
             payloadsLVQuick,  valsLVQuick,  numsLVQuick,
+            payloadsLVDamq,   valsLVDamq,   numsLVDamq,
             payloadsLVComb,   valsLVComb,   numsLVComb,
+            payloadsLVDamr,   valsLVDamr,   numsLVDamr,
+            payloadsLVDama,   valsLVDama,   numsLVDama,
+            payloadsLVDamp,   valsLVDamp,   numsLVDamp,
             payloadsLVFree,   valsLVFree,   numsLVFree,
+            payloadsLVRoll,   valsLVRoll,   numsLVRoll,
             payloadsLVOnep,   valsLVOnep,   numsLVOnep,
             payloadsLVChBase, valsLVChBase, numsLVChBase,
             payloadsLVChComb, valsLVChComb, numsLVChComb,
@@ -3284,8 +5041,13 @@ def createPlotPayloadAux(pFile):
             payloadsHBase,   valsHBase,   numsHBase,
             payloadsHCheap,  valsHCheap,  numsHCheap,
             payloadsHQuick,  valsHQuick,  numsHQuick,
+            payloadsHDamq,   valsHDamq,   numsHDamq,
             payloadsHComb,   valsHComb,   numsHComb,
+            payloadsHDamr,   valsHDamr,   numsHDamr,
+            payloadsHDama,   valsHDama,   numsHDama,
+            payloadsHDamp,   valsHDamp,   numsHDamp,
             payloadsHFree,   valsHFree,   numsHFree,
+            payloadsHRoll,   valsHRoll,   numsHRoll,
             payloadsHOnep,   valsHOnep,   numsHOnep,
             payloadsHChBase, valsHChBase, numsHChBase,
             payloadsHChComb, valsHChComb, numsHChComb,
@@ -3293,8 +5055,13 @@ def createPlotPayloadAux(pFile):
             payloadsCSBase,   valsCSBase,   numsCSBase,
             payloadsCSCheap,  valsCSCheap,  numsCSCheap,
             payloadsCSQuick,  valsCSQuick,  numsCSQuick,
+            payloadsCSDamq,   valsCSDamq,   numsCSDamq,
             payloadsCSComb,   valsCSComb,   numsCSComb,
+            payloadsCSDamr,   valsCSDamr,   numsCSDamr,
+            payloadsCSDama,   valsCSDama,   numsCSDama,
+            payloadsCSDamp,   valsCSDamp,   numsCSDamp,
             payloadsCSFree,   valsCSFree,   numsCSFree,
+            payloadsCSRoll,   valsCSRoll,   numsCSRoll,
             payloadsCSOnep,   valsCSOnep,   numsCSOnep,
             payloadsCSChBase, valsCSChBase, numsCSChBase,
             payloadsCSChComb, valsCSChComb, numsCSChComb,
@@ -3302,8 +5069,13 @@ def createPlotPayloadAux(pFile):
             payloadsCVBase,   valsCVBase,   numsCVBase,
             payloadsCVCheap,  valsCVCheap,  numsCVCheap,
             payloadsCVQuick,  valsCVQuick,  numsCVQuick,
+            payloadsCVDamq,   valsCVDamq,   numsCVDamq,
             payloadsCVComb,   valsCVComb,   numsCVComb,
+            payloadsCVDamr,   valsCVDamr,   numsCVDamr,
+            payloadsCVDama,   valsCVDama,   numsCVDama,
+            payloadsCVDamp,   valsCVDamp,   numsCVDamp,
             payloadsCVFree,   valsCVFree,   numsCVFree,
+            payloadsCVRoll,   valsCVRoll,   numsCVRoll,
             payloadsCVOnep,   valsCVOnep,   numsCVOnep,
             payloadsCVChBase, valsCVChBase, numsCVChBase,
             payloadsCVChComb, valsCVChComb, numsCVChComb)
@@ -3325,8 +5097,13 @@ def createPlotPayload(files):
     global baseCOL
     global cheapCOL
     global quickCOL
+    global damqCOL
     global combCOL
+    global damrCOL
+    global damaCOL
+    global dampCOL
     global freeCOL
+    global rollCOL
     global onepCOL
     global onepbCOL
     global onepcCOL
@@ -3367,8 +5144,8 @@ def createPlotPayload(files):
         else:
             if plotHandle and not plotView:
                 fig.suptitle("Handling time")
-            else:
-                fig.suptitle("Throughputs (top) & Latencies (bottom)")
+#            else:
+#                fig.suptitle("Throughputs (top) & Latencies (bottom)")
 
     adjustFigAspect(fig,aspect=0.9)
     #adjustFigAspect(fig,aspect=0.9)
@@ -3408,8 +5185,13 @@ def createPlotPayload(files):
              payloadsTVBase,   valsTVBase,   numsTVBase,
              payloadsTVCheap,  valsTVCheap,  numsTVCheap,
              payloadsTVQuick,  valsTVQuick,  numsTVQuick,
+             payloadsTVDamq,   valsTVDamq,   numsTVDamq,
              payloadsTVComb,   valsTVComb,   numsTVComb,
+             payloadsTVDamr,   valsTVDamr,   numsTVDamr,
+             payloadsTVDama,   valsTVDama,   numsTVDama,
+             payloadsTVDamp,   valsTVDamp,   numsTVDamp,
              payloadsTVFree,   valsTVFree,   numsTVFree,
+             payloadsTVRoll,   valsTVRoll,   numsTVRoll,
              payloadsTVOnep,   valsTVOnep,   numsTVOnep,
              payloadsTVChBase, valsTVChBase, numsTVChBase,
              payloadsTVChComb, valsTVChComb, numsTVChComb,
@@ -3417,8 +5199,13 @@ def createPlotPayload(files):
              payloadsLVBase,   valsLVBase,   numsLVBase,
              payloadsLVCheap,  valsLVCheap,  numsLVCheap,
              payloadsLVQuick,  valsLVQuick,  numsLVQuick,
+             payloadsLVDamq,   valsLVDamq,   numsLVDamq,
              payloadsLVComb,   valsLVComb,   numsLVComb,
+             payloadsLVDamr,   valsLVDamr,   numsLVDamr,
+             payloadsLVDama,   valsLVDama,   numsLVDama,
+             payloadsLVDamp,   valsLVDamp,   numsLVDamp,
              payloadsLVFree,   valsLVFree,   numsLVFree,
+             payloadsLVRoll,   valsLVRoll,   numsLVRoll,
              payloadsLVOnep,   valsLVOnep,   numsLVOnep,
              payloadsLVChBase, valsLVChBase, numsLVChBase,
              payloadsLVChComb, valsLVChComb, numsLVChComb,
@@ -3426,8 +5213,13 @@ def createPlotPayload(files):
              payloadsHBase,   valsHBase,   numsHBase,
              payloadsHCheap,  valsHCheap,  numsHCheap,
              payloadsHQuick,  valsHQuick,  numsHQuick,
+             payloadsHDamq,   valsHDamq,   numsHDamq,
              payloadsHComb,   valsHComb,   numsHComb,
+             payloadsHDamr,   valsHDamr,   numsHDamr,
+             payloadsHDama,   valsHDama,   numsHDama,
+             payloadsHDamp,   valsHDamp,   numsHDamp,
              payloadsHFree,   valsHFree,   numsHFree,
+             payloadsHRoll,   valsHRoll,   numsHRoll,
              payloadsHOnep,   valsHOnep,   numsHOnep,
              payloadsHChBase, valsHChBase, numsHChBase,
              payloadsHChComb, valsHChComb, numsHChComb,
@@ -3435,8 +5227,13 @@ def createPlotPayload(files):
              payloadsCSBase,   valsCSBase,   numsCSBase,
              payloadsCSCheap,  valsCSCheap,  numsCSCheap,
              payloadsCSQuick,  valsCSQuick,  numsCSQuick,
+             payloadsCSDamq,   valsCSDamq,   numsCSDamq,
              payloadsCSComb,   valsCSComb,   numsCSComb,
+             payloadsCSDamr,   valsCSDamr,   numsCSDamr,
+             payloadsCSDama,   valsCSDama,   numsCSDama,
+             payloadsCSDamp,   valsCSDamp,   numsCSDamp,
              payloadsCSFree,   valsCSFree,   numsCSFree,
+             payloadsCSRoll,   valsCSRoll,   numsCSRoll,
              payloadsCSOnep,   valsCSOnep,   numsCSOnep,
              payloadsCSChBase, valsCSChBase, numsCSChBase,
              payloadsCSChComb, valsCSChComb, numsCSChComb,
@@ -3444,8 +5241,13 @@ def createPlotPayload(files):
              payloadsCVBase,   valsCVBase,   numsCVBase,
              payloadsCVCheap,  valsCVCheap,  numsCVCheap,
              payloadsCVQuick,  valsCVQuick,  numsCVQuick,
+             payloadsCVDamq,   valsCVDamq,   numsCVDamq,
              payloadsCVComb,   valsCVComb,   numsCVComb,
+             payloadsCVDamr,   valsCVDamr,   numsCVDamr,
+             payloadsCVDama,   valsCVDama,   numsCVDama,
+             payloadsCVDamp,   valsCVDamp,   numsCVDamp,
              payloadsCVFree,   valsCVFree,   numsCVFree,
+             payloadsCVRoll,   valsCVRoll,   numsCVRoll,
              payloadsCVOnep,   valsCVOnep,   numsCVOnep,
              payloadsCVChBase, valsCVChBase, numsCVChBase,
              payloadsCVChComb, valsCVChComb, numsCVChComb) = createPlotPayloadAux(file)
@@ -3483,6 +5285,8 @@ def createPlotPayload(files):
                         axs[0].plot(payloadsTVCheap,  valsTVCheap,  color=cheapCOL,  linewidth=LW, marker=cheapMRK,  markersize=MS, linestyle=cheapLS,  label=cheapHS + "(" + str(int(rate)) + ")")
                     if len(payloadsTVQuick) > 0:
                         axs[0].plot(payloadsTVQuick,  valsTVQuick,  color=quickCOL,  linewidth=LW, marker=quickMRK,  markersize=MS, linestyle=quickLS,  label=quickHS + "(" + str(int(rate)) + ")")
+                    if len(payloadsTVDamq) > 0:
+                        axs[0].plot(payloadsTVDamq,  valsTVDamq,  color=damqCOL,  linewidth=LW, marker=damqMRK,  markersize=MS, linestyle=damqLS,  label=damqHS + "(" + str(int(rate)) + ")")
                     if runComb and len(payloadsTVComb) > 0:
                         if barPlot:
                             payloadsTVComb = [x+posT for x in payloadsTVComb]
@@ -3494,8 +5298,43 @@ def createPlotPayload(files):
                                 f.close()
                         else:
                             axs[0].plot(payloadsTVComb,   valsTVComb,   color=combCOL,   linewidth=LW, marker=combMRK,   markersize=MS, linestyle=combLS,   label=combHS + "(" + str(int(rate)) + ")")
+                    if runDamr and len(payloadsTVDamr) > 0:
+                        if barPlot:
+                            payloadsTVDamr = [x+posT for x in payloadsTVDamr]
+                            axs[0].bar(payloadsTVDamr,   valsTVDamr, width=width,   color=damrCOL,   linewidth=LW, linestyle=damrLS,   label=damrHS + "(" + str(int(rate)) + ")")
+                            posT += width
+                            for (i,j) in zip(payloadsTVDamr, valsTVDamr):
+                                f = open("points","a")
+                                f.write("throughput " + str(int(rate)) + " " + str(i) + " " + str(j) + "\n")
+                                f.close()
+                        else:
+                            axs[0].plot(payloadsTVDamr,   valsTVDamr,   color=damrCOL,   linewidth=LW, marker=damrMRK,   markersize=MS, linestyle=damrLS,   label=damrHS + "(" + str(int(rate)) + ")")
+                    if runDama and len(payloadsTVDama) > 0:
+                        if barPlot:
+                            payloadsTVDama = [x+posT for x in payloadsTVDama]
+                            axs[0].bar(payloadsTVDama,   valsTVDama, width=width,   color=damaCOL,   linewidth=LW, linestyle=damaLS,   label=damaHS + "(" + str(int(rate)) + ")")
+                            posT += width
+                            for (i,j) in zip(payloadsTVDama, valsTVDama):
+                                f = open("points","a")
+                                f.write("throughput " + str(int(rate)) + " " + str(i) + " " + str(j) + "\n")
+                                f.close()
+                        else:
+                            axs[0].plot(payloadsTVDama,   valsTVDama,   color=damaCOL,   linewidth=LW, marker=damaMRK,   markersize=MS, linestyle=damaLS,   label=damaHS + "(" + str(int(rate)) + ")")
+                    if runDamp and len(payloadsTVDamp) > 0:
+                        if barPlot:
+                            payloadsTVDamp = [x+posT for x in payloadsTVDamp]
+                            axs[0].bar(payloadsTVDamp,   valsTVDamp, width=width,   color=dampCOL,   linewidth=LW, linestyle=dampLS,   label=dampHS + "(" + str(int(rate)) + ")")
+                            posT += width
+                            for (i,j) in zip(payloadsTVDmr, valsTVDamp):
+                                f = open("points","a")
+                                f.write("throughput " + str(int(rate)) + " " + str(i) + " " + str(j) + "\n")
+                                f.close()
+                        else:
+                            axs[0].plot(payloadsTVDamp,   valsTVDamp,   color=dampCOL,   linewidth=LW, marker=dampMRK,   markersize=MS, linestyle=dampLS,   label=dampHS + "(" + str(int(rate)) + ")")
                     if len(payloadsTVFree) > 0:
                         axs[0].plot(payloadsTVFree,   valsTVFree,   color=freeCOL,   linewidth=LW, marker=freeMRK,   markersize=MS, linestyle=freeLS,   label=freeHS + "(" + str(int(rate)) + ")")
+                    if len(payloadsTVRoll) > 0:
+                        axs[0].plot(payloadsTVRoll,   valsTVRoll,   color=rollCOL,   linewidth=LW, marker=rollMRK,   markersize=MS, linestyle=rollLS,   label=rollHS + "(" + str(int(rate)) + ")")
                     if len(payloadsTVOnep) > 0:
                         axs[0].plot(payloadsTVOnep,   valsTVOnep,   color=onepCOL,   linewidth=LW, marker=onepMRK,   markersize=MS, linestyle=onepLS,   label=onepHS + "(" + str(int(rate)) + ")")
                 if plotChained:
@@ -3511,9 +5350,19 @@ def createPlotPayload(files):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsTVQuick, valsTVQuick, numsTVQuick):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsTVDamq, valsTVDamq, numsTVDamq):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsTVComb, valsTVComb, numsTVComb):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsTVDamr, valsTVDamr, numsTVDamr):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsTVDama, valsTVDama, numsTVDama):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsTVDamp, valsTVDamp, numsTVDamp):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsTVFree, valsTVFree, numsTVFree):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsTVRoll, valsTVRoll, numsTVRoll):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsTVOnep, valsTVOnep, numsTVOnep):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
@@ -3559,8 +5408,13 @@ def createPlotPayload(files):
              payloadsTVBase,   valsTVBase,   numsTVBase,
              payloadsTVCheap,  valsTVCheap,  numsTVCheap,
              payloadsTVQuick,  valsTVQuick,  numsTVQuick,
+             payloadsTVDamq,   valsTVDamq,   numsTVDamq,
              payloadsTVComb,   valsTVComb,   numsTVComb,
+             payloadsTVDamr,   valsTVDamr,   numsTVDamr,
+             payloadsTVDama,   valsTVDama,   numsTVDama,
+             payloadsTVDamp,   valsTVDamp,   numsTVDamp,
              payloadsTVFree,   valsTVFree,   numsTVFree,
+             payloadsTVRoll,   valsTVRoll,   numsTVRoll,
              payloadsTVOnep,   valsTVOnep,   numsTVOnep,
              payloadsTVChBase, valsTVChBase, numsTVChBase,
              payloadsTVChComb, valsTVChComb, numsTVChComb,
@@ -3568,8 +5422,13 @@ def createPlotPayload(files):
              payloadsLVBase,   valsLVBase,   numsLVBase,
              payloadsLVCheap,  valsLVCheap,  numsLVCheap,
              payloadsLVQuick,  valsLVQuick,  numsLVQuick,
+             payloadsLVDamq,   valsLVDamq,   numsLVDamq,
              payloadsLVComb,   valsLVComb,   numsLVComb,
+             payloadsLVDamr,   valsLVDamr,   numsLVDamr,
+             payloadsLVDama,   valsLVDama,   numsLVDama,
+             payloadsLVDamp,   valsLVDamp,   numsLVDamp,
              payloadsLVFree,   valsLVFree,   numsLVFree,
+             payloadsLVRoll,   valsLVRoll,   numsLVRoll,
              payloadsLVOnep,   valsLVOnep,   numsLVOnep,
              payloadsLVChBase, valsLVChBase, numsLVChBase,
              payloadsLVChComb, valsLVChComb, numsLVChComb,
@@ -3577,8 +5436,13 @@ def createPlotPayload(files):
              payloadsHBase,   valsHBase,   numsHBase,
              payloadsHCheap,  valsHCheap,  numsHCheap,
              payloadsHQuick,  valsHQuick,  numsHQuick,
+             payloadsHDamq,   valsHDamq,   numsHDamq,
              payloadsHComb,   valsHComb,   numsHComb,
+             payloadsHDamr,   valsHDamr,   numsHDamr,
+             payloadsHDama,   valsHDama,   numsHDama,
+             payloadsHDamp,   valsHDamp,   numsHDamp,
              payloadsHFree,   valsHFree,   numsHFree,
+             payloadsHRoll,   valsHRoll,   numsHRoll,
              payloadsHOnep,   valsHOnep,   numsHOnep,
              payloadsHChBase, valsHChBase, numsHChBase,
              payloadsHChComb, valsHChComb, numsHChComb,
@@ -3586,8 +5450,13 @@ def createPlotPayload(files):
              payloadsCSBase,   valsCSBase,   numsCSBase,
              payloadsCSCheap,  valsCSCheap,  numsCSCheap,
              payloadsCSQuick,  valsCSQuick,  numsCSQuick,
+             payloadsCSDamq,   valsCSDamq,   numsCSDamq,
              payloadsCSComb,   valsCSComb,   numsCSComb,
+             payloadsCSDamr,   valsCSDamr,   numsCSDamr,
+             payloadsCSDama,   valsCSDama,   numsCSDama,
+             payloadsCSDamp,   valsCSDamp,   numsCSDamp,
              payloadsCSFree,   valsCSFree,   numsCSFree,
+             payloadsCSRoll,   valsCSRoll,   numsCSRoll,
              payloadsCSOnep,   valsCSOnep,   numsCSOnep,
              payloadsCSChBase, valsCSChBase, numsCSChBase,
              payloadsCSChComb, valsCSChComb, numsCSChComb,
@@ -3595,8 +5464,13 @@ def createPlotPayload(files):
              payloadsCVBase,   valsCVBase,   numsCVBase,
              payloadsCVCheap,  valsCVCheap,  numsCVCheap,
              payloadsCVQuick,  valsCVQuick,  numsCVQuick,
+             payloadsCVDamq,   valsCVDamq,   numsCVDamq,
              payloadsCVComb,   valsCVComb,   numsCVComb,
+             payloadsCVDamr,   valsCVDamr,   numsCVDamr,
+             payloadsCVDama,   valsCVDama,   numsCVDama,
+             payloadsCVDamp,   valsCVDamp,   numsCVDamp,
              payloadsCVFree,   valsCVFree,   numsCVFree,
+             payloadsCVRoll,   valsCVRoll,   numsCVRoll,
              payloadsCVOnep,   valsCVOnep,   numsCVOnep,
              payloadsCVChBase, valsCVChBase, numsCVChBase,
              payloadsCVChComb, valsCVChComb, numsCVChComb) = createPlotPayloadAux(file)
@@ -3628,6 +5502,8 @@ def createPlotPayload(files):
                         ax.plot(payloadsLVCheap,  valsLVCheap,  color=cheapCOL,  linewidth=LW, marker=cheapMRK,  markersize=MS, linestyle=cheapLS,  label=cheapHS + "(" + str(int(rate)) + ")")
                     if len(payloadsLVQuick) > 0:
                         ax.plot(payloadsLVQuick,  valsLVQuick,  color=quickCOL,  linewidth=LW, marker=quickMRK,  markersize=MS, linestyle=quickLS,  label=quickHS + "(" + str(int(rate)) + ")")
+                    if len(payloadsLVDamq) > 0:
+                        ax.plot(payloadsLVDamq,  valsLVDamq,  color=damqCOL,  linewidth=LW, marker=damqMRK,  markersize=MS, linestyle=damqLS,  label=damqHS + "(" + str(int(rate)) + ")")
                     if runComb and len(payloadsLVComb) > 0:
                         if barPlot:
                             payloadsLVComb = [x+posL for x in payloadsLVComb]
@@ -3639,8 +5515,43 @@ def createPlotPayload(files):
                                 f.close()
                         else:
                             ax.plot(payloadsLVComb,   valsLVComb,   color=combCOL,   linewidth=LW, marker=combMRK,   markersize=MS, linestyle=combLS,   label=combHS + "(" + str(int(rate)) + ")")
+                    if runDamr and len(payloadsLVDamr) > 0:
+                        if barPlot:
+                            payloadsLVDamr = [x+posL for x in payloadsLVDamr]
+                            ax.bar(payloadsLVDamr,   valsLVDamr, width=width,   color=damrCOL,   linewidth=LW, linestyle=damrLS,   label=damrHS + "(" + str(int(rate)) + ")")
+                            posL += width
+                            for (i,j) in zip(payloadsLVDamr, valsLVDamr):
+                                f = open("points","a")
+                                f.write("latency " + str(int(rate)) + " " + str(i) + " " + str(j) + "\n")
+                                f.close()
+                        else:
+                            ax.plot(payloadsLVDamr,   valsLVDamr,   color=damrCOL,   linewidth=LW, marker=damrMRK,   markersize=MS, linestyle=damrLS,   label=damrHS + "(" + str(int(rate)) + ")")
+                    if runDama and len(payloadsLVDama) > 0:
+                        if barPlot:
+                            payloadsLVDama = [x+posL for x in payloadsLVDama]
+                            ax.bar(payloadsLVDama,   valsLVDama, width=width,   color=damaCOL,   linewidth=LW, linestyle=damaLS,   label=damaHS + "(" + str(int(rate)) + ")")
+                            posL += width
+                            for (i,j) in zip(payloadsLVDama, valsLVDama):
+                                f = open("points","a")
+                                f.write("latency " + str(int(rate)) + " " + str(i) + " " + str(j) + "\n")
+                                f.close()
+                        else:
+                            ax.plot(payloadsLVDama,   valsLVDama,   color=damaCOL,   linewidth=LW, marker=damaMRK,   markersize=MS, linestyle=damaLS,   label=damaHS + "(" + str(int(rate)) + ")")
+                    if runDamp and len(payloadsLVDamp) > 0:
+                        if barPlot:
+                            payloadsLVDamp = [x+posL for x in payloadsLVDamp]
+                            ax.bar(payloadsLVDamp,   valsLVDamp, width=width,   color=dampCOL,   linewidth=LW, linestyle=dampLS,   label=dampHS + "(" + str(int(rate)) + ")")
+                            posL += width
+                            for (i,j) in zip(payloadsLVDamp, valsLVDamp):
+                                f = open("points","a")
+                                f.write("latency " + str(int(rate)) + " " + str(i) + " " + str(j) + "\n")
+                                f.close()
+                        else:
+                            ax.plot(payloadsLVDamp,   valsLVDamp,   color=dampCOL,   linewidth=LW, marker=dampMRK,   markersize=MS, linestyle=dampLS,   label=dampHS + "(" + str(int(rate)) + ")")
                     if len(payloadsLVFree) > 0:
                         ax.plot(payloadsLVFree,   valsLVFree,   color=freeCOL,   linewidth=LW, marker=freeMRK,   markersize=MS, linestyle=freeLS,   label=freeHS + "(" + str(int(rate)) + ")")
+                    if len(payloadsLVRoll) > 0:
+                        ax.plot(payloadsLVRoll,   valsLVRoll,   color=rollCOL,   linewidth=LW, marker=rollMRK,   markersize=MS, linestyle=rollLS,   label=rollHS + "(" + str(int(rate)) + ")")
                     if len(payloadsLVOnep) > 0:
                         ax.plot(payloadsLVOnep,   valsLVOnep,   color=onepCOL,   linewidth=LW, marker=onepMRK,   markersize=MS, linestyle=onepLS,   label=onepHS + "(" + str(int(rate)) + ")")
                 if plotChained:
@@ -3656,9 +5567,19 @@ def createPlotPayload(files):
                             ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsLVQuick, valsLVQuick, numsLVQuick):
                             ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsLVDamq, valsLVDamq, numsLVDamq):
+                            ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsLVComb, valsLVComb, numsLVComb):
                             ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsLVDamr, valsLVDamr, numsLVDamr):
+                            ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsLVDama, valsLVDama, numsLVDama):
+                            ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsLVDamp, valsLVDamp, numsLVDamp):
+                            ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsLVFree, valsLVFree, numsLVFree):
+                            ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsLVRoll, valsLVRoll, numsLVRoll):
                             ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsLVOnep, valsLVOnep, numsLVOnep):
                             ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
@@ -3675,10 +5596,20 @@ def createPlotPayload(files):
                         ax.plot(payloadsHCheap,  valsHCheap,  color=cheapCOL,  linewidth=LW, marker="+", markersize=MS, linestyle=cheapLS,  label=cheapHS + "(" + str(int(rate)) + ")"+"")
                     if len(payloadsHQuick) > 0:
                         ax.plot(payloadsHQuick,  valsHQuick,  color=quickCOL,  linewidth=LW, marker="+", markersize=MS, linestyle=quickLS,  label=quickHS + "(" + str(int(rate)) + ")"+"")
+                    if len(payloadsHDamq) > 0:
+                        ax.plot(payloadsHDamq,   valsHDamq,   color=damqCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=damqLS,   label=damqHS + "(" + str(int(rate)) + ")"+"")
                     if len(payloadsHComb) > 0:
                         ax.plot(payloadsHComb,   valsHComb,   color=combCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=combLS,   label=combHS + "(" + str(int(rate)) + ")"+"")
+                    if len(payloadsHDamr) > 0:
+                        ax.plot(payloadsHDamr,   valsHDamr,   color=damrCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=damrLS,   label=damrHS + "(" + str(int(rate)) + ")"+"")
+                    if len(payloadsHDama) > 0:
+                        ax.plot(payloadsHDama,   valsHDama,   color=damaCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=damaLS,   label=damaHS + "(" + str(int(rate)) + ")"+"")
+                    if len(payloadsHDamp) > 0:
+                        ax.plot(payloadsHDamp,   valsHDamp,   color=dampCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=dampLS,   label=dampHS + "(" + str(int(rate)) + ")"+"")
                     if len(payloadsHFree) > 0:
                         ax.plot(payloadsHFree,   valsHFree,   color=freeCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=freeLS,   label=freeHS + "(" + str(int(rate)) + ")"+"")
+                    if len(payloadsHRoll) > 0:
+                        ax.plot(payloadsHRoll,   valsHRoll,   color=rollCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=rollLS,   label=rollHS + "(" + str(int(rate)) + ")"+"")
                     if len(payloadsHOnep) > 0:
                         ax.plot(payloadsHOnep,   valsHOnep,   color=onepCOL,   linewidth=LW, marker="+", markersize=MS, linestyle=onepLS,   label=onepHS + "(" + str(int(rate)) + ")"+"")
                 if plotChained:
@@ -3694,9 +5625,19 @@ def createPlotPayload(files):
                             ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsHQuick, valsHQuick, numsHQuick):
                             ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsHDamq, valsHDamq, numsHDamq):
+                            ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsHComb, valsHComb, numsHComb):
                             ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsHDamr, valsHDamr, numsHDamr):
+                            ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsHDama, valsHDama, numsHDama):
+                            ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsHDamp, valsHDamp, numsHDamp):
+                            ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsHFree, valsHFree, numsHFree):
+                            ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsHRoll, valsHRoll, numsHRoll):
                             ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsHOnep, valsHOnep, numsHOnep):
                             ax.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
@@ -3713,10 +5654,20 @@ def createPlotPayload(files):
                         axs[0].plot(payloadsCSCheap,  valsCSCheap,  color=cheapCOL,  linewidth=LW, marker="1", markersize=MS, linestyle=cheapLS,  label=cheapHS + "(" + str(int(rate)) + ")"+" (crypto-sign)")
                     if len(payloadsCSQuick) > 0:
                         axs[0].plot(payloadsCSQuick,  valsCSQuick,  color=quickCOL,  linewidth=LW, marker="1", markersize=MS, linestyle=quickLS,  label=quickHS + "(" + str(int(rate)) + ")"+" (crypto-sign)")
+                    if len(payloadsCSDamq) > 0:
+                        axs[0].plot(payloadsCSDamq,   valsCSDamq,   color=damqCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=damqLS,   label=damqHS + "(" + str(int(rate)) + ")"+" (crypto-sign)")
                     if len(payloadsCSComb) > 0:
                         axs[0].plot(payloadsCSComb,   valsCSComb,   color=combCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=combLS,   label=combHS + "(" + str(int(rate)) + ")"+" (crypto-sign)")
+                    if len(payloadsCSDamr) > 0:
+                        axs[0].plot(payloadsCSDamr,   valsCSDamr,   color=damrCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=damrLS,   label=damrHS + "(" + str(int(rate)) + ")"+" (crypto-sign)")
+                    if len(payloadsCSDama) > 0:
+                        axs[0].plot(payloadsCSDama,   valsCSDama,   color=damaCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=damaLS,   label=damaHS + "(" + str(int(rate)) + ")"+" (crypto-sign)")
+                    if len(payloadsCSDamp) > 0:
+                        axs[0].plot(payloadsCSDamp,   valsCSDamp,   color=dampCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=dampLS,   label=dampHS + "(" + str(int(rate)) + ")"+" (crypto-sign)")
                     if len(payloadsCSFree) > 0:
                         axs[0].plot(payloadsCSFree,   valsCSFree,   color=freeCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=freeLS,   label=freeHS + "(" + str(int(rate)) + ")"+" (crypto-sign)")
+                    if len(payloadsCSRoll) > 0:
+                        axs[0].plot(payloadsCSRoll,   valsCSRoll,   color=rollCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=rollLS,   label=rollHS + "(" + str(int(rate)) + ")"+" (crypto-sign)")
                     if len(payloadsCSOnep) > 0:
                         axs[0].plot(payloadsCSOnep,   valsCSOnep,   color=onepCOL,   linewidth=LW, marker="1", markersize=MS, linestyle=onepLS,   label=onepHS + "(" + str(int(rate)) + ")"+" (crypto-sign)")
                 if plotChained:
@@ -3732,9 +5683,19 @@ def createPlotPayload(files):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsCSQuick, valsCSQuick, numsCSQuick):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsCSDamq, valsCSDamq, numsCSDamq):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsCCSomb, valsCSComb, numsCSComb):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsCCSomb, valsCSDamr, numsCSDamr):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsCCSomb, valsCSDama, numsCSDama):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsCCSomb, valsCSDamp, numsCSDamp):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsCSFree, valsCSFree, numsCSFree):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsCSRoll, valsCSRoll, numsCSRoll):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsCSOnep, valsCSOnep, numsCSOnep):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
@@ -3751,10 +5712,20 @@ def createPlotPayload(files):
                         axs[0].plot(payloadsCVCheap,  valsCVCheap,  color=cheapCOL,  linewidth=LW, marker="2", markersize=MS, linestyle=cheapLS,  label=cheapHS + "(" + str(int(rate)) + ")"+" (crypto-verif)")
                     if len(payloadsCVQuick) > 0:
                         axs[0].plot(payloadsCVQuick,  valsCVQuick,  color=quickCOL,  linewidth=LW, marker="2", markersize=MS, linestyle=quickLS,  label=quickHS + "(" + str(int(rate)) + ")"+" (crypto-verif)")
+                    if len(payloadsCVDamq) > 0:
+                        axs[0].plot(payloadsCVDamq,   valsCVDamq,   color=damqCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=damqLS,   label=damqHS + "(" + str(int(rate)) + ")"+" (crypto-verif)")
                     if len(payloadsCVComb) > 0:
                         axs[0].plot(payloadsCVComb,   valsCVComb,   color=combCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=combLS,   label=combHS + "(" + str(int(rate)) + ")"+" (crypto-verif)")
+                    if len(payloadsCVDamr) > 0:
+                        axs[0].plot(payloadsCVDamr,   valsCVDamr,   color=damrCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=damrLS,   label=damrHS + "(" + str(int(rate)) + ")"+" (crypto-verif)")
+                    if len(payloadsCVDama) > 0:
+                        axs[0].plot(payloadsCVDama,   valsCVDama,   color=damaCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=damaLS,   label=damaHS + "(" + str(int(rate)) + ")"+" (crypto-verif)")
+                    if len(payloadsCVDamp) > 0:
+                        axs[0].plot(payloadsCVDamp,   valsCVDamp,   color=dampCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=dampLS,   label=dampHS + "(" + str(int(rate)) + ")"+" (crypto-verif)")
                     if len(payloadsCVFree) > 0:
                         axs[0].plot(payloadsCVFree,   valsCVFree,   color=freeCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=freeLS,   label=freeHS + "(" + str(int(rate)) + ")"+" (crypto-verif)")
+                    if len(payloadsCVRoll) > 0:
+                        axs[0].plot(payloadsCVRoll,   valsCVRoll,   color=rollCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=rollLS,   label=rollHS + "(" + str(int(rate)) + ")"+" (crypto-verif)")
                     if len(payloadsCVOnep) > 0:
                         axs[0].plot(payloadsCVOnep,   valsCVOnep,   color=onepCOL,   linewidth=LW, marker="2", markersize=MS, linestyle=onepLS,   label=onepHS + "(" + str(int(rate)) + ")"+" (crypto-verif)")
                 if plotChained:
@@ -3770,9 +5741,19 @@ def createPlotPayload(files):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsCVQuick, valsCVQuick, numsCVQuick):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsCVDamq, valsCVDamq, numsCVDamq):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsCCVomb, valsCVComb, numsCVComb):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsCCVomb, valsCVDamr, numsCVDamr):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsCCVomb, valsCVDama, numsCVDama):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsCCVomb, valsCVDamp, numsCVDamp):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsCVFree, valsCVFree, numsCVFree):
+                            axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+                        for x,y,z in zip(payloadsCVRoll, valsCVRoll, numsCVRoll):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
                         for x,y,z in zip(payloadsCVOnep, valsCVOnep, numsCVOnep):
                             axs[0].annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
@@ -3787,6 +5768,7 @@ def createPlotPayload(files):
 
     #fig.subplots_adjust(hspace=0.5)
     fig.savefig(plotFile, bbox_inches='tight', pad_inches=0.05)
+    print("view-times are in", timesFile)
     print("points are in", files)
     print("plot is in", plotFile)
     if displayPlot:
@@ -3812,79 +5794,109 @@ def runExperimentsFaults(numFaults):
         # ------
         # HotStuff-like baseline
         if runBase:
-            computeAvgStats(recompile,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Cheap-HotStuff (TEE locked/prepared blocks)
         if runCheap:
-            computeAvgStats(recompile,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Quick-HotStuff (Accumulator)
         if runQuick:
-            computeAvgStats(recompile,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Damysus-A (Accumulator) + Pacemaker
+        if runDamq:
+            computeAvgStats(recompile,protocol=Protocol.DAMQ,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Quick-HotStuff (Accumulator) - debug version
         if runQuickDbg:
-            computeAvgStats(recompile,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Combines Cheap&Quick-HotStuff
         if runComb:
-            computeAvgStats(recompile,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Damysus + kinda ROTE
+        if runDamr:
+            computeAvgStats(recompile,protocol=Protocol.DAMR,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Damysus + kinda Achilles
+        if runDama:
+            computeAvgStats(recompile,protocol=Protocol.DAMA,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Damysus + Pacemaker
+        if runDamp:
+            computeAvgStats(recompile,protocol=Protocol.DAMP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Free
         if runFree:
-            computeAvgStats(recompile,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Roll
+        if runRoll:
+            computeAvgStats(recompile,protocol=Protocol.ROLL,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Onep
         if runOnep:
-            computeAvgStats(recompile,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # OnepB
         if runOnepB:
-            computeAvgStats(recompile,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # OnepC
         if runOnepC:
-            computeAvgStats(recompile,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # OnepD
         if runOnepD:
-            computeAvgStats(recompile,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Chained HotStuff-like baseline
         if runChBase:
-            computeAvgStats(recompile,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Chained Cheap&Quick
         if runChComb:
-            computeAvgStats(recompile,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Chained Cheap&Quick - debug version
         if runChCombDbg:
-            computeAvgStats(recompile,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
 
@@ -3902,85 +5914,119 @@ def runExperiments():
 
     printNodePointParams()
 
+    g = open(timesFile, 'a')
+    g.write("## lat="+str(networkLat)+" rate="+str(rateMbit)+" payload="+str(payloadSize)+"\n")
+    g.close()
+
     for numFaults in faults:
-        numDeadNodes = numFaults
+        numDeadNodes = 0 #numFaults
 
         # ------
         # HotStuff-like baseline
         if runBase:
-            computeAvgStats(recompile,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Cheap-HotStuff (TEE locked/prepared blocks)
         if runCheap:
-            computeAvgStats(recompile,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Quick-HotStuff (Accumulator)
         if runQuick:
-            computeAvgStats(recompile,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Damysus-A (Accumulator) + Pacemaker
+        if runDamq:
+            computeAvgStats(recompile,protocol=Protocol.DAMQ,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Quick-HotStuff (Accumulator) - debug version
         if runQuickDbg:
-            computeAvgStats(recompile,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Combines Cheap&Quick-HotStuff
         if runComb:
-            computeAvgStats(recompile,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Damysus + kinda ROTE
+        if runDamr:
+            computeAvgStats(recompile,protocol=Protocol.DAMR,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Damysus + kinda Achilles
+        if runDama:
+            computeAvgStats(recompile,protocol=Protocol.DAMA,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Damysus + Pacemaker
+        if runDamp:
+            computeAvgStats(recompile,protocol=Protocol.DAMP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Free
         if runFree:
-            computeAvgStats(recompile,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Roll
+        if runRoll:
+            computeAvgStats(recompile,protocol=Protocol.ROLL,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Onep
         if runOnep:
-            computeAvgStats(recompile,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # OnepB
         if runOnepB:
-            computeAvgStats(recompile,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # OnepC
         if runOnepC:
-            computeAvgStats(recompile,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # OnepD
         if runOnepD:
-            computeAvgStats(recompile,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Chained HotStuff-like baseline
         if runChBase:
-            computeAvgStats(recompile,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Chained Cheap&Quick
         if runChComb:
-            computeAvgStats(recompile,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
         # ------
         # Chained Cheap&Quick - debug version
         if runChCombDbg:
-            computeAvgStats(recompile,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numDeadNodes=numDeadNodes,numRepeats=repeats)
+            computeAvgStats(recompile,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
 
@@ -3990,6 +6036,137 @@ def runExperiments():
 
     createPlot(pointsFile)
 # End of runExperiments
+
+
+## For p9 - to run experiments where we vary the number of nodes trying to rejoin the system
+def runExperimentsJoin(numFaults,joiners):
+    # Creating stats directory
+    Path(statsdir).mkdir(parents=True, exist_ok=True)
+
+    printNodePointParams()
+
+    print("will test the following number of joiners: ", joiners)
+
+    numDeadNodes = 0
+
+    for j in joiners:
+        print("number of joiners: ", j)
+
+        # ------
+        # HotStuff-like baseline
+        if runBase:
+            computeAvgStats(recompile,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Cheap-HotStuff (TEE locked/prepared blocks)
+        if runCheap:
+            computeAvgStats(recompile,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Quick-HotStuff (Accumulator)
+        if runQuick:
+            computeAvgStats(recompile,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Damysus-A (Accumulator) + Pacemaker
+        if runDamq:
+            computeAvgStats(recompile,protocol=Protocol.DAMQ,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Quick-HotStuff (Accumulator) - debug version
+        if runQuickDbg:
+            computeAvgStats(recompile,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Combines Cheap&Quick-HotStuff
+        if runComb:
+            computeAvgStats(recompile,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Damysus + kinda ROTE
+        if runDamr:
+            computeAvgStats(recompile,protocol=Protocol.DAMR,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Damysus + kinda Achilles
+        if runDama:
+            computeAvgStats(recompile,protocol=Protocol.DAMA,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Damysus + Pacemaker
+        if runDamp:
+            computeAvgStats(recompile,protocol=Protocol.DAMP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Free
+        if runFree:
+            computeAvgStats(recompile,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Roll
+        if runRoll:
+            computeAvgStats(recompile,protocol=Protocol.ROLL,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Onep
+        if runOnep:
+            computeAvgStats(recompile,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # OnepB
+        if runOnepB:
+            computeAvgStats(recompile,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # OnepC
+        if runOnepC:
+            computeAvgStats(recompile,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # OnepD
+        if runOnepD:
+            computeAvgStats(recompile,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Chained HotStuff-like baseline
+        if runChBase:
+            computeAvgStats(recompile,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Chained Cheap&Quick
+        if runChComb:
+            computeAvgStats(recompile,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+        # ------
+        # Chained Cheap&Quick - debug version
+        if runChCombDbg:
+            computeAvgStats(recompile,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
+        else:
+            (0.0,0.0,0.0,0.0)
+
+    print("num complete runs=", completeRuns)
+    print("num aborted runs=", abortedRuns)
+    print("aborted runs:", aborted)
+
+    createPlotJoin(pointsFile)
+# End of runExperimentsJoin
 
 
 def printClientPoint(protocol,sleepTime,numFaults,throughput,latency,numPoints):
@@ -4067,13 +6244,33 @@ def createTVLplot(cFile,instances):
     TQuick = []
     aQuick = []
 
+    LDamq = []
+    TDamq = []
+    aDamq = []
+
     LComb = []
     TComb = []
     aComb = []
 
+    LDamr = []
+    TDamr = []
+    aDamr = []
+
+    LDama = []
+    TDama = []
+    aDama = []
+
+    LDamp = []
+    TDamp = []
+    aDamp = []
+
     LFree = []
     TFree = []
     aFree = []
+
+    LRoll = []
+    TRoll = []
+    aRoll = []
 
     LOnep = []
     TOnep = []
@@ -4133,10 +6330,30 @@ def createTVLplot(cFile,instances):
                 TComb.append(throughput)
                 LComb.append(latency)
                 aComb.append(sleep)
+            if protVal == "BASIC_DAMYSUS_ROTE":
+                TDamr.append(throughput)
+                LDamr.append(latency)
+                aDamr.append(sleep)
+            if protVal == "BASIC_DAMYSUS_ACHILLES":
+                TDama.append(throughput)
+                LDama.append(latency)
+                aDama.append(sleep)
+            if protVal == "BASIC_DAMYSUS_PACEMAKER":
+                TDamp.append(throughput)
+                LDamp.append(latency)
+                aDamp.append(sleep)
+            if protVal == "BASIC_DAMYSUS3_PACEMAKER":
+                TDamq.append(throughput)
+                LDamq.append(latency)
+                aDamq.append(sleep)
             if protVal == "BASIC_FREE":
                 TFree.append(throughput)
                 LFree.append(latency)
                 aFree.append(sleep)
+            if protVal == "BASIC_ROLL":
+                TRoll.append(throughput)
+                LRoll.append(latency)
+                aRoll.append(sleep)
             if protVal == "BASIC_ONEP":
                 TOnep.append(throughput)
                 LOnep.append(latency)
@@ -4191,10 +6408,20 @@ def createTVLplot(cFile,instances):
             plt.plot(TCheap,  LCheap,  color=cheapCOL,  linewidth=LW, marker=cheapMRK,  markersize=MS, linestyle=cheapLS,  label=cheapHS)
         if len(TQuick) > 0:
             plt.plot(TQuick,  LQuick,  color=quickCOL,  linewidth=LW, marker=quickMRK,  markersize=MS, linestyle=quickLS,  label=quickHS)
+        if len(TDamq) > 0:
+            plt.plot(TDamq,   LDamq,   color=damqCOL,   linewidth=LW, marker=damqMRK,   markersize=MS, linestyle=damqLS,   label=damqHS)
         if len(TComb) > 0:
             plt.plot(TComb,   LComb,   color=combCOL,   linewidth=LW, marker=combMRK,   markersize=MS, linestyle=combLS,   label=combHS)
+        if len(TDamr) > 0:
+            plt.plot(TDamr,   LDamr,   color=damrCOL,   linewidth=LW, marker=damrMRK,   markersize=MS, linestyle=damrLS,   label=damrHS)
+        if len(TDama) > 0:
+            plt.plot(TDama,   LDama,   color=damaCOL,   linewidth=LW, marker=damaMRK,   markersize=MS, linestyle=damaLS,   label=damaHS)
+        if len(TDamp) > 0:
+            plt.plot(TDamp,   LDamp,   color=dampCOL,   linewidth=LW, marker=dampMRK,   markersize=MS, linestyle=dampLS,   label=dampHS)
         if len(TFree) > 0:
             plt.plot(TFree,   LFree,   color=freeCOL,   linewidth=LW, marker=freeMRK,   markersize=MS, linestyle=freeLS,   label=freeHS)
+        if len(TRoll) > 0:
+            plt.plot(TRoll,   LRoll,   color=rollCOL,   linewidth=LW, marker=rollMRK,   markersize=MS, linestyle=rollLS,   label=rollHS)
         if len(TOnep) > 0:
             plt.plot(TOnep,   LOnep,   color=onepCOL,   linewidth=LW, marker=onepMRK,   markersize=MS, linestyle=onepLS,   label=onepHS)
         if len(TOnepB) > 0:
@@ -4216,9 +6443,19 @@ def createTVLplot(cFile,instances):
                 plt.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
             for x,y,z in zip(TQuick, LQuick, aQuick):
                 plt.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+            for x,y,z in zip(TDamq, LDamq, aDamq):
+                plt.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
             for x,y,z in zip(TComb, LComb, aComb):
                 plt.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+            for x,y,z in zip(TDamr, LDamr, aDamr):
+                plt.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+            for x,y,z in zip(TDama, LDama, aDama):
+                plt.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+            for x,y,z in zip(TDamp, LDamp, aDamp):
+                plt.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
             for x,y,z in zip(TFree, LFree, aFree):
+                plt.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
+            for x,y,z in zip(TRoll, LRoll, aRoll):
                 plt.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
             for x,y,z in zip(TOnep, LOnep, aOnep):
                 plt.annotate(z,(x,y),textcoords="offset points",xytext=XYT,ha='center')
@@ -4250,7 +6487,7 @@ def createTVLplot(cFile,instances):
     plt.savefig(tvlFile, bbox_inches='tight', pad_inches=0.05)
     print("plot is in", tvlFile)
     if displayPlot:
-        subprocess.call(["shotwell",tvlFile])
+        subprocess.call([displayApp,tvlFile])
 # Enf of createTVLplot
 
 
@@ -4268,12 +6505,12 @@ def oneTVL(protocol,constFactor,numFaults,numTransPerBlock,payloadSize,numClTran
                   "protocol="+protocol.value,
                   ";regions="+regions[0],
                   ";payload="+str(payloadSize),
-                  "(factor="+str(constFactor)+")",
-                  "sleep="+str(sleepTime),
-                  "#faults="+str(numFaults),
-                  "repeat="+str(i))
+                  ";factor="+str(constFactor),
+                  ";sleep="+str(sleepTime),
+                  ";#faults="+str(numFaults),
+                  ";repeat="+str(i))
             time.sleep(2)
-            execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numDeadNodes,i)
+            execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numDeadNodes,numJoiners,i)
         computeClientStats(protocol,numClTrans,sleepTime,numFaults)
 
     if runDocker:
@@ -4371,6 +6608,19 @@ def TVL():
                sleepTimes=sleepTimes,
                repeats=repeats)
 
+    # Damysus + Pacemaker + 3f+1 nodes
+    if runDamq:
+        oneTVL(protocol=Protocol.DAMQ,
+               constFactor=3,
+               numFaults=numFaults,
+               numTransPerBlock=numTransPerBlock,
+               payloadSize=payloadSize,
+               numClTrans=numClTrans,
+               numViews=numViews,
+               cutOffBound=cutOffBound,
+               sleepTimes=sleepTimes,
+               repeats=repeats)
+
     # Quick-HotStuff - debug version
     if runQuickDbg:
         oneTVL(protocol=Protocol.QUICKDBG,
@@ -4397,9 +6647,61 @@ def TVL():
                sleepTimes=sleepTimes,
                repeats=repeats)
 
+    # Damysus + kinda ROTE
+    if runDamr:
+        oneTVL(protocol=Protocol.DAMR,
+               constFactor=2,
+               numFaults=numFaults,
+               numTransPerBlock=numTransPerBlock,
+               payloadSize=payloadSize,
+               numClTrans=numClTrans,
+               numViews=numViews,
+               cutOffBound=cutOffBound,
+               sleepTimes=sleepTimes,
+               repeats=repeats)
+
+    # Damysus + kinda Achilles
+    if runDama:
+        oneTVL(protocol=Protocol.DAMA,
+               constFactor=2,
+               numFaults=numFaults,
+               numTransPerBlock=numTransPerBlock,
+               payloadSize=payloadSize,
+               numClTrans=numClTrans,
+               numViews=numViews,
+               cutOffBound=cutOffBound,
+               sleepTimes=sleepTimes,
+               repeats=repeats)
+
+    # Damysus + Pacemaker
+    if runDamp:
+        oneTVL(protocol=Protocol.DAMP,
+               constFactor=2,
+               numFaults=numFaults,
+               numTransPerBlock=numTransPerBlock,
+               payloadSize=payloadSize,
+               numClTrans=numClTrans,
+               numViews=numViews,
+               cutOffBound=cutOffBound,
+               sleepTimes=sleepTimes,
+               repeats=repeats)
+
     # Free
     if runFree:
         oneTVL(protocol=Protocol.FREE,
+               constFactor=2,
+               numFaults=numFaults,
+               numTransPerBlock=numTransPerBlock,
+               payloadSize=payloadSize,
+               numClTrans=numClTrans,
+               numViews=numViews,
+               cutOffBound=cutOffBound,
+               sleepTimes=sleepTimes,
+               repeats=repeats)
+
+    # Roll
+    if runRoll:
+        oneTVL(protocol=Protocol.ROLL,
                constFactor=2,
                numFaults=numFaults,
                numTransPerBlock=numTransPerBlock,
@@ -4533,7 +6835,7 @@ def oneTVLaws(protocol,constFactor,numFaults,allRepIds,allClIds,numTransPerBlock
                   "#faults="+str(numFaults),
                   "repeat="+str(i))
             time.sleep(2)
-            executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,i)
+            executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numJoiners,i)
         # copy the stats over
         copyClientStats(instanceClIds)
         computeClientStats(protocol,numClTrans,sleepTime,numFaults)
@@ -4652,6 +6954,21 @@ def TVLaws():
                   sleepTimes=sleepTimes,
                   repeats=repeats)
 
+    if runDamq:
+        oneTVLaws(protocol=Protocol.DAMQ,
+                  constFactor=3,
+                  numFaults=numFaults,
+                  allRepIds=allRepIds,
+                  allClIds=allClIds,
+                  numTransPerBlock=numTransPerBlock,
+                  payloadSize=payloadSize,
+                  numCl=numClients,
+                  numClTrans=numClTrans,
+                  numViews=numViews,
+                  cutOffBound=cutOffBound,
+                  sleepTimes=sleepTimes,
+                  repeats=repeats)
+
     if runComb:
         oneTVLaws(protocol=Protocol.COMB,
                   constFactor=2,
@@ -4667,8 +6984,68 @@ def TVLaws():
                   sleepTimes=sleepTimes,
                   repeats=repeats)
 
+    if runDamr:
+        oneTVLaws(protocol=Protocol.DAMR,
+                  constFactor=2,
+                  numFaults=numFaults,
+                  allRepIds=allRepIds,
+                  allClIds=allClIds,
+                  numTransPerBlock=numTransPerBlock,
+                  payloadSize=payloadSize,
+                  numCl=numClients,
+                  numClTrans=numClTrans,
+                  numViews=numViews,
+                  cutOffBound=cutOffBound,
+                  sleepTimes=sleepTimes,
+                  repeats=repeats)
+
+    if runDama:
+        oneTVLaws(protocol=Protocol.DAMA,
+                  constFactor=2,
+                  numFaults=numFaults,
+                  allRepIds=allRepIds,
+                  allClIds=allClIds,
+                  numTransPerBlock=numTransPerBlock,
+                  payloadSize=payloadSize,
+                  numCl=numClients,
+                  numClTrans=numClTrans,
+                  numViews=numViews,
+                  cutOffBound=cutOffBound,
+                  sleepTimes=sleepTimes,
+                  repeats=repeats)
+
+    if runDamp:
+        oneTVLaws(protocol=Protocol.DAMP,
+                  constFactor=2,
+                  numFaults=numFaults,
+                  allRepIds=allRepIds,
+                  allClIds=allClIds,
+                  numTransPerBlock=numTransPerBlock,
+                  payloadSize=payloadSize,
+                  numCl=numClients,
+                  numClTrans=numClTrans,
+                  numViews=numViews,
+                  cutOffBound=cutOffBound,
+                  sleepTimes=sleepTimes,
+                  repeats=repeats)
+
     if runFree:
         oneTVLaws(protocol=Protocol.FREE,
+                  constFactor=2,
+                  numFaults=numFaults,
+                  allRepIds=allRepIds,
+                  allClIds=allClIds,
+                  numTransPerBlock=numTransPerBlock,
+                  payloadSize=payloadSize,
+                  numCl=numClients,
+                  numClTrans=numClTrans,
+                  numViews=numViews,
+                  cutOffBound=cutOffBound,
+                  sleepTimes=sleepTimes,
+                  repeats=repeats)
+
+    if runRoll:
+        oneTVLaws(protocol=Protocol.ROLL,
                   constFactor=2,
                   numFaults=numFaults,
                   allRepIds=allRepIds,
@@ -4814,11 +7191,14 @@ def copyDamysusExperiments():
     whichExp  = "EUexp1"
     pointFile = statsdir+"/points-09-Sep-2021-14:37:34.270859"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-EUregs-256B.png")
 
     print("--THROUGHPUT/LATENCY EU256")
-    comparisonN(20,30,dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVChBase1,dLVChComb1)
+    comparisonN(20,30,
+                dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVChBase1,dTVChComb1,
+                dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVChBase1,dLVChComb1)
     print("--")
 
     showYlabel  = False
@@ -4829,11 +7209,14 @@ def copyDamysusExperiments():
     whichExp  = "EUexp1"
     pointFile = statsdir+"/points-18-Sep-2021-08:40:10.075174"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase2,dTVCheap2,dTVQuick2,dTVComb2,dTVFree2,dTVOnep2,dTVOnepb2,dTVOnepc2,dTVOnepd2,dTVChBase2,dTVChComb2,dLVBase2,dLVCheap2,dLVQuick2,dLVComb2,dLVFree2,dLVOnep2,dLVOnepb2,dLVOnepc2,dLVOnepd2,dLVChBase2,dLVChComb2) = createPlot(pointFile)
+    (dTVBase2,dTVCheap2,dTVQuick2,dTVDamq2,dTVComb2,dTVDamr2,dTVDama2,dTVDamp2,dTVFree2,dTVRoll2,dTVOnep2,dTVOnepb2,dTVOnepc2,dTVOnepd2,dTVChBase2,dTVChComb2,
+     dLVBase2,dLVCheap2,dLVQuick2,dLVDamq2,dLVComb2,dLVDamr2,dLVDama2,dLVDamp2,dLVFree2,dLVRoll2,dLVOnep2,dLVOnepb2,dLVOnepc2,dLVOnepd2,dLVChBase2,dLVChComb2) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-EUregs-0B.png")
 
     print("--THROUGHPUT/LATENCY EU0")
-    comparisonN(20,30,dTVBase2,dTVCheap2,dTVQuick2,dTVComb2,dTVChBase2,dTVChComb2,dLVBase2,dLVCheap2,dLVQuick2,dLVComb2,dLVChBase2,dLVChComb2)
+    comparisonN(20,30,
+                dTVBase2,dTVCheap2,dTVQuick2,dTVDamq2,dTVComb2,dTVDamr2,dTVDama2,dTVDamp2,dTVChBase2,dTVChComb2,
+                dLVBase2,dLVCheap2,dLVQuick2,dLVDamq2,dLVComb2,dLVDamr2,dLVDama2,dLVDamp2,dLVChBase2,dLVChComb2)
     print("--")
 
     showYlabel  = True
@@ -4844,11 +7227,14 @@ def copyDamysusExperiments():
     whichExp  = "ALLexp1"
     pointFile = statsdir+"/points-12-Sep-2021-21:22:48.294547-v2"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase3,dTVCheap3,dTVQuick3,dTVComb3,dTVFree3,dTVOnep3,dTVOnepb3,dTVOnepc3,dTVOnepd3,dTVChBase3,dTVChComb3,dLVBase3,dLVCheap3,dLVQuick3,dLVComb3,dLVFree3,dLVOnep3,dLVOnepb3,dLVOnepc3,dLVOnepd3,dLVChBase3,dLVChComb3) = createPlot(pointFile)
+    (dTVBase3,dTVCheap3,dTVQuick3,dTVDamq3,dTVComb3,dTVDamr3,dTVDama3,dTVDamp3,dTVFree3,dTVRoll3,dTVOnep3,dTVOnepb3,dTVOnepc3,dTVOnepd3,dTVChBase3,dTVChComb3,
+     dLVBase3,dLVCheap3,dLVQuick3,dLVDamq3,dLVComb3,dLVDamr3,dLVDama3,dLVDamp3,dLVFree3,dLVRoll3,dLVOnep3,dLVOnepb3,dLVOnepc3,dLVOnepd3,dLVChBase3,dLVChComb3) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-ALLregs-256B.png")
 
     print("--THROUGHPUT/LATENCY ALL256")
-    comparisonN(20,30,dTVBase3,dTVCheap3,dTVQuick3,dTVComb3,dTVChBase3,dTVChComb3,dLVBase3,dLVCheap3,dLVQuick3,dLVComb3,dLVChBase3,dLVChComb3)
+    comparisonN(20,30,
+                dTVBase3,dTVCheap3,dTVQuick3,dTVDamq3,dTVComb3,dLVDamr3,dLVDama3,dLVDamp3,dTVChBase3,dTVChComb3,
+                dLVBase3,dLVCheap3,dLVQuick3,dLVDamq3,dLVComb3,dLVDamr3,dLVDama3,dLVDamp3,dLVChBase3,dLVChComb3)
     print("--")
 
     showYlabel  = False
@@ -4859,11 +7245,14 @@ def copyDamysusExperiments():
     whichExp  = "ALLexp1"
     pointFile = statsdir+"/points-23-Sep-2021-20:57:01.200810-v2"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase4,dTVCheap4,dTVQuick4,dTVComb4,dTVFree4,dTVOnep4,dTVOnepb4,dTVOnepc4,dTVOnepd4,dTVChBase4,dTVChComb4,dLVBase4,dLVCheap4,dLVQuick4,dLVComb4,dLVFree4,dLVOnep4,dLVOnepb4,dLVOnepc4,dLVOnepd4,dLVChBase4,dLVChComb4) = createPlot(pointFile)
+    (dTVBase4,dTVCheap4,dTVQuick4,dTVDamq4,dTVComb4,dTVDamr4,dTVDama4,dTVDamp4,dTVFree4,dTVRoll4,dTVOnep4,dTVOnepb4,dTVOnepc4,dTVOnepd4,dTVChBase4,dTVChComb4,
+     dLVBase4,dLVCheap4,dLVQuick4,dLVDamq4,dLVComb4,dLVDamr4,dLVDama4,dLVDamp4,dLVFree4,dLVRoll4,dLVOnep4,dLVOnepb4,dLVOnepc4,dLVOnepd4,dLVChBase4,dLVChComb4) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-ALLregs-0B.png")
 
     print("--THROUGHPUT/LATENCY ALL0")
-    comparisonN(20,30,dTVBase4,dTVCheap4,dTVQuick4,dTVComb4,dTVChBase4,dTVChComb4,dLVBase4,dLVCheap4,dLVQuick4,dLVComb4,dLVChBase4,dLVChComb4)
+    comparisonN(20,30,
+                dTVBase4,dTVCheap4,dTVQuick4,dTVDamq4,dTVComb4,dTVDamr4,dTVDama4,dTVDamp4,dTVChBase4,dTVChComb4,
+                dLVBase4,dLVCheap4,dLVQuick4,dLVDamq4,dLVComb4,dLVDamr4,dLVDama4,dLVDamp4,dLVChBase4,dLVChComb4)
     print("--")
 
     # TVL - EUregions, payload=0, chained
@@ -4890,14 +7279,16 @@ def copyDamysusExperiments():
     whichExp  = "ONEexp1"
     pointFile = statsdir+"/points-08-Sep-2022-combined"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-ONEreg-0B.png")
 
     # ONEregion, payload=256
     whichExp  = "ONEexp1"
     pointFile = statsdir+"/points-16-Sep-2022-combined"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-ONEreg-256B.png")
 
     plotHandle = True
@@ -4907,14 +7298,16 @@ def copyDamysusExperiments():
     whichExp  = "ONEexp1"
     pointFile = statsdir+"/points-08-Sep-2022-combined"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-ONEreg-0B-handle.png")
 
     # ONEregion, payload=256 --handleonly
     whichExp  = "ONEexp1"
     pointFile = statsdir+"/points-16-Sep-2022-combined"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-ONEreg-256B-handle.png")
 
 
@@ -4935,61 +7328,71 @@ def copyOneShotExperiments():
     # payload=0 latency=0
     pointFile = statsdir+"/points-28-Mar-2023-12:27:54.316676"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-0ms-0B.png")
 
     # payload=0 latency=10
     pointFile = statsdir+"/points-28-Mar-2023-15:06:52.955560"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-10ms-0B.png")
 
     # payload=0 latency=100
     pointFile = statsdir+"/points-28-Mar-2023-17:23:15.539785"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-100ms-0B.png")
 
     # payload=256 latency=0
     pointFile = statsdir+"/points-28-Mar-2023-20:55:52.523475"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-0ms-256B.png")
 
     # payload=256 latency=10
     pointFile = statsdir+"/points-28-Mar-2023-23:01:14.176344"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-10ms-256B.png")
 
     # payload=256 latency=100
     pointFile = statsdir+"/points-29-Mar-2023-01:45:05.351300"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-100ms-256B.png")
 
     # payload=256 latency=100 1/2
     pointFile = statsdir+"/points-29-Mar-2023-23:38:11.874277"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-10ms-256B-50.png")
 
     # payload=256 latency=100 1/3
     pointFile = statsdir+"/points-29-Mar-2023-19:51:59.492672"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-10ms-256B-33.png")
 
     # payload=256 latency=100 1/4
     pointFile = statsdir+"/points-29-Mar-2023-14:36:43.045542"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-10ms-256B-25.png")
 
     # payload=256 latency=100 50+-50
     pointFile = statsdir+"/points-22-Mar-2023-11:00:28.123250"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-50ms-50var-256B.png")
 
 
@@ -5010,25 +7413,29 @@ def copyOneShotAWSExperiments():
     # regions=US payload=0
     pointFile = statsdir+"/points-28-Sep-2023-02:24:24.406924" #"/points-13-Sep-2023-12:21:40.700210"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-aws-us-0B.png")
 
     # regions=US payload=256
     pointFile = statsdir+"/points-29-Sep-2023-21:37:50.162903" #"/points-20-Sep-2023-23:24:32.586954"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-aws-us-256B.png")
 
     # regions=EU payload=0
     pointFile = statsdir+"/points-22-Sep-2023-16:27:10.874357"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-aws-eu-0B.png")
 
     # regions=EU payload=256
     pointFile = statsdir+"/points-22-Sep-2023-10:32:45.166841"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-aws-eu-256B.png")
 
     ## NOT DONE YET
@@ -5041,19 +7448,22 @@ def copyOneShotAWSExperiments():
     # regions=ONE payload=256
     pointFile = statsdir+"/points-24-Sep-2023-20:46:37.931370"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-aws-one-256B.png")
 
     # regions=ALL payload=0
     pointFile = statsdir+"/points-26-Sep-2023-18:10:17.577236"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-aws-all-0B.png")
 
     # regions=ALL payload=256
     pointFile = statsdir+"/points-27-Sep-2023-12:23:37.655408"
     plotFile  = statsdir + "/plot-" + timestampStr + ".png"
-    (dTVBase1,dTVCheap1,dTVQuick1,dTVComb1,dTVFree1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,dLVBase1,dLVCheap1,dLVQuick1,dLVComb1,dLVFree1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
+    (dTVBase1,dTVCheap1,dTVQuick1,dTVDamq1,dTVComb1,dTVDamr1,dTVDama1,dTVDamp1,dTVFree1,dTVRoll1,dTVOnep1,dTVOnepb1,dTVOnepc1,dTVOnepd1,dTVChBase1,dTVChComb1,
+     dLVBase1,dLVCheap1,dLVQuick1,dLVDamq1,dLVComb1,dLVDamr1,dLVDama1,dLVDamp1,dLVFree1,dLVRoll1,dLVOnep1,dLVOnepb1,dLVOnepc1,dLVOnepd1,dLVChBase1,dLVChComb1) = createPlot(pointFile)
     copyfile(plotFile,"../figures/eval-1p-aws-all-256B.png")
 
 
@@ -5069,6 +7479,8 @@ def setRegion(reg):
         regions = (ALLregionsNAME, ALLregions)
     elif reg == ALL2regionsNAME:
         regions = (ALL2regionsNAME, ALL2regions)
+    elif reg == ALL3regionsNAME:
+        regions = (ALL3regionsNAME, ALL3regions)
     else:
         # default
         regions = (ONEregionsNAME, ONEregions)
@@ -5077,6 +7489,8 @@ def setRegion(reg):
 parser = argparse.ArgumentParser(description='X-HotStuff evaluation')
 parser.add_argument("--file",       help="file to plot", type=str, default="")
 parser.add_argument("--pfile",      help="file to plot", type=str, default="")
+parser.add_argument("--jfile",      help="file to plot", type=str, default="")
+parser.add_argument("--jfile2",     help="file to plot", type=str, default="")
 parser.add_argument("--conf",       type=int, default=0)     # generate a configuration file for 'n' nodes
 parser.add_argument("--tvl",        action="store_true")     # throughput vs. latency experiments
 parser.add_argument("--tvlaws",     action="store_true")     # throughput vs. latency experiments on AWS
@@ -5092,6 +7506,7 @@ parser.add_argument("--latest",     type=int, default=0,   help="copies plots") 
 parser.add_argument("--copy",       type=str, default="",  help="copies all files to the AWS address provided as argument")
 parser.add_argument("--nocopy",     action="store_true",   help="does not copy the files when running the AWS experiments")
 parser.add_argument("--docker",     action="store_true",   help="runs nodes locally in Docker containers")
+parser.add_argument("--randomize",  action="store_true",   help="randomizes AWS regions before allocating nodes to regions")
 parser.add_argument("--repeats",    type=int, default=0,   help="number of repeats per experiment")
 parser.add_argument("--repeats2",   type=int, default=0,   help="number of repeats per experiment (2nd level, i.e., regenerates AWS instances)")
 parser.add_argument("--faults",     type=str, default="",  help="the number of faults to test, separated by commas: 1,2,3,etc.")
@@ -5101,13 +7516,19 @@ parser.add_argument("--p1",         action="store_true",   help="sets runBase to
 parser.add_argument("--p2",         action="store_true",   help="sets runCheap to True (Damysus-C)")
 parser.add_argument("--p3",         action="store_true",   help="sets runQuick to True (Damysus-A)")
 parser.add_argument("--p4",         action="store_true",   help="sets runComb to True (Damysus)")
+parser.add_argument("--np4",        action="store_true",   help="sets runComb to False (Damysus)")
 parser.add_argument("--p5",         action="store_true",   help="sets runChBase to True (chained base protocol, i.e., chained HotStuff")
 parser.add_argument("--p6",         action="store_true",   help="sets runChComb to True (chained Damysus)")
 parser.add_argument("--p7",         action="store_true",   help="sets runFree to True (hash&signature-free Damysus)")
+parser.add_argument("--p7b",        action="store_true",   help="sets runDamr to True (hash&signature-free Damysus + kinda ROTE)")
+parser.add_argument("--p7c",        action="store_true",   help="sets runDamp to true (hash&signature-free Damysus + Pacemaker)")
+parser.add_argument("--p7d",        action="store_true",   help="sets runDamq to True (hash&signature-free Damysus + Pacemaker + 3f+1 nodes)")
+parser.add_argument("--p7e",        action="store_true",   help="sets runDama to True (hash&signature-free Damysus + kinda Achilles)")
 parser.add_argument("--p8",         action="store_true",   help="sets runOnep to True (1+1/2 phase Damysus)")
 parser.add_argument("--p8b",        action="store_true",   help="sets runOnepB to True (1+1/2 phase Damysus)")
 parser.add_argument("--p8c",        action="store_true",   help="sets runOnepC to True (1+1/2 phase Damysus)")
 parser.add_argument("--p8d",        action="store_true",   help="sets runOnepD to True (1+1/2 phase Damysus)")
+parser.add_argument("--p9",         action="store_true",   help="with rollback prevention")
 parser.add_argument("--pall",       action="store_true",   help="sets all runXXX to True, i.e., all protocols will be executed")
 parser.add_argument("--netlat",     type=float, default=0, help="network latency in ms")
 #parser.add_argument("--netlat",     type=int, default=0,   help="network latency in ms")
@@ -5119,9 +7540,9 @@ parser.add_argument("--hw",         action="store_true",   help="sets sgxmode to
 parser.add_argument("--memory",     type=int, default=0,   help="memory used by docker containers")
 parser.add_argument("--cpus",       type=float, default=0, help="cpus used by docker containers")
 parser.add_argument("--nocompil",   action="store_true",   help="to not recompile the code at the beginnong of each experiment (should only be used when runnning an already compiled experiment)")
-parser.add_argument("--cutoff",     type=int, default=0,   help="time after which the experiments are stopped")
+parser.add_argument("--cutoff",     type=int, default=0,   help="time after which the experiments are stopped (in seconds)")
 parser.add_argument("--views",      type=int, default=0,   help="number of views to run per experiments")
-parser.add_argument("--regions",    type=str, default="",  help="the AWS regions to use (one, eu, all)")
+parser.add_argument("--regions",    type=str, default="",  help="the AWS regions to use (one, eu, us, all)")
 parser.add_argument("--handle",     action="store_true",   help="to plot handling times")
 parser.add_argument("--handleonly", action="store_true",   help="to plot handling times only")
 parser.add_argument("--crypto",     action="store_true",   help="to plot crypto times")
@@ -5132,24 +7553,86 @@ parser.add_argument("--throughput", type=int, default=1,   help="to not print de
 parser.add_argument("--rate",       type=int, default=0,   help="bandwidth when using netem")
 parser.add_argument("--trans",      type=int, default=0,   help="number of transactions per block")
 parser.add_argument("--timeout",    type=int, default=0,   help="timeout before starting a new view (in seconds)")
+parser.add_argument("--timeoutMul", type=int, default=0,   help="factor used to mulitply the timeout with when timeouts occur")
+parser.add_argument("--timeoutDiv", type=int, default=0,   help="factor used to divide the timeout with when making progress")
 parser.add_argument("--opdist",     type=int, default=0,   help="OP cases")
 parser.add_argument("--dead",       action="store_true",   help="to run experiments based on the number of nodes instead of faults")
+parser.add_argument("--syncperiod", type=int, default=0,   help="synchronization period")
+parser.add_argument("--joinperiod", type=int, default=0,   help="joining period")
+parser.add_argument("--joining",    action="store_true",   help="to run experiments varying the number of joining nodes (rollback-resilient protocol)")
+parser.add_argument("--numjoiners", type=str, default="",  help="number of nodes to join")
+parser.add_argument("--quantile1",  type=int, default=0,   help="quantile1")
+parser.add_argument("--quantile2",  type=int, default=0,   help="quantile2")
+parser.add_argument("--skip",       type=int, default=0,   help="number of views to skip at the start of a run")
+parser.add_argument("--loss",       type=int, default=0,   help="percentage of messages lost using netem in docker")
+parser.add_argument("--stress",     action="store_true",   help="runs stress-ng")
 
 
 args = parser.parse_args()
 
 
 if args.regions:
-    if args.regions in [ONEregionsNAME,EUregionsNAME,USregionsNAME,ALLregionsNAME,ALL2regionsNAME]:
+    if args.regions in [ONEregionsNAME,EUregionsNAME,USregionsNAME,ALLregionsNAME,ALL2regionsNAME,ALL3regionsNAME]:
         setRegion(args.regions)
         print("SUCCESSFULLY PARSED ARGUMENT - regions is", args.regions)
     else:
         print("UNSUCCESSFULLY PARSED regions ARGUMENT")
 
 
+if args.quantile1 > 0:
+    quantileSize1 = args.quantile1
+    print("SUCCESSFULLY PARSED ARGUMENT - quantileSize1 is now:", quantileSize1)
+
+
+if args.quantile2 > 0:
+    quantileSize2 = args.quantile2
+    print("SUCCESSFULLY PARSED ARGUMENT - quantileSize2 is now:", quantileSize2)
+
+
+if args.skip > 0:
+    skipViews = args.skip
+    print("SUCCESSFULLY PARSED ARGUMENT - skipViews is now:", skipViews)
+
+
+if args.loss > 0:
+    msgLoss = args.loss
+    print("SUCCESSFULLY PARSED ARGUMENT - msgLoss is now:", msgLoss)
+
+
+if args.syncperiod > 0:
+    syncPeriod = args.syncperiod
+    print("SUCCESSFULLY PARSED ARGUMENT - synchronization period is now:", syncPeriod)
+
+
+if args.joinperiod > 0:
+    joinPeriod = args.joinperiod
+    print("SUCCESSFULLY PARSED ARGUMENT - joining period is now:", joinPeriod)
+
+
+if args.stress:
+    stressNg = True
+    print("SUCCESSFULLY PARSED ARGUMENT - stressNg now:", stressNg)
+
+
+if args.numjoiners:
+    l = list(map(lambda x: int(x), args.numjoiners.split(",")))
+    numJoiners = l[0]
+    print("SUCCESSFULLY PARSED ARGUMENT - number of joiners is now:", numJoiners)
+
+
 if args.timeout > 0:
     timeout = args.timeout
-    print("SUCCESSFULLY PARSED ARGUMENT - timout is now:", timeout , "seconds")
+    print("SUCCESSFULLY PARSED ARGUMENT - timeout is now:", timeout , "seconds")
+
+
+if args.timeoutMul > 0:
+    timeoutMul = args.timeoutMul
+    print("SUCCESSFULLY PARSED ARGUMENT - timeoutMul is now:", timeoutMul)
+
+
+if args.timeoutDiv > 0:
+    timeoutDiv = args.timeoutDiv
+    print("SUCCESSFULLY PARSED ARGUMENT - timeoutDiv is now:", timeoutDiv)
 
 
 if args.opdist > 0:
@@ -5215,6 +7698,11 @@ if args.payload >= 0:
 if args.docker:
     runDocker = True
     print("SUCCESSFULLY PARSED ARGUMENT - running nodes in Docker containers")
+
+
+if args.randomize:
+    randomizeRegions = True
+    print("SUCCESSFULLY PARSED ARGUMENT - randomizing AWS regions before allocating nodes")
 
 
 if args.nocompil:
@@ -5303,6 +7791,10 @@ if args.p4:
     runComb = True
     print("SUCCESSFULLY PARSED ARGUMENT - testing Damysus")
 
+if args.np4:
+    plotComb = False
+    print("SUCCESSFULLY PARSED ARGUMENT - not ploting Damysus")
+
 if args.p5:
     runChBase = True
     print("SUCCESSFULLY PARSED ARGUMENT - testing chained base protocol")
@@ -5314,6 +7806,22 @@ if args.p6:
 if args.p7:
     runFree = True
     print("SUCCESSFULLY PARSED ARGUMENT - testing hash&signature-free Damysus")
+
+if args.p7b:
+    runDamr = True
+    print("SUCCESSFULLY PARSED ARGUMENT - testing hash&signature-free Damysus + kinda ROTE")
+
+if args.p7c:
+    runDamp = True
+    print("SUCCESSFULLY PARSED ARGUMENT - testing Damysus + Pacemaker")
+
+if args.p7d:
+    runDamq = True
+    print("SUCCESSFULLY PARSED ARGUMENT - testing Damysus + Pacemaker + 3f+1 nodes")
+
+if args.p7e:
+    runDama = True
+    print("SUCCESSFULLY PARSED ARGUMENT - testing hash&signature-free Damysus + kinda Achilles")
 
 if args.p8:
     runOnep = True
@@ -5331,12 +7839,21 @@ if args.p8d:
     runOnepD = True
     print("SUCCESSFULLY PARSED ARGUMENT - testing 1+1/2 phase Damysus (case 4)")
 
+if args.p9:
+    runRoll = True
+    print("SUCCESSFULLY PARSED ARGUMENT - testing rollback prevention")
+
 if args.pall:
     runBase   = True
     runCheap  = True
     runQuick  = True
+    runDamq   = True
     runComb   = True
+    runDamr   = True
+    runDama   = True
+    runDamp   = True
     runFree   = True
+    runRoll   = True
     runOnep   = True
     runOnepB  = True
     runOnepC  = True
@@ -5368,6 +7885,14 @@ elif args.file.startswith(statsdir+"/clients-"):
 elif args.pfile.startswith(statsdir+"/points-") or args.pfile.startswith(statsdir+"/final-points-"):
     l = args.pfile.split(",")
     createPlotPayload(l)
+elif args.jfile.startswith(statsdir+"/points-") or args.jfile.startswith(statsdir+"/final-points-"):
+    joining = True
+    createPlotJoin(args.jfile)
+elif args.jfile2.startswith(statsdir+"/points-") or args.jfile2.startswith(statsdir+"/final-points-"):
+    joining = True
+    createPlotJoin2(args.jfile2)
+elif args.file.startswith(statsdir+"/view-times-"):
+    createPlotViewTimes(args.file)
 elif args.conf > 0:
     genLocalConf(args.conf,addresses)
 elif args.tvl:
@@ -5393,7 +7918,7 @@ elif args.containers:
         fact = 2
     elif args.p3:
         prop = Protocol.QUICK
-        fact = 2
+        fact = 3
     elif args.p4:
         prop = Protocol.COMB
         fact = 2
@@ -5406,6 +7931,18 @@ elif args.containers:
     elif args.p7:
         prop = Protocol.FREE
         fact = 2
+    elif args.p7b:
+        prop = Protocol.DAMR
+        fact = 2
+    elif args.p7c:
+        prop = Protocol.DAMP
+        fact = 2
+    elif args.p7d:
+        prop = Protocol.DAMQ
+        fact = 3
+    elif args.p7e:
+        prop = Protocol.DAMA
+        fact = 2
     elif args.p8:
         prop = Protocol.ONEP
         fact = 2
@@ -5417,6 +7954,9 @@ elif args.containers:
         fact = 2
     elif args.p8d:
         prop = Protocol.ONEPD
+        fact = 2
+    elif args.p9:
+        prop = Protocol.ROLL
         fact = 2
     else:
         prop = Protocol.ONEP
@@ -5442,7 +7982,18 @@ elif args.awstest:
     testAWS()
 elif args.aws:
     print("lauching AWS experiment")
-    runAWS()
+    if args.joining and args.numjoiners:
+        print("...in joining mode")
+        joining = True
+        joiners = list(map(lambda x: int(x), args.numjoiners.split(",")))
+        if len(joiners) == 1:
+            joiners = range(numJoiners+1)
+        if len(faults) > 0:
+            runAWSJoin(faults[0],joiners)
+        else:
+            runAWSJoin(2,joiners)
+    else:
+        runAWS()
 elif args.cluster:
     print("lauching cluster experiment")
     runCluster()
@@ -5470,6 +8021,15 @@ elif args.dead:
         runExperimentsFaults(faults[0])
     else:
         runExperimentsFaults(2) # some random default value so that we have a few points
+elif args.joining and args.numjoiners:
+    joining = True
+    joiners = list(map(lambda x: int(x), args.numjoiners.split(",")))
+    if len(joiners) == 1:
+        joiners = range(numJoiners+1)
+    if len(faults) > 0:
+        runExperimentsJoin(faults[0],joiners)
+    else:
+        runExperimentsJoin(2,joiners) # some random default value so that we have a few points
 else:
     print("Throughput and Latency")
     runExperiments()

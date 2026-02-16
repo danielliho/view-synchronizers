@@ -360,6 +360,55 @@ int main(int argc, char const *argv[]) {
                    sizeof(MsgBckPrepareFree),
                    sizeof(MsgPrepareFree),
                    sizeof(MsgPreCommitFree)});
+#elif defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS3_PACEMAKER) // Same as FREE + Pacemaker messages
+  size = std::max({size,
+                   sizeof(MsgNewViewFree),
+                   sizeof(MsgLdrPrepareFree),
+                   sizeof(MsgBckPrepareFree),
+                   sizeof(MsgPrepareFree),
+                   sizeof(MsgPreCommitFree),
+                   sizeof(MsgPmSync),
+                   sizeof(MsgPmSyncTC),
+                   sizeof(MsgPmSyncVote),
+                   sizeof(MsgPmSyncVoteQc)});
+#elif defined(BASIC_DAMYSUS_ACHILLES)
+  size = std::max({size,
+                   sizeof(MsgNewViewFree),
+                   sizeof(MsgLdrPrepareFree),
+                   sizeof(MsgBckPrepareFree),
+                   sizeof(MsgPrepareFree),
+                   sizeof(MsgPreCommitFree),
+                   sizeof(MsgPmSync),
+                   sizeof(MsgPmSyncTC),
+                   sizeof(MsgPmSyncVote),
+                   sizeof(MsgPmSyncVoteQc),
+                   sizeof(MsgRestart),
+                   sizeof(MsgReplyRestart)});
+#elif defined(BASIC_DAMYSUS_ROTE) // Same as FREE + ROTE messages
+  size = std::max({size,
+                   sizeof(MsgNewViewFree),
+                   sizeof(MsgLdrPrepareFree),
+                   sizeof(MsgBckPrepareFree),
+                   sizeof(MsgPrepareFree),
+                   sizeof(MsgPreCommitFree),
+                   sizeof(MsgCounterRote),
+                   sizeof(MsgEchoRote),
+                   sizeof(MsgAckRote),
+                   sizeof(MsgRequestCounterRote),
+                   sizeof(MsgReplyCounterRote)});
+  #elif defined(BASIC_ROLL)
+  size = std::max({size,
+                   sizeof(MsgNewViewRB),
+                   sizeof(MsgLdrPrepareRB),
+                   sizeof(MsgBckPrepareRB),
+                   sizeof(MsgLdrPreCommitRB),
+                   sizeof(MsgBckPreCommitRB),
+                   sizeof(MsgDecideRB),
+                   sizeof(MsgSync),
+                   sizeof(MsgSyncTC),
+                   sizeof(MsgSyncVote),
+                   sizeof(MsgSyncVoteQc),
+                   sizeof(MsgJoin)});
   #elif defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC)
   size = std::max({size,
                    sizeof(MsgNewViewOPA),

@@ -39,6 +39,7 @@ class Hash {
   std::string toString();
 
   bool operator==(const Hash& s) const;
+  bool operator<(const Hash& s) const;
 };
 
 

@@ -31,9 +31,12 @@ std::string cdata2string(cdata_t cdata);
 std::string cblock2string(cblock_t *block);
 std::string signs2string(signs_t signs);
 std::string sign2string(sign_t sign);
+std::string joins2string(joins_t joins);
+bool eq_hashes(unsigned char *h1, unsigned char *h2);
 bool eqHashes(hash_t h1, hash_t h2);
 hash_t newHash();
 hash_t noHash();
+joins_t noJoins();
 
 bool WF(just_t just);
 View just2cview(just_t just);

@@ -12,7 +12,6 @@ void Auths::serialize(salticidae::DataStream &data) const {
   }
 }
 
-
 void Auths::unserialize(salticidae::DataStream &data) {
   data >> this->size;
   for (int i = 0; i < MAX_NUM_SIGNATURES; i++) {
@@ -20,28 +19,24 @@ void Auths::unserialize(salticidae::DataStream &data) {
   }
 }
 
-
-
 Auths::Auths(Auth auth) {
   this->auths[0] = auth;
   this->size=1;
 }
 
-
 Auths::Auths(unsigned int size, Auth auths[MAX_NUM_SIGNATURES]) {
-  this->size=size;
+  this->size = size;
   for (int i = 0; i < MAX_NUM_SIGNATURES; i++) {
     this->auths[i] = auths[i];
   }
 }
 
-
 Auths::Auths(salticidae::DataStream &data) {
   unserialize(data);
 }
 
-
 Auths::Auths() {
+  this->size = 0;
   for (int i = 0; i < MAX_NUM_SIGNATURES; i++) { this->auths[i] = Auth(); }
 }
 
@@ -53,7 +48,6 @@ Auth Auths::get(unsigned int n) {
   return this->auths[n];
 }
 
-
 bool Auths::verify(std::string secret, std::string s) {
   for (int i = 0; i < this->size; i++) {
     if (!this->auths[i].verify(secret,s)) {
@@ -63,7 +57,6 @@ bool Auths::verify(std::string secret, std::string s) {
   }
   return true;
 }
-
 
 std::string Auths::prettyPrint() {
   std::string text = "";
@@ -80,7 +73,6 @@ std::string Auths::toString() {
   }
   return text;
 }
-
 
 bool Auths::operator<(const Auths& s) const {
   if (size < s.size) { return true; }
@@ -126,6 +118,8 @@ void Auths::add(Auth auth) {
 
 void Auths::addUpto(Auths others, unsigned int n) {
   for (int i = 0; i < others.getSize() && this->size < n; i++) {
+    if (DEBUG1) { std::cout << KYEL << "adding " << this->size << " " << n << " " << others.get(i).prettyPrint()
+                            << KNRM << std::endl; }
     this->add(others.get(i));
   }
 }

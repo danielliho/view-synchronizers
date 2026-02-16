@@ -160,6 +160,8 @@ public:
   Times getTotalNewTime(unsigned int quant);
   Times getTotalPCommTime(unsigned int quant);
 
+  std::vector<double> getViewTimes();
+
   unsigned int getTimeouts();
   unsigned int getNumOnePBs();
   unsigned int getNumOnePCs();

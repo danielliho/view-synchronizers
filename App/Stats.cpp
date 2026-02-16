@@ -131,6 +131,8 @@ Times Stats::getTotalGen2Time(unsigned int quant)   { return getTotalTime(quant,
 Times Stats::getTotalNewTime(unsigned int quant)    { return getTotalTime(quant, this->newTimes);    }
 Times Stats::getTotalPCommTime(unsigned int quant)  { return getTotalTime(quant, this->pcommTimes);  }
 
+std::vector<double> Stats::getViewTimes() { return this->viewTimes; }
+
 unsigned int Stats::getTimeouts()  { return this->timeouts;  }
 unsigned int Stats::getNumOnePBs() { return this->numonepbs; }
 unsigned int Stats::getNumOnePCs() { return this->numonepcs; }

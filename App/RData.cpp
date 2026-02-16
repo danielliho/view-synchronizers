@@ -70,7 +70,7 @@ std::string RData::toString() {
 
 
 bool RData::operator==(const RData& s) const {
-  if (DEBUG1) {
+  if (DEBUG2) {
     std::cout << KYEL
               << "[1]" << (this->proph == s.proph)
               << "[2]" << (this->propv == s.propv)

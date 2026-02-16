@@ -1,5 +1,6 @@
 enclave {
     from "sgx_tsgxssl.edl" import *;
+    from "sgx_pthread.edl" import *;
 
     include "../App/config.h"
     include "../App/types.h"
@@ -39,6 +40,14 @@ enclave {
 
         public sgx_status_t FREE_initialize_variables([in] PID *me, [in] unsigned int *q);
 
+        public sgx_status_t TEEpmSync([in] fvjust_t *just, [out] pm_sync_t *res);
+        public sgx_status_t TEEpmSyncVote([in] pm_sync_t *sync, [out] pm_sync_t *res);
+        public sgx_status_t TEEpmSyncEnd([in] pm_syncs_t *votes, [out] fvjust_t *res);
+
+        /* kinda ROTE */
+        public sgx_status_t ROTE_TEEauthView([out] auth_t *res);
+        // public sgx_status_t ROTE_TEEauthCounter([in] View *view, [in] View *counter, [out] auth_t *res);
+
         /* OP */
         public sgx_status_t OP_TEEverify([in] payload_t *text, [in] auths_t *a, [out] bool *res);
         public sgx_status_t OP_TEEprepare([in] hash_t *hash, [out] opproposal_t *res);
@@ -57,6 +66,23 @@ enclave {
         public sgx_status_t CH_COMB_TEEprepare([in] cblock_t *block, [in] hash_t *hash, [out] just_t *res);
         public sgx_status_t CH_COMB_TEEaccum([in] onejusts_t *js, [out] accum_t *res);
         public sgx_status_t CH_COMB_TEEaccumSp([in] just_t *just, [out] accum_t *res);
+
+        /* Rollback-resilient Pacemaker */
+        public sgx_status_t TEEinitializeRB([in] PID *me, [out] rbstore_auth_t *p);
+
+        public sgx_status_t TEEsync([in] rbstore_auth_t *p, [out] sync_t *res);
+        public sgx_status_t TEEjoinRequest([in] Session *s, [out] join_t *res);
+        public sgx_status_t TEEsyncVote([in] rbaccum_sync_auth_t *acc, [in] inonces_t *nonces, [out] sync_vote_auth_t *res);
+        public sgx_status_t TEEsyncEnd([in] sync_vote_auths_t *qc, [out] rbstore_auth_t *res);
+        public sgx_status_t TEEspSyncVote([in] rbaccum_sync_auth_t *acc, [out] sp_sync_vote_auth_t *res);
+        public sgx_status_t TEEspSyncEnd([in] sp_sync_vote_auths_t *qc, [out] rbstore_auth_t *res);
+
+        /* Rollback-resilient Damysus */
+        public sgx_status_t TEEprepareRB([in] hash_t *hblock, [out] rbprepare_auth_t *res);
+        public sgx_status_t TEEstoreRB([in] rbprepare_auths_t *prep, [out] rbstore_auth_t *res);
+        public sgx_status_t TEEnewviewRB([in] rbstore_auth_t *store, [out] rbnewview_auth_t *res);
+        public sgx_status_t TEEaccumNvRB([in] rbnewview_auth_t *j, [in] rbnewviews_t *js, [out] rbaccum_nv_auth_t *res);
+        public sgx_status_t TEEaccumSyncRB([in] sync_t *j, [in] syncs_t *js, [out] rbaccum_sync_auth_t *res);
     };
 
     untrusted {
