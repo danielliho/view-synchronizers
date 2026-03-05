@@ -231,7 +231,7 @@ keys: App/Keys.o App/KeysFun.o # $(Nsgx_App_Cpp_Objects)
 ######## App Objects ########
 
 App/Enclave_u.c: $(SGX_EDGER8R) Enclave/Enclave.edl
-	@cd App && $(SGX_EDGER8R) --untrusted ../Enclave/Enclave.edl --search-path ../Enclave --search-path $(SGX_SDK)/include --search-path $(SGXSSL_INCLUDE_PATH)
+	@cd App && $(SGX_EDGER8R) --untrusted ../Enclave/Enclave.edl --search-path ../Enclave --search-path $(SGX_SDK)/include --search-path $(SGXSSL_INCLUDE_PATH) --search-path $(SGXSSL_INCLUDE_PATH)/filefunc --search-path $(SGXSSL_INCLUDE_PATH)/nofilefunc
 	@echo "GEN  =>  $@"
 
 App/Enclave_u.o: App/Enclave_u.c
@@ -258,7 +258,7 @@ sgxkeys: App/Keys.cpp App/KeysFun.o
 ######## Enclave Objects ########
 
 Enclave/Enclave_t.c: $(SGX_EDGER8R) Enclave/Enclave.edl
-	@cd Enclave && $(SGX_EDGER8R) --trusted ../Enclave/Enclave.edl --search-path ../Enclave --search-path $(SGX_SDK)/include --search-path $(SGXSSL_INCLUDE_PATH)
+	@cd Enclave && $(SGX_EDGER8R) --trusted ../Enclave/Enclave.edl --search-path ../Enclave --search-path $(SGX_SDK)/include --search-path $(SGXSSL_INCLUDE_PATH) --search-path $(SGXSSL_INCLUDE_PATH)/filefunc --search-path $(SGXSSL_INCLUDE_PATH)/nofilefunc
 	@echo "GEN  =>  $@"
 
 Enclave/Enclave_t.o: Enclave/Enclave_t.c

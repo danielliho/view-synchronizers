@@ -14,6 +14,7 @@ from enum import Enum
 import json
 import multiprocessing
 import random
+import shutil
 from shutil import copyfile
 import re
 import mmap
@@ -1687,18 +1688,20 @@ def mkApp(protocol,constFactor,numFaults,numTrans,payloadSize):
             subprocess.run([docker + " exec -t " + instancex + " bash -c \"make -j " + str(ncores) + " server client\""], shell=True, check=True)
 
         tmp = "docker_tmp"
-        #Path(tmp).rmdir()
         Path(tmp).mkdir(parents=True, exist_ok=True)
-        subprocess.run([docker + " cp " + instancex + ":/app/." + " " + tmp + "/"], shell=True, check=True)
+        try:
+            subprocess.run([docker + " cp " + instancex + ":/app/." + " " + tmp + "/"], shell=True, check=True)
 
-        # copy the files over to the other instances
-        numReps = (constFactor * numFaults) + 1
-        lr = list(map(lambda x: str(x), list(range(numReps))))           # replicas
-        lc = list(map(lambda x: "c" + str(x), list(range(numClients))))  # clients
-        for i in lr + lc:
-            instance = dockerBase + i
-            print("copying files from " + instancex + " to " + instance)
-            subprocess.run([docker + " cp " + tmp + "/." + " " + instance + ":/app/"], shell=True, check=True)
+            # copy the files over to the other instances
+            numReps = (constFactor * numFaults) + 1
+            lr = list(map(lambda x: str(x), list(range(numReps))))           # replicas
+            lc = list(map(lambda x: "c" + str(x), list(range(numClients))))  # clients
+            for i in lr + lc:
+                instance = dockerBase + i
+                print("copying files from " + instancex + " to " + instance)
+                subprocess.run([docker + " cp " + tmp + "/." + " " + instance + ":/app/"], shell=True, check=True)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
     else:
         subprocess.call(["make","clean"])
         if needsSGX(protocol):
