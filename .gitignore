@@ -1,0 +1,29 @@
+# IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Project-specific
+stats/
+stats.json
+config
+App/params.h
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+venv/
+.env
+.venv
+
+# Logs
+*.log
