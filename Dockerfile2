@@ -34,7 +34,10 @@ RUN cd /opt/intel/linux-sgx \
 
 # install SDK
 RUN cd /opt/intel/linux-sgx/linux/installer/bin \
-    && echo -e "no\n/opt/intel\n" | ./sgx_linux_x64_sdk_2.25.100.3.bin
+    && SDK_INSTALLER="$(find . -maxdepth 1 -type f -name 'sgx_linux_x64_sdk*.bin' | head -n 1)" \
+    && test -n "$SDK_INSTALLER" \
+    && chmod +x "$SDK_INSTALLER" \
+    && printf "no\n/opt/intel\n" | "$SDK_INSTALLER"
 
 # build PSW
 RUN mkdir /etc/init
