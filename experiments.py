@@ -606,7 +606,7 @@ def makeInstances(instanceIds,protocol):
     print(">> making",str(len(instanceIds)),"instance(s) using",str(ncores),"core(s)")
 
     make0  = "make -j "+str(ncores)
-    make   = make0 + " SGX_MODE="+sgxmode if needsSGX(protocol) else make0 + " server client"
+    make   = make0 + " SGX_MODE=" + sgxmode + " sgxserver sgxclient enclave.signed.so" if needsSGX(protocol) else make0 + " server client"
 
     # copying
     procs = []
@@ -1253,7 +1253,7 @@ def makeCluster(instanceIds,protocol):
 
     procs  = []
     make0  = "make -j "+str(ncores)
-    make   = make0 + " SGX_MODE="+sgxmode if needsSGX(protocol) else make0 + " server client"
+    make   = make0 + " SGX_MODE=" + sgxmode + " sgxserver sgxclient enclave.signed.so" if needsSGX(protocol) else make0 + " server client"
 
     for (n,i,node) in instanceIds:
         #
@@ -1682,7 +1682,7 @@ def mkApp(protocol,constFactor,numFaults,numTrans,payloadSize):
         subprocess.run([docker + " exec -t " + instancex + " bash -c \"make clean\""], shell=True, check=True)
         if needsSGX(protocol):
             print("protocol needs SGX")
-            subprocess.run([docker + " exec -t " + instancex + " bash -c \"" + srcsgx + "; make -j " + str(ncores) + " SGX_MODE=" + sgxmode + "\""], shell=True, check=True)
+            subprocess.run([docker + " exec -t " + instancex + " bash -c \"" + srcsgx + "; make -j " + str(ncores) + " SGX_MODE=" + sgxmode + " sgxserver sgxclient enclave.signed.so\""], shell=True, check=True)
         else:
             print("protocol doesn't need SGX")
             subprocess.run([docker + " exec -t " + instancex + " bash -c \"make -j " + str(ncores) + " server client\""], shell=True, check=True)
@@ -1706,7 +1706,7 @@ def mkApp(protocol,constFactor,numFaults,numTrans,payloadSize):
         subprocess.call(["make","clean"])
         if needsSGX(protocol):
             subprocess.run(["bash -c \"" + srcsgx + "\""], shell=True, check=True)
-            subprocess.call(["make","-j",str(ncores),"SGX_MODE="+sgxmode])
+            subprocess.call(["make","-j",str(ncores),"SGX_MODE="+sgxmode,"sgxserver","sgxclient","enclave.signed.so"])
         else:
             subprocess.call(["make","-j",str(ncores),"server","client"])
 # End of mkApp
@@ -7778,92 +7778,48 @@ if args.faults:
     print("SUCCESSFULLY PARSED ARGUMENT - we will be testing for f in", l)
 
 
-if args.p1:
-    runBase = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing base protocol")
-
-if args.p2:
-    runCheap = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing Damysus-C")
-
-if args.p3:
-    runQuick = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing Damysus-A")
-
-if args.p4:
-    runComb = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing Damysus")
-
 if args.np4:
     plotComb = False
     print("SUCCESSFULLY PARSED ARGUMENT - not ploting Damysus")
 
-if args.p5:
-    runChBase = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing chained base protocol")
+# Athena-only protocol selection:
+# ignore non-p9 protocol flags and keep only runRoll active.
+nonAthenaProtocolArgs = [
+    args.p1, args.p2, args.p3, args.p4,
+    args.p5, args.p6,
+    args.p7, args.p7b, args.p7c, args.p7d, args.p7e,
+    args.p8, args.p8b, args.p8c, args.p8d,
+]
 
-if args.p6:
-    runChComb = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing chained Damysus")
+runBase = False
+runCheap = False
+runQuick = False
+runComb = False
+runDamr = False
+runDama = False
+runDamp = False
+runDamq = False
+runFree = False
+runOnep = False
+runOnepB = False
+runOnepC = False
+runOnepD = False
+runChBase = False
+runChComb = False
+runQuickDbg = False
+runChCombDbg = False
 
-if args.p7:
-    runFree = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing hash&signature-free Damysus")
-
-if args.p7b:
-    runDamr = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing hash&signature-free Damysus + kinda ROTE")
-
-if args.p7c:
-    runDamp = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing Damysus + Pacemaker")
-
-if args.p7d:
-    runDamq = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing Damysus + Pacemaker + 3f+1 nodes")
-
-if args.p7e:
-    runDama = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing hash&signature-free Damysus + kinda Achilles")
-
-if args.p8:
-    runOnep = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing 1+1/2 phase Damysus")
-
-if args.p8b:
-    runOnepB = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing 1+1/2 phase Damysus (case 2)")
-
-if args.p8c:
-    runOnepC = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing 1+1/2 phase Damysus (case 3)")
-
-if args.p8d:
-    runOnepD = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing 1+1/2 phase Damysus (case 4)")
+if any(nonAthenaProtocolArgs):
+    print("SUCCESSFULLY PARSED ARGUMENT - non-Athena protocol flags were provided but ignored (Athena-only mode)")
 
 if args.p9:
     runRoll = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing rollback prevention")
-
-if args.pall:
-    runBase   = True
-    runCheap  = True
-    runQuick  = True
-    runDamq   = True
-    runComb   = True
-    runDamr   = True
-    runDama   = True
-    runDamp   = True
-    runFree   = True
-    runRoll   = True
-    runOnep   = True
-    runOnepB  = True
-    runOnepC  = True
-    runOnepD  = True
-    runChBase = True
-    runChComb = True
-    print("SUCCESSFULLY PARSED ARGUMENT - testing all protocols")
+    print("SUCCESSFULLY PARSED ARGUMENT - testing Athena (--p9)")
+elif args.pall:
+    runRoll = True
+    print("SUCCESSFULLY PARSED ARGUMENT - Athena-only mode: --pall mapped to Athena (--p9)")
+else:
+    runRoll = False
 
 
 if args.clients1 > 0:
@@ -7911,59 +7867,10 @@ elif args.containers:
     print("lauching Docker containers")
     numContainers = args.containers
     startContainers(numContainers,0)
-    prot = Protocol.ONEP
+    prot = Protocol.ROLL
     fact = 2
-    if args.p1:
-        prop = Protocol.BASE
-        fact = 3
-    elif args.p2:
-        prop = Protocol.CHEAP
-        fact = 2
-    elif args.p3:
-        prop = Protocol.QUICK
-        fact = 3
-    elif args.p4:
-        prop = Protocol.COMB
-        fact = 2
-    elif args.p5:
-        prop = Protocol.CHBASE
-        fact = 3
-    elif args.p6:
-        prop = Protocol.CHCOMB
-        fact = 2
-    elif args.p7:
-        prop = Protocol.FREE
-        fact = 2
-    elif args.p7b:
-        prop = Protocol.DAMR
-        fact = 2
-    elif args.p7c:
-        prop = Protocol.DAMP
-        fact = 2
-    elif args.p7d:
-        prop = Protocol.DAMQ
-        fact = 3
-    elif args.p7e:
-        prop = Protocol.DAMA
-        fact = 2
-    elif args.p8:
-        prop = Protocol.ONEP
-        fact = 2
-    elif args.p8b:
-        prop = Protocol.ONEPB
-        fact = 2
-    elif args.p8c:
-        prop = Protocol.ONEPC
-        fact = 2
-    elif args.p8d:
-        prop = Protocol.ONEPD
-        fact = 2
-    elif args.p9:
-        prop = Protocol.ROLL
-        fact = 2
-    else:
-        prop = Protocol.ONEP
-        fact = 2
+    if not args.p9 and not args.pall:
+        print("Athena-only mode: using --p9 configuration for containers")
     mkParams(protocol=prot,constFactor=fact,numFaults=1,numTrans=400,payloadSize=0)
     for i in range(numContainers):
         instance = dockerBase + str(i)
@@ -7976,7 +7883,7 @@ elif args.containers:
         src =  "Enclave/."
         dst = instance + ":/app/Enclave/"
         subprocess.run([docker + " cp " + src + " " + dst], shell=True, check=True)
-        subprocess.run([docker + " exec -t " + instance + " bash -c \"" + srcsgx + "; make clean; make -j " + str(1) + " SGX_MODE=" + sgxmode + "\""], shell=True, check=True)
+        subprocess.run([docker + " exec -t " + instance + " bash -c \"" + srcsgx + "; make clean; make -j " + str(1) + " SGX_MODE=" + sgxmode + " sgxserver sgxclient enclave.signed.so\""], shell=True, check=True)
 elif args.copy:
     print("copying files to AWS instance")
     copyToAddr(args.copy)

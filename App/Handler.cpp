@@ -70,16 +70,7 @@ std::string Handler::nfo() {
 }
 
 
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
-// These versions use trusted components
-#else
-// Trusted Component (would have to be executed in a TEE):
-TrustedFun tf;
-TrustedAccum ta;
-TrustedComb tc;
-TrustedCh tp; // 'p' for pipelined
-TrustedChComb tq;
-#endif
+// Athena-only mode keeps SGX trusted components path.
 
 
 
@@ -893,7 +884,7 @@ RBaccumSyncAuth getRBaccumSyncAuth(rbaccum_sync_auth_t *p) {
 
 // ------------------------------------
 // SGX related stuff
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
 /* Global EID shared by multiple threads */
 sgx_enclave_id_t global_eid = 0;
 
@@ -947,17 +938,9 @@ int Handler::initializeSGX() {
   }
 
   sgx_status_t ret, status;
-#if defined(BASIC_FREE) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE)
-  status = FREE_initialize_variables(global_eid, &ret, &(this->myid), &(this->qsize));
-#elif defined(BASIC_ROLL)
   rbstore_auth_t jout;
   status = TEEinitializeRB(global_eid, &ret, &(this->myid), &jout);
   this->lastRBstore = getRBstoreAuth(&jout);
-#elif defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD)
-  status = OP_initialize_variables(global_eid, &ret, &(this->myid), &(this->qsize));
-#else
-  status = initialize_variables(global_eid, &ret, &(this->myid), &others, &(this->qsize));
-#endif
   if (DEBUG1) std::cout << KBLU << nfo() << "enclave variables are initialized" << KNRM << std::endl;
 
   return 0;
@@ -969,18 +952,6 @@ int Handler::initializeSGX() {
 
 void Handler::startNewViewOnTimeout() {
   // TODO: start a new-view
-#if defined(BASIC_BASELINE)
-  if (DEBUG0) std::cout << KMAG << nfo() << "starting a new view" << KNRM << std::endl;
-  startNewView();
-#elif defined (BASIC_CHEAP)
-  startNewView();
-#elif defined (BASIC_QUICK)
-  startNewViewAcc();
-#elif defined (BASIC_CHEAP_AND_QUICK)
-  startNewViewComb();
-#elif defined (BASIC_FREE) || defined (BASIC_DAMYSUS_PACEMAKER) || defined (BASIC_DAMYSUS_ACHILLES) || defined (BASIC_DAMYSUS3_PACEMAKER) || defined (BASIC_DAMYSUS_ROTE)
-  startNewViewFree();
-#elif defined (BASIC_ROLL)
   //if (DEBUG1) std::cout << KRED << nfo() << "TODO-startNewViewOnTimeout" << KNRM << std::endl;
   //exit(0);
   if (!this->rejoining) { // only nodes that are not rejoining participate
@@ -1055,100 +1026,10 @@ void Handler::startNewViewOnTimeout() {
       }
     }
   }
-#elif defined (BASIC_ONEP) || defined (BASIC_ONEPB) || defined (BASIC_ONEPC) || defined (BASIC_ONEPD)
-  startNewViewOP();
-#elif defined (CHAINED_BASELINE)
-  startNewViewCh();
-#elif defined (CHAINED_CHEAP_AND_QUICK)
-  startNewViewChComb();
-#else
-  recordStats();
-#endif
 }
 
 
 
-#if defined(BASIC_FREE)
-const uint8_t MsgNewViewFree::opcode;
-const uint8_t MsgLdrPrepareFree::opcode;
-const uint8_t MsgBckPrepareFree::opcode;
-const uint8_t MsgPrepareFree::opcode;
-const uint8_t MsgPreCommitFree::opcode;
-#elif defined(BASIC_DAMYSUS_ROTE) // same as FREE + ROTE opcodes
-const uint8_t MsgNewViewFree::opcode;
-const uint8_t MsgLdrPrepareFree::opcode;
-const uint8_t MsgBckPrepareFree::opcode;
-const uint8_t MsgPrepareFree::opcode;
-const uint8_t MsgPreCommitFree::opcode;
-// to store a counter
-const uint8_t MsgCounterRote::opcode;
-const uint8_t MsgEchoRote::opcode;
-const uint8_t MsgAckRote::opcode;
-// to restart
-const uint8_t MsgRequestCounterRote::opcode;
-const uint8_t MsgReplyCounterRote::opcode;
-#elif defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD)
-const uint8_t MsgNewViewOPA::opcode;
-const uint8_t MsgNewViewOPB::opcode;
-const uint8_t MsgNewViewOPBB::opcode;
-const uint8_t MsgLdrPrepareOPA::opcode;
-const uint8_t MsgLdrPrepareOPB::opcode;
-const uint8_t MsgLdrPrepareOPC::opcode;
-const uint8_t MsgBckPrepareOP::opcode;
-//const uint8_t MsgPrepareOP::opcode;
-const uint8_t MsgPreCommitOP::opcode;
-const uint8_t MsgLdrAddOP::opcode;
-const uint8_t MsgBckAddOP::opcode;
-#elif defined(BASIC_CHEAP_AND_QUICK)
-const uint8_t MsgNewViewComb::opcode;
-const uint8_t MsgLdrPrepareComb::opcode;
-const uint8_t MsgPrepareComb::opcode;
-const uint8_t MsgPreCommitComb::opcode;
-#elif defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS3_PACEMAKER)
-const uint8_t MsgNewViewFree::opcode;
-const uint8_t MsgLdrPrepareFree::opcode;
-const uint8_t MsgBckPrepareFree::opcode;
-const uint8_t MsgPrepareFree::opcode;
-const uint8_t MsgPreCommitFree::opcode;
-const uint8_t MsgPmSync::opcode;
-const uint8_t MsgPmSyncTC::opcode;
-const uint8_t MsgPmSyncVote::opcode;
-const uint8_t MsgPmSyncVoteQc::opcode;
-#elif defined(BASIC_DAMYSUS_ACHILLES)
-const uint8_t MsgNewViewFree::opcode;
-const uint8_t MsgLdrPrepareFree::opcode;
-const uint8_t MsgBckPrepareFree::opcode;
-const uint8_t MsgPrepareFree::opcode;
-const uint8_t MsgPreCommitFree::opcode;
-// pacemaker messages
-const uint8_t MsgPmSync::opcode;
-const uint8_t MsgPmSyncTC::opcode;
-const uint8_t MsgPmSyncVote::opcode;
-const uint8_t MsgPmSyncVoteQc::opcode;
-// restart messages
-const uint8_t MsgRestart::opcode;
-const uint8_t MsgReplyRestart::opcode;
-// TODO[ACHILLES]: add messages to restart
-#elif defined(BASIC_QUICK) || defined(BASIC_QUICK_DEBUG)
-const uint8_t MsgNewViewAcc::opcode;
-const uint8_t MsgLdrPrepareAcc::opcode;
-const uint8_t MsgPrepareAcc::opcode;
-const uint8_t MsgPreCommitAcc::opcode;
-#elif defined(BASIC_CHEAP) || defined(BASIC_BASELINE)
-const uint8_t MsgNewView::opcode;
-const uint8_t MsgLdrPrepare::opcode;
-const uint8_t MsgPrepare::opcode;
-const uint8_t MsgPreCommit::opcode;
-const uint8_t MsgCommit::opcode;
-#elif defined(CHAINED_BASELINE)
-const uint8_t MsgNewViewCh::opcode;
-const uint8_t MsgLdrPrepareCh::opcode;
-const uint8_t MsgPrepareCh::opcode;
-#elif defined(CHAINED_CHEAP_AND_QUICK) || defined(CHAINED_CHEAP_AND_QUICK_DEBUG)
-const uint8_t MsgNewViewChComb::opcode;
-const uint8_t MsgLdrPrepareChComb::opcode;
-const uint8_t MsgPrepareChComb::opcode;
-#elif defined(BASIC_ROLL)
 const uint8_t MsgNewViewRB::opcode;
 const uint8_t MsgLdrPrepareRB::opcode;
 const uint8_t MsgBckPrepareRB::opcode;
@@ -1160,7 +1041,6 @@ const uint8_t MsgSync::opcode;
 const uint8_t MsgSyncTC::opcode;
 const uint8_t MsgSyncVote::opcode;
 const uint8_t MsgSyncVoteQc::opcode;
-#endif
 
 const uint8_t MsgTransaction::opcode;
 const uint8_t MsgReply::opcode;
@@ -1217,17 +1097,9 @@ Handler::Handler(KeysFun k,
   if (DEBUG1) { std::cout << KBLU << nfo() << "qsize=" << this->qsize << KNRM << std::endl; }
 
   // Trusted Functions
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
   if (DEBUG0) { std::cout << KBLU << nfo() << "initializing TEE" << KNRM << std::endl; }
   initializeSGX();
   if (DEBUG0) { std::cout << KBLU << nfo() << "initialized TEE" << KNRM << std::endl; }
-#else
-  tf = TrustedFun(this->myid,this->priv,this->qsize);
-  ta = TrustedAccum(this->myid,this->priv,this->qsize);
-  tc = TrustedComb(this->myid,this->priv,this->qsize);
-  tp = TrustedCh(this->myid,this->priv,this->qsize);
-  tq = TrustedChComb(this->myid,this->priv,this->qsize);
-#endif
   //getStarted();
 
 
@@ -1322,84 +1194,6 @@ Handler::Handler(KeysFun k,
       }
     }
   }
-#if defined(BASIC_FREE)
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewfree,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrpreparefree, this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_bckpreparefree, this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_preparefree,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_precommitfree,  this, _1, _2));
-#elif defined(BASIC_DAMYSUS_ROTE) // same as FREE + ROTE handlers
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewfree,          this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrpreparefree,       this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_bckpreparefree,       this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_preparefree,          this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_precommitfree,        this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_counter_rote,         this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_echo_rote,            this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ack_rote,             this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_request_counter_rote, this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_reply_counter_rote,   this, _1, _2));
-#elif defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD)
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewopa,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewopb,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewopbb,   this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_precommitop,   this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrprepareopa, this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrprepareopb, this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrprepareopc, this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_bckprepareop,  this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldraddop,      this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_bckaddop,      this, _1, _2));
-  /*this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_preparefree, this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_precommitfree, this, _1, _2));*/
-#elif defined(BASIC_CHEAP_AND_QUICK)
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewcomb,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrpreparecomb, this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_preparecomb,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_precommitcomb,  this, _1, _2));
-#elif defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS3_PACEMAKER)
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewfree,     this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrpreparefree,  this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_bckpreparefree,  this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_preparefree,     this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_precommitfree,   this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_pm_sync,         this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_pm_sync_tc,      this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_pm_sync_vote,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_pm_sync_vote_qc, this, _1, _2));
-#elif defined(BASIC_DAMYSUS_ACHILLES)
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewfree,     this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrpreparefree,  this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_bckpreparefree,  this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_preparefree,     this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_precommitfree,   this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_pm_sync,         this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_pm_sync_tc,      this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_pm_sync_vote,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_pm_sync_vote_qc, this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_restart,         this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_reply_restart,   this, _1, _2));
-// TODO[ACHILLES]: add the functions to restart
-#elif defined(BASIC_QUICK) || defined(BASIC_QUICK_DEBUG)
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewacc,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrprepareacc, this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_prepareacc,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_precommitacc,  this, _1, _2));
-#elif defined(BASIC_CHEAP) || defined(BASIC_BASELINE)
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newview,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_prepare,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrprepare, this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_precommit,  this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_commit,     this, _1, _2));
-#elif defined(CHAINED_BASELINE)
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newview_ch,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_prepare_ch,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrprepare_ch, this, _1, _2));
-#elif defined(CHAINED_CHEAP_AND_QUICK) || defined(CHAINED_CHEAP_AND_QUICK_DEBUG)
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newview_ch_comb,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_prepare_ch_comb,    this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrprepare_ch_comb, this, _1, _2));
-#elif defined(BASIC_ROLL)
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewRB,      this, _1, _2));
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrprepareRB,   this, _1, _2));
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_bckprepareRB,   this, _1, _2));
@@ -1411,9 +1205,6 @@ Handler::Handler(KeysFun k,
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_sync_tc,        this, _1, _2));
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_sync_vote,      this, _1, _2));
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_sync_vote_qc,   this, _1, _2));
-#else
-  std::cout << KRED << nfo() << "TODO" << "(Handler)" << KNRM << std::endl;
-#endif
 
   this->cnet.reg_handler(salticidae::generic_bind(&Handler::handle_transaction, this, _1, _2));
   this->cnet.reg_handler(salticidae::generic_bind(&Handler::handle_start, this, _1, _2));
@@ -1923,7 +1714,7 @@ void Handler::sendMsgNewViewRB(MsgNewViewRB msg, Peers recipients) {
 
 Just Handler::callTEEsign() {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   just_t jout;
   sgx_status_t ret;
   sgx_status_t status = TEEsign(global_eid, &ret, &jout);
@@ -1941,7 +1732,7 @@ Just Handler::callTEEsign() {
 
 Just Handler::callTEEprepare(Hash h, Just j) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   just_t jout;
   just_t jin;
   setJust(j,&jin);
@@ -1963,7 +1754,7 @@ Just Handler::callTEEprepare(Hash h, Just j) {
 
 Just Handler::callTEEstore(Just j) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   just_t jout;
   just_t jin;
   setJust(j,&jin);
@@ -1981,29 +1772,9 @@ Just Handler::callTEEstore(Just j) {
 }
 
 
-/*bool Handler::callTEEverify(Just j) {
-  auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK)
-  unsigned int bout;
-  just_t jin;
-  setJust(j,&jin);
-  sgx_status_t ret;
-  sgx_status_t status = TEEverify(global_eid, &ret, &jin, &bout);
-  bool b = (bool)bout;
-#else
-  bool b = tf.TEEverify(this->nodes,j);
-#endif
-  auto end = std::chrono::steady_clock::now();
-  double time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-  stats.addTEEverify(time);
-  stats.addTEEtime(time);
-  return b;
-}*/
-
-
 Accum Handler::callTEEaccum(Vote<Void,Cert> votes[MAX_NUM_SIGNATURES]) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   accum_t aout;
   votes_t vin;
   setVotes(votes,&vin);
@@ -2027,7 +1798,7 @@ Accum Handler::callTEEaccum(Vote<Void,Cert> votes[MAX_NUM_SIGNATURES]) {
 // a simpler version of callTEEaccum for when all votes are for the same payload
 Accum Handler::callTEEaccumSp(uvote_t vote) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   accum_t aout;
   sgx_status_t ret;
   sgx_status_t status = TEEaccumSp(global_eid, &ret, &vote, &aout);
@@ -2045,7 +1816,7 @@ Accum Handler::callTEEaccumSp(uvote_t vote) {
 
 Accum Handler::callTEEaccumComb(Just justs[MAX_NUM_SIGNATURES]) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   accum_t aout;
   onejusts_t jin;
   setOneJusts(justs,&jin);
@@ -2065,7 +1836,7 @@ Accum Handler::callTEEaccumComb(Just justs[MAX_NUM_SIGNATURES]) {
 // a simpler version of callTEEaccum for when all votes are for the same payload
 Accum Handler::callTEEaccumCombSp(just_t just) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ROL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   accum_t aout;
   sgx_status_t ret;
   sgx_status_t status = COMB_TEEaccumSp(global_eid, &ret, &just, &aout);
@@ -2082,7 +1853,7 @@ Accum Handler::callTEEaccumCombSp(just_t just) {
 
 Just Handler::callTEEsignComb() {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   just_t jout;
   sgx_status_t ret;
   sgx_status_t status = COMB_TEEsign(global_eid, &ret, &jout);
@@ -2099,7 +1870,7 @@ Just Handler::callTEEsignComb() {
 
 Just Handler::callTEEprepareComb(Hash h, Accum acc) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   just_t jout;
   accum_t ain;
   setAccum(acc,&ain);
@@ -2120,7 +1891,7 @@ Just Handler::callTEEprepareComb(Hash h, Accum acc) {
 
 Just Handler::callTEEstoreComb(Just j) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   just_t jout;
   just_t jin;
   setJust(j,&jin);
@@ -2145,19 +1916,12 @@ Just Handler::callTEEstoreComb(Just j) {
 bool Handler::callTEEverifyFree(Auths auths, std::string s) {
   auto start = std::chrono::steady_clock::now();
   bool b = false;
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL)
   payload_t pin;
   setPayload(s,&pin);
   auths_t ain;
   setAuths(auths,&ain);
   sgx_status_t ret;
   sgx_status_t status = FREE_TEEverify(global_eid, &ret, &pin, &ain, &b);
-#else
-  // TODO
-  if (DEBUG0) std::cout << KRED << nfo() << "EXIT!(2)" << KNRM << std::endl;
-  exit(0);
-  //b = tf.TEEverify(this->nodes,j);
-#endif
   auto end = std::chrono::steady_clock::now();
   double time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
   stats.addTEEverify(time);
@@ -2169,7 +1933,6 @@ bool Handler::callTEEverifyFree(Auths auths, std::string s) {
 bool Handler::callTEEverifyFree2(Auths auths1, std::string s1, Auths auths2, std::string s2) {
   auto start = std::chrono::steady_clock::now();
   bool b = false;
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL)
   payload_t pin1;
   setPayload(s1,&pin1);
   auths_t ain1;
@@ -2180,12 +1943,6 @@ bool Handler::callTEEverifyFree2(Auths auths1, std::string s1, Auths auths2, std
   setAuths(auths2,&ain2);
   sgx_status_t ret;
   sgx_status_t status = FREE_TEEverify2(global_eid, &ret, &pin1, &ain1, &pin2, &ain2, &b);
-#else
-  // TODO
-  if (DEBUG0) std::cout << KRED << nfo() << "EXIT!(3)" << KNRM << std::endl;
-  exit(0);
-  //b = tf.TEEverify(this->nodes,j);
-#endif
   auto end = std::chrono::steady_clock::now();
   double time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
   stats.addTEEverify(time);
@@ -2197,7 +1954,6 @@ bool Handler::callTEEverifyFree2(Auths auths1, std::string s1, Auths auths2, std
 Auth Handler::callTEEauthFree(std::string s) {
   auto start = std::chrono::steady_clock::now();
   Auth a;
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL)
   payload_t pin;
   setPayload(s,&pin);
   auth_t aout;
@@ -2205,12 +1961,6 @@ Auth Handler::callTEEauthFree(std::string s) {
   sgx_status_t status = FREE_TEEauth(global_eid, &ret, &pin, &aout);
   a = getAuth(&aout);
   //b = (bool)bout;
-#else
-  // TODO
-  if (DEBUG0) std::cout << KRED << nfo() << "EXIT!(4)" << KNRM << std::endl;
-  exit(0);
-  //b = tf.TEEverify(this->nodes,j);
-#endif
   auto end = std::chrono::steady_clock::now();
   double time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
   stats.addTEEverify(time);
@@ -2263,34 +2013,9 @@ std::string h2sx(hash_t hash) {
 }
 
 
-/*
-HJust Handler::callTEEprepareFree(Hash h) {
-  auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(CHAINED_CHEAP_AND_QUICK)
-  hjust_t jout;
-  hash_t hin;
-  setHash(h,&hin);
-  if (DEBUG1) std::cout << KLBLU << nfo() << "preparing hash:" << h2s(hin) << KNRM << std::endl;
-  if (DEBUG1) std::cout << KLBLU << nfo() << "preparing hash:" << h2sx(hin) << KNRM << std::endl;
-  sgx_status_t ret;
-  sgx_status_t status = FREE_TEEprepare(global_eid, &ret, &hin, &jout);
-  HJust just = getHJust(&jout);
-#else
-  HJust just; //TODO: = tc.TEEprepare(this->nodes,h,acc);
-  exit(0);
-#endif
-  auto end = std::chrono::steady_clock::now();
-  double time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-  stats.addTEEprepare(time);
-  stats.addTEEtime(time);
-  return just;
-}
-*/
-
-
 FVJust Handler::callTEEstoreFree(PJust j) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   fvjust_t jout;
   pjust_t jin;
   setPJust(j,&jin);
@@ -2312,7 +2037,7 @@ FVJust Handler::callTEEstoreFree(PJust j) {
 
 HAccum Handler::callTEEaccumFree(FJust high, FJust justs[MAX_NUM_SIGNATURES-1], Hash hash) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   haccum_t aout;
   fjust_t jin;
   fjusts_t jsin;
@@ -2339,7 +2064,7 @@ HAccum Handler::callTEEaccumFree(FJust high, FJust justs[MAX_NUM_SIGNATURES-1], 
 // a simpler version of callTEEaccum for when all votes are for the same payload
 HAccum Handler::callTEEaccumFreeSp(ofjust_t just, Hash hash) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   haccum_t aout;
   hash_t hin;
   setHash(hash,&hin);
@@ -2366,7 +2091,7 @@ HAccum Handler::callTEEaccumFreeSp(ofjust_t just, Hash hash) {
 
 OPproposal Handler::callTEEprepareOP(Hash h) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD)
+#if 0
   opproposal_t pout;
   hash_t hin;
   setHash(h,&hin);
@@ -2390,7 +2115,7 @@ OPproposal Handler::callTEEprepareOP(Hash h) {
 
 OPstore Handler::callTEEstoreOP(OPproposal prop) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD)
+#if 0
   opstore_t sout;
   opproposal_t pin;
   setOPproposal(prop,&pin);
@@ -2413,7 +2138,7 @@ OPstore Handler::callTEEstoreOP(OPproposal prop) {
 bool Handler::callTEEverifyOP(Auths auths, std::string s) {
   auto start = std::chrono::steady_clock::now();
   bool b = false;
-#if defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD)
+#if 0
   payload_t pin;
   setPayload(s,&pin);
   auths_t ain;
@@ -2437,7 +2162,7 @@ bool Handler::callTEEverifyOP(Auths auths, std::string s) {
 
 OPaccum Handler::callTEEaccumOp(OPstore high, OPstore justs[MAX_NUM_SIGNATURES-1]) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD)
+#if 0
   if (DEBUG1) std::cout << KBLU << nfo() << "(callTEEaccumOP)" << KNRM << std::endl;
   //exit(0);
   opaccum_t aout;
@@ -2464,7 +2189,7 @@ OPaccum Handler::callTEEaccumOp(OPstore high, OPstore justs[MAX_NUM_SIGNATURES-1
 // a simpler version of callTEEaccum for when all votes are for the same payload
 OPaccum Handler::callTEEaccumOpSp(OPprepare just) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD)
+#if 0
   if (DEBUG1) std::cout << KBLU << nfo() << "callTEEaccumOpSp:" << just.prettyPrint() << KNRM << std::endl;
   //exit(0);
   opaccum_t aout;
@@ -2492,7 +2217,7 @@ OPaccum Handler::callTEEaccumOpSp(OPprepare just) {
 
 OPvote Handler::callTEEvoteOP(Hash h) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD)
+#if 0
   opvote_t vout;
   hash_t hin;
   setHash(h,&hin);
@@ -2520,7 +2245,7 @@ OPvote Handler::callTEEvoteOP(Hash h) {
 
 Just Handler::callTEEsignCh() {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   just_t jout;
   sgx_status_t ret;
   sgx_status_t status = CH_TEEsign(global_eid, &ret, &jout);
@@ -2538,7 +2263,7 @@ Just Handler::callTEEsignCh() {
 
 Just Handler::callTEEprepareCh(JBlock block, JBlock block0, JBlock block1) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   just_t jout;
   // 1st block
   jblock_t jin;
@@ -2570,7 +2295,7 @@ Just Handler::callTEEprepareCh(JBlock block, JBlock block0, JBlock block1) {
 
 Just Handler::callTEEsignChComb() {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   just_t jout;
   sgx_status_t ret;
   sgx_status_t status = CH_COMB_TEEsign(global_eid, &ret, &jout);
@@ -2588,7 +2313,7 @@ Just Handler::callTEEsignChComb() {
 
 Just Handler::callTEEprepareChComb(CBlock block, Hash hash) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   just_t jout;
   // 1st block
   cblock_t cin;
@@ -2615,7 +2340,7 @@ Just Handler::callTEEprepareChComb(CBlock block, Hash hash) {
 
 Accum Handler::callTEEaccumChComb(Just justs[MAX_NUM_SIGNATURES]) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   accum_t aout;
   onejusts_t jin;
   setOneJusts(justs,&jin);
@@ -2636,7 +2361,7 @@ Accum Handler::callTEEaccumChComb(Just justs[MAX_NUM_SIGNATURES]) {
 // a simpler version of callTEEaccumChComb for when all votes are for the same payload
 Accum Handler::callTEEaccumChCombSp(just_t just) {
   auto start = std::chrono::steady_clock::now();
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD) || defined(CHAINED_CHEAP_AND_QUICK)
+#if defined(BASIC_ROLL)
   accum_t aout;
   sgx_status_t ret;
   sgx_status_t status = CH_COMB_TEEaccumSp(global_eid, &ret, &just, &aout);
@@ -2970,115 +2695,10 @@ void Handler::getStarted() {
   // We start the timer
   //setTimer();
 
-// CHEAP_AND_QUICK - DAMYSUS
-#if defined(BASIC_CHEAP_AND_QUICK)
-  Just j = callTEEsignComb();
-  if (j.getSigns().getSize() == 1) {
-    MsgNewViewComb msg(j.getRData(),j.getSigns().get(0));
-    if (DEBUG1) std::cout << KBLU << nfo() << "starting with:" << msg.prettyPrint() << KNRM << std::endl;
-    if (amCurrentLeader()) { handleNewviewComb(msg); }
-    else { sendMsgNewViewComb(msg,recipients); }
-  }
-  if (DEBUG) std::cout << KBLU << nfo() << "sent new-view to leader(" << leader << ")" << KNRM << std::endl;
-
-// FREE
-#elif defined(BASIC_FREE) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ROTE)
-  // TODO[ACHILLES]
-  // For the BASIC_DAMYSUS_ROTE version:
-  //   since this is the initial view, no increment will be performed, so no need to use ROTE
-  //
-  // DAMYSUS + PACEMAKER:
-  //   We assume that nodes don't start by synchronizing, so run the same code as Damysus
-  //
-  // we still need more messages to get started
-  this->prepjust = PJust(Hash(false),0,Auth(false),Auths());
-  // if (DEBUG1) std::cout << KLRED << nfo() << "storing while starting" << KNRM << std::endl;
-  FVJust j = callTEEstoreFree(this->prepjust);
-  this->lastPMstore = j;
-  if (DEBUG1) { std::cout << KLMAG << nfo() << "store certificate is now: " << this->lastPMstore.prettyPrint()
-                          << KNRM << std::endl; }
-  //if (DEBUG1) std::cout << KLRED << nfo() << "stored" << KNRM << std::endl;
-  MsgNewViewFree msg(j.getData(),j.getAuth2());
-  if (DEBUG1) std::cout << KLRED << nfo() << "starting with:" << msg.prettyPrint() << KNRM << std::endl;
-  if (amCurrentLeader()) { handleNewviewFree(msg); }
-  else { sendMsgNewViewFree(msg,recipients); }
-  if (DEBUG) std::cout << KBLU << nfo() << "sent new-view to leader(" << leader << ")" << KNRM << std::endl;
-
-// ROLL
-#elif defined(BASIC_ROLL)
   // starting a view
   //this->lastRBstore = RBstoreAuth(RBstore(),Auth());
   if (DEBUG1) std::cout << KLRED << nfo() << "initial store:" << this->lastRBstore.prettyPrint() << KNRM << std::endl;
   startNewViewOrJoinRB(this->lastRBstore);
-
-// ONEP
-#elif defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD)
-  this->opprep=OPprepare(0,Hash(false),0,Auths());
-  MsgNewViewOPA msg(this->opprep);
-  if (DEBUG1) std::cout << KLRED << nfo() << "starting with:" << msg.prettyPrint() << KNRM << std::endl;
-  if (amCurrentLeader()) { handleNewviewOP(msg); }
-  else { sendMsgNewViewOP(msg,recipients); }
-  if (DEBUG) std::cout << KBLU << nfo() << "sent new-view to leader(" << leader << ")" << KNRM << std::endl;
-
-// QUICK
-#elif defined(BASIC_QUICK) || defined(BASIC_QUICK_DEBUG)
-  MsgNewViewAcc msg = createMsgNewViewAcc();
-  if (DEBUG1) std::cout << KBLU << nfo() << "starting with:" << msg.prettyPrint() << KNRM << std::endl;
-  if (amCurrentLeader()) { handleNewviewAcc(msg); }
-  else { sendMsgNewViewAcc(msg,recipients); }
-  if (DEBUG) std::cout << KBLU << nfo() << "sent new-view to leader(" << leader << ")" << KNRM << std::endl;
-
-// CHEAP
-#elif defined(BASIC_CHEAP) || defined(BASIC_BASELINE)
-  Just j = callTEEsign();
-  if (DEBUG1) std::cout << KBLU << nfo() << "initial just:" << j.prettyPrint() << KNRM << std::endl;
-  MsgNewView msg(j.getRData(),j.getSigns());
-  if (DEBUG1) std::cout << KBLU << nfo() << "starting with:" << msg.prettyPrint() << KNRM << std::endl;
-  if (amCurrentLeader()) { handleNewview(msg); }
-  else { sendMsgNewView(msg,recipients); }
-  if (DEBUG) std::cout << KBLU << nfo() << "sent new-view to leader(" << leader << ")" << KNRM << std::endl;
-
-// CHAINED BASELINE
-#elif defined(CHAINED_BASELINE)
-  // We start voting
-  Just j = callTEEsignCh();
-  if (DEBUG1) std::cout << KBLU << nfo() << "initial just:" << j.prettyPrint() << KNRM << std::endl;
-  MsgNewViewCh msg(j.getRData(),j.getSigns().get(0));
-  if (DEBUG1) std::cout << KBLU << nfo() << "starting with:" << msg.prettyPrint() << KNRM << std::endl;
-  // The view starts at 1 here
-  this->view = 1;
-  // we store the genesis block at view 0
-  this->jblocks[0] = JBlock();
-  stats.startExecTime(0,std::chrono::steady_clock::now());
-  // We handle the message
-  if (amCurrentLeader()) { handleNewviewCh(msg); }
-  else {
-    sendMsgNewViewCh(msg,nextRecipients);
-    handleEarlierMessagesCh();
-  }
-  if (DEBUG) std::cout << KBLU << nfo() << "sent new-view to leader(" << nextLeader << ")" << KNRM << std::endl;
-
-// CHAINED CHEAP AND QUICK
-#elif defined(CHAINED_CHEAP_AND_QUICK) || defined(CHAINED_CHEAP_AND_QUICK_DEBUG)
-  // We start voting
-  Just j = callTEEsignChComb();
-  if (DEBUG1) std::cout << KBLU << nfo() << "initial just:" << j.prettyPrint() << KNRM << std::endl;
-  MsgNewViewChComb msg(j.getRData(),j.getSigns().get(0));
-  if (DEBUG1) std::cout << KBLU << nfo() << "starting with:" << msg.prettyPrint() << KNRM << std::endl;
-  // The view starts at 1 here
-  this->view = 1;
-  // we store the genesis block at view 0
-  this->cblocks[0] = CBlock();
-  stats.startExecTime(0,std::chrono::steady_clock::now());
-  if (DEBUG1) std::cout << KBLU << nfo() << "initial block is:" << this->cblocks[0].prettyPrint() << KNRM << std::endl;
-  // We handle the message
-  if (amCurrentLeader()) { handleNewviewChComb(msg); }
-  else {
-    sendMsgNewViewChComb(msg,nextRecipients);
-    handleEarlierMessagesChComb();
-  }
-  if (DEBUG) std::cout << KBLU << nfo() << "sent new-view to leader(" << nextLeader << ")" << KNRM << std::endl;
-#endif
 }
 
 
@@ -3200,11 +2820,7 @@ void Handler::recordStats() {
   //fileThroughputHandle.close();
 
   // Latency
-#if defined (CHAINED_BASELINE) || defined(CHAINED_CHEAP_AND_QUICK) || defined(CHAINED_CHEAP_AND_QUICK_DEBUG)
-  double latencyView = (stats.getExecTimeAvg() / 1000)/* milli-seconds spent on views */;
-#else
   double latencyView = (totv.tot/totv.n / 1000)/* milli-seconds spent on views */;
-#endif
 
   // Handle
   double handle = (toth.tot / 1000); /* milli-seconds spent on handling messages */
@@ -4934,14 +4550,7 @@ void Handler::preCommitFree(View view) {
     if (DEBUG5) std::cout << KLBLU << nfo() << "hash of logged prepare:" << msgPrep.just.getHash().toString() << KNRM << std::endl;
     PJust pjust    = msgPrep.just;
     this->prepjust = pjust;
-
-#if defined(BASIC_DAMYSUS_ROTE)
-    // now needs to store and increment its counter, so send signed counter first
-    if (DEBUG1) std::cout << KLRED << nfo() << "[ROTE] sending counter before storing" << KNRM << std::endl;
-    triggeringCounterRote(this->view);
-#else
     preCommitOnJustFree(pjust);
-#endif
   }
 }
 
@@ -5027,13 +4636,7 @@ void Handler::respondToPrepareOnJustFree(PJust pjust) {
 void Handler::respondToPrepareFree(MsgPrepareFree msg) {
   PJust pjust = msg.just;
   this->prepjust = pjust;
-
-#if defined(BASIC_DAMYSUS_ROTE)
-  if (DEBUG1) std::cout << KLRED << nfo() << "[ROTE] sending counter before replying to prepare (storing)" << KNRM << std::endl;
-  triggeringCounterRote(this->view);
-#else
   respondToPrepareOnJustFree(pjust);
-#endif
 }
 
 
@@ -5137,26 +4740,7 @@ void Handler::startNewViewFree() {
   }
 
   FJust just = this->nvjust;
-#if defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS3_PACEMAKER)
-  //startNewViewFreeOn(just);
-  startNewViewOrSyncFree(just);
-#elif defined (BASIC_DAMYSUS_ROTE)
-  if ((this->myid < this->numJoiners)
-      && (this->view % this->joinPeriod == 0)) {
-    restartFreeRote();
-  } else {
-    startNewViewFreeOn(just);
-  }
-#elif defined(BASIC_DAMYSUS_ACHILLES)
-  if ((this->myid < this->numJoiners)
-      && (this->view % this->joinPeriod == 0)) {
-    restartFreeAchilles();
-  } else {
-    startNewViewFreeOn(just);
-  }
-#else
   startNewViewFreeOn(just);
-#endif
 }
 
 
@@ -5353,20 +4937,11 @@ void Handler::startNewViewFreeOn(FJust just) {
 
   // generate justifications until we can generate one for the next view
   while (just.getData().getView() < this->view+1) {
-#if defined(BASIC_DAMYSUS_ROTE)
-    this->startingNewView = true;
-    // now needs to store and increment its counter, so send signed counter first
-    if (DEBUG1) std::cout << KLRED << nfo() << "[ROTE] sending counter before starting a new-view (storing)"
-                          << " - " << just.getData().getView() << " - " << this->view
-                          << KNRM << std::endl;
-    return triggeringCounterRote(just.getData().getView());
-#else
     if (DEBUG1) { std::cout << KMAG << nfo() << "catching up with stores before starting a new view ("
                             << just.getData().getView() << ","
                             << this->view << ")" << KNRM << std::endl; }
     FVJust j = triggeringStoreFree(this->prepjust);
     just = FJust(j.isSet(),j.getData(),j.getAuth2());
-#endif
   }
   // increment the view
   // *** THE NODE HAS NOW MOVED TO THE NEW-VIEW ***
@@ -5412,17 +4987,7 @@ void Handler::executeFree(FData data) {
   }
   if (this->transactions.empty()) { this->viewsWithoutNewTrans++; } else { this->viewsWithoutNewTrans = 0; }
 
-#if defined(BASIC_DAMYSUS_PACEMAKER)
-  std::string hdr = "DAMP-EXECUTE";
-#elif defined(BASIC_DAMYSUS_ACHILLES)
-  std::string hdr = "DAMA-EXECUTE";
-#elif defined(BASIC_DAMYSUS3_PACEMAKER)
-  std::string hdr = "DAMQ-EXECUTE";
-#elif defined(BASIC_DAMYSUS_ROTE)
-  std::string hdr = "DAMR-EXECUTE";
-#else
   std::string hdr = "FREE-EXECUTE";
-#endif
 
   // Execute
   // TODO: We should wait until we received the block corresponding to the hash to execute
@@ -5971,21 +5536,7 @@ void Handler::startNewViewOP() {
   // and round 0, then send a new-view message
   if (prep.getView() == this->view - 1) {
     if (DEBUG1) std::cout << KBLU << nfo() << "start-new-view:ok" << KNRM << std::endl;
-
-    // if BASIC_ONEPB, then we send new-view messages instead of prepare certificates (case 2)
-#if defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(BASIC_ONEPD)
-    int i = 0;
-    if (this->opdist > 0) { i = this->view % this->opdist; } //distr(generator);
-    if (DEBUG1X) std::cout << KBLU << nfo() << "rand=" << i << KNRM << std::endl;
-    // if i=0 then force running the normal code
-    if (i > 0 || this->view == 1) {
-      startNewViewOPA(prep);
-    } else {
-      startNewViewOPB();
-    }
-#else
     startNewViewOPA(prep);
-#endif
 
   } else {
     if (DEBUG1) std::cout << KBLU << nfo()
@@ -6317,18 +5868,6 @@ void Handler::prepareOpb(View v) {
       if (DEBUG1) std::cout << KBLU << nfo() << "maybePrep:" << maybePrep.prettyPrint() << KNRM << std::endl;
 
       unsigned int opcase = 0;
-#if defined(BASIC_ONEPB)
-      opcase = 1;
-#elif defined(BASIC_ONEPC)
-      int i = 0;
-      if (this->opdist > 0) { i = this->view % this->opdist; } //distr(generator);
-      if (DEBUG1X) std::cout << KBLU << nfo() << "rand=" << i << KNRM << std::endl;
-      // if i=0 then force running the normal code
-      if (i > 0) { opcase = 0; } else { opcase = 2; }
-#elif defined(BASIC_ONEPD) // not used anymore
-      opcase = 3;
-#else
-#endif
 
       if (opcase <=1 && nvs.nv.cert.store.getView() == this->view-1 && maybePrep.getAuths().getSize() == this->qsize) {
         stats.incNumOnePBs();
@@ -6772,15 +6311,7 @@ void Handler::executeOP(OPprepare cert) {
 
   // Execute
   // TODO: We should wait until we received the block corresponding to the hash to execute
-#if defined(BASIC_ONEPB)
-  if (DEBUG0 && DEBUGE) std::cout << KRED << nfo() << "OPB-EXECUTE(" << this->view << "/" << this->maxViews << ":" << time << ")" << stats.toString() << KNRM << std::endl;
-#elif defined(BASIC_ONEPC)
-  if (DEBUG0 && DEBUGE) std::cout << KRED << nfo() << "OPC-EXECUTE(" << this->view << "/" << this->maxViews << ":" << time << ")" << stats.toString() << KNRM << std::endl;
-#elif defined(BASIC_ONEPD)
-  if (DEBUG0 && DEBUGE) std::cout << KRED << nfo() << "OPD-EXECUTE(" << this->view << "/" << this->maxViews << ":" << time << ")" << stats.toString() << KNRM << std::endl;
-#else
   if (DEBUG0 && DEBUGE) std::cout << KRED << nfo() << "OP-EXECUTE(" << this->view << "/" << this->maxViews << ":" << time << ")" << stats.toString() << KNRM << std::endl;
-#endif
 
   // Reply
   replyHash(cert.getHash());

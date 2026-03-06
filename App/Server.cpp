@@ -152,70 +152,6 @@ int main(int argc, char const *argv[]) {
   if (DEBUG) std::cout << KYEL << "initializing handler" << KNRM << std::endl;
 
   long unsigned int size = std::max({sizeof(MsgTransaction), sizeof(MsgReply), sizeof(MsgStart)});
-
-#if defined(BASIC_CHEAP) || defined(BASIC_BASELINE)
-  size = std::max({size,
-                   sizeof(MsgNewView),
-                   sizeof(MsgPrepare),
-                   sizeof(MsgLdrPrepare),
-                   sizeof(MsgPreCommit),
-                   sizeof(MsgCommit)});
-#elif defined(BASIC_QUICK) || defined(BASIC_QUICK_DEBUG)
-  size = std::max({size,
-                   sizeof(MsgNewViewAcc),
-                   sizeof(MsgLdrPrepareAcc),
-                   sizeof(MsgPrepareAcc),
-                   sizeof(MsgPreCommitAcc)});
-#elif defined(BASIC_CHEAP_AND_QUICK)
-  size = std::max({size,
-                   sizeof(MsgNewViewComb),
-                   sizeof(MsgLdrPrepareComb),
-                   sizeof(MsgPrepareComb),
-                   sizeof(MsgPreCommitComb)});
-#elif defined(BASIC_FREE)
-  size = std::max({size,
-                   sizeof(MsgNewViewFree),
-                   sizeof(MsgLdrPrepareFree),
-                   sizeof(MsgBckPrepareFree),
-                   sizeof(MsgPrepareFree),
-                   sizeof(MsgPreCommitFree)});
-#elif defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS3_PACEMAKER) // Same as FREE + Pacemaker messages
-  size = std::max({size,
-                   sizeof(MsgNewViewFree),
-                   sizeof(MsgLdrPrepareFree),
-                   sizeof(MsgBckPrepareFree),
-                   sizeof(MsgPrepareFree),
-                   sizeof(MsgPreCommitFree),
-                   sizeof(MsgPmSync),
-                   sizeof(MsgPmSyncTC),
-                   sizeof(MsgPmSyncVote),
-                   sizeof(MsgPmSyncVoteQc)});
-#elif defined(BASIC_DAMYSUS_ACHILLES)
-  size = std::max({size,
-                   sizeof(MsgNewViewFree),
-                   sizeof(MsgLdrPrepareFree),
-                   sizeof(MsgBckPrepareFree),
-                   sizeof(MsgPrepareFree),
-                   sizeof(MsgPreCommitFree),
-                   sizeof(MsgPmSync),
-                   sizeof(MsgPmSyncTC),
-                   sizeof(MsgPmSyncVote),
-                   sizeof(MsgPmSyncVoteQc),
-                   sizeof(MsgRestart),
-                   sizeof(MsgReplyRestart)});
-#elif defined(BASIC_DAMYSUS_ROTE) // Same as FREE + ROTE messages
-  size = std::max({size,
-                   sizeof(MsgNewViewFree),
-                   sizeof(MsgLdrPrepareFree),
-                   sizeof(MsgBckPrepareFree),
-                   sizeof(MsgPrepareFree),
-                   sizeof(MsgPreCommitFree),
-                   sizeof(MsgCounterRote),
-                   sizeof(MsgEchoRote),
-                   sizeof(MsgAckRote),
-                   sizeof(MsgRequestCounterRote),
-                   sizeof(MsgReplyCounterRote)});
-#elif defined(BASIC_ROLL)
   size = std::max({size,
                    sizeof(MsgNewViewRB),
                    sizeof(MsgLdrPrepareRB),
@@ -228,60 +164,10 @@ int main(int argc, char const *argv[]) {
                    sizeof(MsgSyncVote),
                    sizeof(MsgSyncVoteQc),
                    sizeof(MsgJoin)});
-#elif defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC)
-  size = std::max({size,
-                   sizeof(MsgNewViewOPA),
-                   sizeof(MsgNewViewOPB),
-                   sizeof(MsgLdrPrepareOPA),
-                   sizeof(MsgLdrPrepareOPB),
-                   sizeof(MsgLdrPrepareOPC),
-                   sizeof(MsgBckPrepareOP),
-                   sizeof(MsgPreCommitOP),
-                   sizeof(MsgLdrAddOP),
-                   sizeof(MsgBckAddOP)});
-#elif defined(CHAINED_BASELINE)
-  size = std::max({size,
-                   sizeof(MsgNewViewCh),
-                   sizeof(MsgLdrPrepareCh),
-                   sizeof(MsgPrepareCh)});
-#elif defined(CHAINED_CHEAP_AND_QUICK) || defined(CHAINED_CHEAP_AND_QUICK_DEBUG)
-  size = std::max({size,
-                   sizeof(MsgNewViewChComb),
-                   sizeof(MsgLdrPrepareChComb),
-                   sizeof(MsgPrepareChComb)});
-#endif
 
   if (DEBUG0) {
     std::cout << KYEL << "[" << myid << "]sizes"
-              << ":newview="        << sizeof(MsgNewView)
-              << ":prepare="        << sizeof(MsgPrepare)
-              << ":ldrprepare="     << sizeof(MsgLdrPrepare)
-              << ":precommit="      << sizeof(MsgPreCommit)
-              << ":commit="         << sizeof(MsgCommit)
               << ":transaction="    << sizeof(MsgTransaction)
-              //<< ":start="          << sizeof(MsgStart)
-              << ":newviewacc="     << sizeof(MsgNewViewAcc)
-              << ":ldrprepareacc="  << sizeof(MsgLdrPrepareAcc)
-              << ":prepareacc="     << sizeof(MsgPrepareAcc)
-              << ":precommitacc="   << sizeof(MsgPreCommitAcc)
-              << ":newviewcomb="    << sizeof(MsgNewViewComb)
-              << ":ldrpreparecomb=" << sizeof(MsgLdrPrepareComb)
-              << ":preparecomb="    << sizeof(MsgPrepareComb)
-              << ":precommitcomb="  << sizeof(MsgPreCommitComb)
-              << ":newviewfree="    << sizeof(MsgNewViewFree)
-              << ":ldrpreparefree=" << sizeof(MsgLdrPrepareFree)
-              << ":bckpreparefree=" << sizeof(MsgBckPrepareFree)
-              << ":preparefree="    << sizeof(MsgPrepareFree)
-              << ":precommitfree="  << sizeof(MsgPreCommitFree)
-              << ";newviewopa="     << sizeof(MsgNewViewOPA)
-              << ";newviewopb="     << sizeof(MsgNewViewOPB)
-              << ";ldrprepareopa="  << sizeof(MsgLdrPrepareOPA)
-              << ";ldrprepareopb="  << sizeof(MsgLdrPrepareOPB)
-              << ";ldrprepareopc="  << sizeof(MsgLdrPrepareOPC)
-              << ";bckprepareop="   << sizeof(MsgBckPrepareOP)
-              << ";precommitop="    << sizeof(MsgPreCommitOP)
-              << ";ldraddop="       << sizeof(MsgLdrAddOP)
-              << ";bckaddop="       << sizeof(MsgBckAddOP)
               << ";newviewrb="      << sizeof(MsgNewViewRB)
               << ";ldrpreparerb="   << sizeof(MsgLdrPrepareRB)
               << ";bckpreparerb="   << sizeof(MsgBckPrepareRB)

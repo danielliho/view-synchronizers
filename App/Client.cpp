@@ -23,23 +23,17 @@ using MsgNet    = salticidae::MsgNetwork<uint8_t>;
 using Clock     = std::chrono::time_point<std::chrono::steady_clock>;
 using TransInfo = std::tuple<unsigned int,Clock,Transaction>; // int: number of replies
 
-#ifdef COMB
-const uint8_t MsgNewViewComb::opcode;
-const uint8_t MsgLdrPrepareComb::opcode;
-const uint8_t MsgPrepareComb::opcode;
-const uint8_t MsgPreCommitComb::opcode;
-#elif defined(ACCUM)
-const uint8_t MsgNewViewAcc::opcode;
-const uint8_t MsgLdrPrepareAcc::opcode;
-const uint8_t MsgPrepareAcc::opcode;
-const uint8_t MsgPreCommitAcc::opcode;
-#else
-const uint8_t MsgNewView::opcode;
-const uint8_t MsgPrepare::opcode;
-const uint8_t MsgLdrPrepare::opcode;
-const uint8_t MsgPreCommit::opcode;
-const uint8_t MsgCommit::opcode;
-#endif
+const uint8_t MsgNewViewRB::opcode;
+const uint8_t MsgLdrPrepareRB::opcode;
+const uint8_t MsgBckPrepareRB::opcode;
+const uint8_t MsgLdrPreCommitRB::opcode;
+const uint8_t MsgBckPreCommitRB::opcode;
+const uint8_t MsgDecideRB::opcode;
+const uint8_t MsgJoin::opcode;
+const uint8_t MsgSync::opcode;
+const uint8_t MsgSyncTC::opcode;
+const uint8_t MsgSyncVote::opcode;
+const uint8_t MsgSyncVoteQc::opcode;
 
 const uint8_t MsgTransaction::opcode;
 const uint8_t MsgReply::opcode;
@@ -70,12 +64,7 @@ std::string statsThroughputLatency;
 std::string debugThroughputLatency;
 
 
-// In the chained versions, as we start with node 1 as the leader, we also send the first transaction to 1
-#if defined(CHAINED_BASELINE) || defined(CHAINED_CHEAP_AND_QUICK) || defined(CHAINED_CHEAP_AND_QUICK_DEBUG)
-bool skipFirst = true;
-#else
 bool skipFirst = false;
-#endif
 
 
 
@@ -333,70 +322,6 @@ int main(int argc, char const *argv[]) {
 
 
   long unsigned int size = std::max({sizeof(MsgTransaction), sizeof(MsgReply), sizeof(MsgStart)});
-
-  #if defined(BASIC_CHEAP) || defined(BASIC_BASELINE)
-  size = std::max({size,
-                   sizeof(MsgNewView),
-                   sizeof(MsgPrepare),
-                   sizeof(MsgLdrPrepare),
-                   sizeof(MsgPreCommit),
-                   sizeof(MsgCommit)});
-  #elif defined(BASIC_QUICK) || defined(BASIC_QUICK_DEBUG)
-  size = std::max({size,
-                   sizeof(MsgNewViewAcc),
-                   sizeof(MsgLdrPrepareAcc),
-                   sizeof(MsgPrepareAcc),
-                   sizeof(MsgPreCommitAcc)});
-  #elif defined(BASIC_CHEAP_AND_QUICK)
-  size = std::max({size,
-                   sizeof(MsgNewViewComb),
-                   sizeof(MsgLdrPrepareComb),
-                   sizeof(MsgPrepareComb),
-                   sizeof(MsgPreCommitComb)});
-  #elif defined(BASIC_FREE)
-  size = std::max({size,
-                   sizeof(MsgNewViewFree),
-                   sizeof(MsgLdrPrepareFree),
-                   sizeof(MsgBckPrepareFree),
-                   sizeof(MsgPrepareFree),
-                   sizeof(MsgPreCommitFree)});
-#elif defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS3_PACEMAKER) // Same as FREE + Pacemaker messages
-  size = std::max({size,
-                   sizeof(MsgNewViewFree),
-                   sizeof(MsgLdrPrepareFree),
-                   sizeof(MsgBckPrepareFree),
-                   sizeof(MsgPrepareFree),
-                   sizeof(MsgPreCommitFree),
-                   sizeof(MsgPmSync),
-                   sizeof(MsgPmSyncTC),
-                   sizeof(MsgPmSyncVote),
-                   sizeof(MsgPmSyncVoteQc)});
-#elif defined(BASIC_DAMYSUS_ACHILLES)
-  size = std::max({size,
-                   sizeof(MsgNewViewFree),
-                   sizeof(MsgLdrPrepareFree),
-                   sizeof(MsgBckPrepareFree),
-                   sizeof(MsgPrepareFree),
-                   sizeof(MsgPreCommitFree),
-                   sizeof(MsgPmSync),
-                   sizeof(MsgPmSyncTC),
-                   sizeof(MsgPmSyncVote),
-                   sizeof(MsgPmSyncVoteQc),
-                   sizeof(MsgRestart),
-                   sizeof(MsgReplyRestart)});
-#elif defined(BASIC_DAMYSUS_ROTE) // Same as FREE + ROTE messages
-  size = std::max({size,
-                   sizeof(MsgNewViewFree),
-                   sizeof(MsgLdrPrepareFree),
-                   sizeof(MsgBckPrepareFree),
-                   sizeof(MsgPrepareFree),
-                   sizeof(MsgPreCommitFree),
-                   sizeof(MsgCounterRote),
-                   sizeof(MsgEchoRote),
-                   sizeof(MsgAckRote),
-                   sizeof(MsgRequestCounterRote),
-                   sizeof(MsgReplyCounterRote)});
-  #elif defined(BASIC_ROLL)
   size = std::max({size,
                    sizeof(MsgNewViewRB),
                    sizeof(MsgLdrPrepareRB),
@@ -409,25 +334,6 @@ int main(int argc, char const *argv[]) {
                    sizeof(MsgSyncVote),
                    sizeof(MsgSyncVoteQc),
                    sizeof(MsgJoin)});
-  #elif defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC)
-  size = std::max({size,
-                   sizeof(MsgNewViewOPA),
-                   sizeof(MsgNewViewOPB),
-                   sizeof(MsgLdrPrepareOPA),
-                   sizeof(MsgLdrPrepareOPB),
-                   sizeof(MsgBckPrepareOP),
-                   sizeof(MsgPreCommitOP)});
-  #elif defined(CHAINED_BASELINE)
-  size = std::max({size,
-                   sizeof(MsgNewViewCh),
-                   sizeof(MsgLdrPrepareCh),
-                   sizeof(MsgPrepareCh)});
-  #elif defined(CHAINED_CHEAP_AND_QUICK) || defined(CHAINED_CHEAP_AND_QUICK_DEBUG)
-  size = std::max({size,
-                   sizeof(MsgNewViewChComb),
-                   sizeof(MsgLdrPrepareChComb),
-                   sizeof(MsgPrepareChComb)});
-  #endif
 
   MsgNet::Config config;
   config.max_msg_size(size);

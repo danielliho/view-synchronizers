@@ -24,21 +24,9 @@
 
 // ------------------------------------
 // SGX related stuff
-#if defined(BASIC_CHEAP) || defined(BASIC_QUICK) || defined(BASIC_CHEAP_AND_QUICK) || defined(BASIC_DAMYSUS_PACEMAKER) || defined(BASIC_DAMYSUS3_PACEMAKER) || defined(BASIC_DAMYSUS_ACHILLES) || defined(BASIC_DAMYSUS_ROTE) || defined(BASIC_FREE) || defined(BASIC_ROLL) || defined(BASIC_ONEP) || defined(BASIC_ONEPB) || defined(BASIC_ONEPC) || defined(CHAINED_CHEAP_AND_QUICK)
-//
 #include "Enclave_u.h"
 #include "sgx_urts.h"
 #include "sgx_utils/sgx_utils.h"
-//
-#else // i.e.,  defined(BASIC_BASELINE) || defined(CHAINED_BASELINE) || defined(BASIC_QUICK_DEBUG) || defined(CHAINED_CHEAP_AND_QUICK_DEBUG)
-//
-#include "TrustedFun.h"
-#include "TrustedAccum.h"
-#include "TrustedComb.h"
-#include "TrustedCh.h"
-#include "TrustedChComb.h"
-//
-#endif
 // ------------------------------------
 
 

@@ -103,8 +103,61 @@ else
 endif
 
 # Non-SGX files
-Nsgx_App_Cpp_Files := $(wildcard App/*.cpp)
-Nsgx_App_Cpp_Files := $(filter-out App/test.cpp App/foo.cpp App/Start.cpp App/App.cpp App/Keys.cpp App/Client.cpp App/Server.cpp, $(Nsgx_App_Cpp_Files))
+# Athena-oriented explicit list (avoids wildcard-based accidental coupling)
+Nsgx_App_Cpp_Files := \
+	App/Accum.cpp \
+	App/Auth.cpp \
+	App/Auths.cpp \
+	App/Block.cpp \
+	App/Cert.cpp \
+	App/FData.cpp \
+	App/FJust.cpp \
+	App/FVJust.cpp \
+	App/Handler.cpp \
+	App/Hash.cpp \
+	App/INonce.cpp \
+	App/INonces.cpp \
+	App/Join.cpp \
+	App/Joins.cpp \
+	App/Just.cpp \
+	App/KeysFun.cpp \
+	App/Log.cpp \
+	App/NodeInfo.cpp \
+	App/Nodes.cpp \
+	App/OPaccum.cpp \
+	App/OPprepare.cpp \
+	App/OPproposal.cpp \
+	App/PJust.cpp \
+	App/RBaccumNv.cpp \
+	App/RBaccumNvAuth.cpp \
+	App/RBaccumSync.cpp \
+	App/RBaccumSyncAuth.cpp \
+	App/RBBlock.cpp \
+	App/RBnewview.cpp \
+	App/RBnewviewAuth.cpp \
+	App/RBprepare.cpp \
+	App/RBprepareAuth.cpp \
+	App/RBprepareAuths.cpp \
+	App/RBproposal.cpp \
+	App/RBstore.cpp \
+	App/RBstoreAuth.cpp \
+	App/RBstoreAuths.cpp \
+	App/RData.cpp \
+	App/Sign.cpp \
+	App/Signs.cpp \
+	App/Stats.cpp \
+	App/Sync.cpp \
+	App/SyncVote.cpp \
+	App/SyncVoteAuth.cpp \
+	App/SyncVoteAuths.cpp \
+	App/Transaction.cpp \
+	App/Transactions.cpp \
+	App/Views.cpp \
+	App/VJoins.cpp \
+	App/Void.cpp \
+	App/Vote.cpp \
+	App/Wish.cpp \
+	App/Wishes.cpp
 # Includes SGX files
 App_Cpp_Files :=  $(Nsgx_App_Cpp_Files) App/sgx_utils/sgx_utils.cpp
 App_Include_Paths := -IApp -I$(SGX_SDK)/include $(Salticidae_Include_Paths) # -I$(SGXSSL_INCLUDE_PATH)
@@ -123,8 +176,8 @@ else
 		App_C_Flags += -DNDEBUG -UEDEBUG -UDEBUG
 endif
 
-App_Cpp_Flags := $(App_C_Flags) -std=c++14 $(CFLAGS)
-App_Link_Flags := $(SGX_COMMON_CFLAGS) -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -L$(SGXSSL_UNTRUSTED_LIB_PATH) -lsgx_usgxssl $(LDLIBS) $(Salticidae_Lib_Paths) -lsalticidae
+App_Cpp_Flags := $(App_C_Flags) -std=c++14 -ffunction-sections -fdata-sections $(CFLAGS)
+App_Link_Flags := $(SGX_COMMON_CFLAGS) -Wl,--gc-sections -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -L$(SGXSSL_UNTRUSTED_LIB_PATH) -lsgx_usgxssl $(LDLIBS) $(Salticidae_Lib_Paths) -lsalticidae
 # -lpthread
 
 #$(info $$(CXX) is [${CXX}])
@@ -196,7 +249,7 @@ endif
 .PHONY: all run
 
 ifeq ($(Build_Mode), HW_RELEASE)
-all: $(App_Name) sgxclient sgxkeys $(Enclave_Name)
+all: $(App_Name) sgxclient $(Enclave_Name)
 	@echo "The project has been built in release hardware mode."
 	@echo "Please sign the $(Enclave_Name) first with your signing key before you run the $(App_Name) to launch and access the enclave."
 	@echo "To sign the enclave use the command:"
@@ -204,7 +257,7 @@ all: $(App_Name) sgxclient sgxkeys $(Enclave_Name)
 	@echo "You can also sign the enclave using an external signing tool. See User's Guide for more details."
 	@echo "To build the project in simulation mode set SGX_MODE=SIM. To build the project in prerelease mode set SGX_PRERELEASE=1 and SGX_MODE=HW."
 else
-all: $(App_Name) sgxclient sgxkeys $(Signed_Enclave_Name)
+all: $(App_Name) sgxclient $(Signed_Enclave_Name)
 endif
 
 run: all
@@ -285,4 +338,4 @@ $(Signed_Enclave_Name): $(Enclave_Name)
 .PHONY: clean
 
 clean:
-	@rm -f $(App_Name) sgxclient sgxkeys $(Enclave_Name) $(Signed_Enclave_Name) $(App_Cpp_Objects) App/Keys.o App/Client.o App/Server.o App/Enclave_u.* $(Enclave_Cpp_Objects) Enclave/Enclave_t.*
+	@rm -f $(App_Name) sgxclient $(Enclave_Name) $(Signed_Enclave_Name) $(App_Cpp_Objects) App/Keys.o App/Client.o App/Server.o App/Enclave_u.* $(Enclave_Cpp_Objects) Enclave/Enclave_t.*
