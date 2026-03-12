@@ -68,15 +68,6 @@ typedef uint8_t HEADER;
 #define HDR_BCK_PRECOMMIT_RB    0x46
 #define HDR_DECIDE_RB           0x47
 
-#define HDR_COUNTER_ROTE        0x48
-#define HDR_ECHO_ROTE           0x49
-#define HDR_ACK_ROTE            0x50
-#define HDR_REQ_COUNTER_ROTE    0x51
-#define HDR_REP_COUNTER_ROTE    0x52
-
-#define HDR_RESTART             0x53
-#define HDR_REPLY_RESTART       0x54
-
 #define HDR_PM_SYNC             0x55
 #define HDR_PM_SYNC_TC          0x56
 #define HDR_PM_SYNC_VOTE        0x57

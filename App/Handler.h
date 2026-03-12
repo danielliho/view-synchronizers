@@ -10,9 +10,6 @@
 #include "Nodes.h"
 #include "Log.h"
 #include "Stats.h"
-#include "Vote.h"
-#include "FJust.h"
-#include "PJust.h"
 #include "HJust.h"
 #include "VJust.h"
 #include "FVJust.h"
@@ -100,23 +97,10 @@ class Handler {
   std::map<View,Block> blocks; // blocks received in each view
   std::map<View,bool> prepared; // whether a view was prepared -> true for fast mode, false for slow mode
   std::map<View,JBlock> jblocks; // blocks received in each view (Chained baseline)
-  std::map<View,CBlock> cblocks; // blocks received in each view (Chained Cheap&Quick)
   Log log; // log of messages
 
   // Used for the accumulator version
   Cert qcprep;
-
-  // Used in the 'free' version - the new-view certificate generated last
-  FJust nvjust;
-  // Used in the 'free' version - the prepare certificate received last
-  PJust prepjust;
-
-  // Used in the 'ROTE' version - catching up with view in startNewViewFree
-  bool startingNewView = false;
-
-  std::map<PID,View> latestRoteCounters; // latest counters/views receveid in MsgCounterRote messages
-
-  std::set<Hash> acceptedNoncesAchilles; // set of nonces that led to a successful restart
 
   // Used in the 'OP' version - the latest prepare certificate
   OPprepare opprep;
@@ -227,21 +211,10 @@ class Handler {
 
   //void sendMsgReply(MsgReply msg, ClientNet::conn_t recipient);
 
-  void sendMsgNewViewAcc(MsgNewViewAcc msg, Peers recipients);
-  void sendMsgLdrPrepareAcc(MsgLdrPrepareAcc msg, Peers recipients);
-  void sendMsgPrepareAcc(MsgPrepareAcc msg, Peers recipients);
-  void sendMsgPreCommitAcc(MsgPreCommitAcc msg, Peers recipients);
-
   void sendMsgNewViewComb(MsgNewViewComb msg, Peers recipients);
   void sendMsgLdrPrepareComb(MsgLdrPrepareComb msg, Peers recipients);
   void sendMsgPrepareComb(MsgPrepareComb msg, Peers recipients);
   void sendMsgPreCommitComb(MsgPreCommitComb msg, Peers recipients);
-
-  void sendMsgNewViewFree(MsgNewViewFree msg, Peers recipients);
-  void sendMsgLdrPrepareFree(MsgLdrPrepareFree msg, Peers recipients);
-  void sendMsgBckPrepareFree(MsgBckPrepareFree msg, Peers recipients);
-  void sendMsgPrepareFree(MsgPrepareFree msg, Peers recipients);
-  void sendMsgPreCommitFree(MsgPreCommitFree msg, Peers recipients);
 
   void sendMsgLdrPrepareOPA(MsgLdrPrepareOPA msg, Peers recipients);
   void sendMsgLdrPrepareOPB(MsgLdrPrepareOPB msg, Peers recipients);
@@ -258,10 +231,6 @@ class Handler {
   void sendMsgPrepareCh(MsgPrepareCh msg, Peers recipients);
   void sendMsgLdrPrepareCh(MsgLdrPrepareCh msg, Peers recipients);
 
-  void sendMsgNewViewChComb(MsgNewViewChComb msg, Peers recipients);
-  void sendMsgPrepareChComb(MsgPrepareChComb msg, Peers recipients);
-  void sendMsgLdrPrepareChComb(MsgLdrPrepareChComb msg, Peers recipients);
-
   // for leaders to start the phase where nodes will log prepare certificates
   void initiatePrepare(RData rdata);
   // for leaders to start the phase where nodes will log lock certificates
@@ -277,11 +246,6 @@ class Handler {
 
   bool verifyLdrPrepareComb(MsgLdrPrepareComb msg);
   bool verifyPreCommitCombCert(MsgPreCommitComb msg);
-
-  bool verifyLdrPrepareFree(HAccum acc, Block block);
-  bool verifyPreCommitFreeCert(MsgPreCommitFree msg);
-
-  Accum newviews2acc(std::set<MsgNewViewAcc> newviews);
 
   // To start the code
   void getStarted();
@@ -318,69 +282,13 @@ class Handler {
   void handleLdrPrepare(MsgLdrPrepare msg);
   void handlePrecommit(MsgPreCommit msg);
   void handleCommit(MsgCommit msg);
+
   void handleTransaction(MsgTransaction msg);
   //void handleStart(MsgStart msg);
 
-  void handle_newview(MsgNewView msg, const PeerNet::conn_t &conn);
-  void handle_prepare(MsgPrepare msg, const PeerNet::conn_t &conn);
-  void handle_ldrprepare(MsgLdrPrepare msg, const PeerNet::conn_t &conn);
-  void handle_precommit(MsgPreCommit msg, const PeerNet::conn_t &conn);
-  void handle_commit(MsgCommit msg, const PeerNet::conn_t &conn);
   void handle_transaction(MsgTransaction msg, const ClientNet::conn_t &conn);
   void handle_start(MsgStart msg, const ClientNet::conn_t &conn);
   //void handle_stop(MsgStop msg, const ClientNet::conn_t &conn);
-
-
-
-  // ------------------------------------------------------------
-  // Quick
-  // ------
-
-  void executeCData(CData<Hash,Void> cdata);
-  void handleEarlierMessagesAcc();
-  void startNewViewAcc();
-  void startNewViewAccOn();
-  void startNewViewOrSyncAcc();
-
-  // For leaders to start preparing
-  void prepareAcc();
-  // For leaders to start pre-committing
-  void preCommitAcc(CData<Hash,Void> data);
-  // For leaders to start deciding
-  void decideAcc(CData<Hash,Void> data);
-
-  // For backups to respond to correct MsgLdrPrepareAcc messages received from leaders
-  void respondToLdrPrepareAcc(Block block);
-  // For backups to respond to MsgPrepareAcc messages receveid from leaders
-  void respondToPrepareAcc(MsgPrepareAcc msg);
-  // For backups to respond to MsgPreCommitAcc messages receveid from leaders
-  void respondToPreCommitAcc(MsgPreCommitAcc msg);
-
-  Accum callTEEaccum(Vote<Void,Cert> votes[MAX_NUM_SIGNATURES]);
-  Accum callTEEaccumSp(uvote_t vote);
-
-  bool verifyPrepareAccCert(MsgPrepareAcc msg);
-  bool verifyLdrPrepareAcc(MsgLdrPrepareAcc msg);
-  bool verifyAcc(Accum acc);
-  bool verifyPreCommitAccCert(MsgPreCommitAcc msg);
-
-  // To create MsgPrepareAcc messages in the prepare phase
-  MsgPrepareAcc createMsgPrepareAcc(Block block);
-  // To create MsgPreCommitAcc messages in the pre-commit phase
-  MsgPreCommitAcc createMsgPreCommitAcc(View view, Hash hash);
-  // To create MsgNewViewAcc messages at the beginning of a new view
-  MsgNewViewAcc createMsgNewViewAcc();
-
-  void handleNewviewAcc(MsgNewViewAcc msg);
-  void handlePrepareAcc(MsgPrepareAcc msg);
-  void handleLdrPrepareAcc(MsgLdrPrepareAcc msg);
-  void handlePreCommitAcc(MsgPreCommitAcc msg);
-
-  void handle_newviewacc(MsgNewViewAcc msg, const PeerNet::conn_t &conn);
-  void handle_prepareacc(MsgPrepareAcc msg, const PeerNet::conn_t &conn);
-  void handle_ldrprepareacc(MsgLdrPrepareAcc msg, const PeerNet::conn_t &conn);
-  void handle_precommitacc(MsgPreCommitAcc msg, const PeerNet::conn_t &conn);
-
 
 
   // ------------------------------------------------------------
@@ -423,89 +331,6 @@ class Handler {
   void handle_preparecomb(MsgPrepareComb msg, const PeerNet::conn_t &conn);
   void handle_ldrpreparecomb(MsgLdrPrepareComb msg, const PeerNet::conn_t &conn);
   void handle_precommitcomb(MsgPreCommitComb msg, const PeerNet::conn_t &conn);
-
-
-
-  // ------------------------------------------------------------
-  // Free
-  // ------
-
-  void executeFree(FData data);
-  void handleEarlierMessagesFree();
-  void startNewViewFreeOn(FJust just);
-  void startNewViewFree();
-
-  // For leaders to start preparing
-  void prepareFree();
-  // For leaders to start pre-committing
-  void preCommitFree(View view);
-  void preCommitOnJustFree(PJust pjust);
-  // For leaders to start deciding
-  void decideFree(FData data);
-  // to call TEEstore and record the certificate
-  FVJust triggeringStoreFree(PJust pjust);
-
-  // For backups to respond to correct MsgLdrPrepareFree messages received from leaders
-  void respondToLdrPrepareFree(HAccum acc);
-  // For backups to respond to MsgPrepareFree messages receveid from leaders
-  void respondToPrepareFree(MsgPrepareFree msg);
-  void respondToPrepareOnJustFree(PJust pjust);
-  // For backups to respond to MsgPreCommitFree messages receveid from leaders
-  void respondToPreCommitFree(MsgPreCommitFree msg);
-
-  HAccum newviews2accFree(MsgNewViewFree high, std::set<MsgNewViewFree> others, Hash hash);
-
-  MsgNewViewFree highestNewViewFree(std::set<MsgNewViewFree> *newviews);
-
-  bool callTEEverifyFree(Auths auths, std::string s);
-  bool callTEEverifyFree2(Auths auths1, std::string s1, Auths auths2, std::string s2);
-  Auth callTEEauthFree(std::string s);
-  Auth callTEEauthView();                          // only for the kinda ROTE version
-  //Auth callTEEauthCounter(View view, View couter); // only for the kinda ROTE version
-  HAccum callTEEaccumFree(FJust just, FJust justs[MAX_NUM_SIGNATURES], Hash hash);
-  HAccum callTEEaccumFreeSp(ofjust_t just, Hash hash);
-  Just callTEEsignFree();
-  // HJust callTEEprepareFree(Hash h);
-  FVJust callTEEstoreFree(PJust j);
-
-  void handleNewviewFree(MsgNewViewFree msg);
-  void handlePrepareFree(MsgPrepareFree msg);
-  void handleLdrPrepareFree(HAccum acc, Block blockk);
-  void handleBckPrepareFree(MsgBckPrepareFree msg);
-  void handlePreCommitFree(MsgPreCommitFree msg);
-
-  void handle_newviewfree(MsgNewViewFree msg, const PeerNet::conn_t &conn);
-  void handle_preparefree(MsgPrepareFree msg, const PeerNet::conn_t &conn);
-  void handle_ldrpreparefree(MsgLdrPrepareFree msg, const PeerNet::conn_t &conn);
-  void handle_bckpreparefree(MsgBckPrepareFree msg, const PeerNet::conn_t &conn);
-  void handle_precommitfree(MsgPreCommitFree msg, const PeerNet::conn_t &conn);
-
-  // ------------------------------------------------------------
-  // kinda ROTE - shared with FREE
-  // ------
-
-  void triggeringCounterRote(View view);
-
-  void sendMsgCounterRote(MsgCounterRote msg, Peers recipients);
-  void sendMsgEchoRote(MsgEchoRote msg, Peers recipients);
-  void sendMsgAckRote(MsgAckRote msg, Peers recipients);
-  void sendMsgRequestCounterRote(MsgRequestCounterRote msg, Peers recipients);
-  void sendMsgReplyCounterRote(MsgReplyCounterRote msg, Peers recipients);
-
-  void handleCounterRote(MsgCounterRote msg);
-  void handleEchoRote(MsgEchoRote msg);
-  void handleAckRote(MsgAckRote msg);
-
-  void handle_counter_rote(MsgCounterRote msg, const PeerNet::conn_t &conn);
-  void handle_echo_rote(MsgEchoRote msg, const PeerNet::conn_t &conn);
-  void handle_ack_rote(MsgAckRote msg, const PeerNet::conn_t &conn);
-
-  void restartFreeRote();
-  void handleRequestCounterRote(MsgRequestCounterRote msg);
-  void handleReplyCounterRote(MsgReplyCounterRote msg);
-  void handle_request_counter_rote(MsgRequestCounterRote msg, const PeerNet::conn_t &conn);
-  void handle_reply_counter_rote(MsgReplyCounterRote msg, const PeerNet::conn_t &conn);
-
   // ------------------------------------------------------------
   // 1/2 PHASE
   // ------
@@ -605,34 +430,6 @@ class Handler {
   // ------------------------------------------------------------
   // Chained Cheap&Quick
   // ------
-
-  CA caprep;
-
-  void startNewViewChComb();
-
-  Just callTEEsignChComb();
-  Just callTEEprepareChComb(CBlock block, Hash hash);
-  Accum callTEEaccumChComb(Just justs[MAX_NUM_SIGNATURES]);
-  Accum callTEEaccumChCombSp(just_t just);
-
-  CBlock createNewBlockChComb();
-
-  Just ldrPrepareChComb2just(MsgLdrPrepareChComb msg);
-
-  void tryExecuteChComb(CBlock block, CBlock block0);
-  void voteChComb(CBlock block);
-  void prepareChComb();
-  void checkNewJustChComb(RData data);
-  void handleEarlierMessagesChComb();
-  Accum newviews2accChComb(std::set<MsgNewViewChComb> newviews);
-
-  void handleNewviewChComb(MsgNewViewChComb msg);
-  void handlePrepareChComb(MsgPrepareChComb msg);
-  void handleLdrPrepareChComb(MsgLdrPrepareChComb msg);
-
-  void handle_newview_ch_comb(MsgNewViewChComb msg, const PeerNet::conn_t &conn);
-  void handle_prepare_ch_comb(MsgPrepareChComb msg, const PeerNet::conn_t &conn);
-  void handle_ldrprepare_ch_comb(MsgLdrPrepareChComb msg, const PeerNet::conn_t &conn);
 
   // ------------------------------------------------------------
   // Pacemaker
@@ -734,15 +531,6 @@ class Handler {
   void handleEarlierMessagesPmSync();
   void wishToAdvanceOnPmSync(MsgPmSync msg, PID leader);
   void wishToAdvancePm();
-  void startNewViewOrSyncFree(FJust just);
-
-  void restartFreeAchilles();
-  void sendMsgRestart(MsgRestart msg, Peers recipients);
-  void sendMsgReplyRestart(MsgReplyRestart msg, Peers recipients);
-  void handle_restart(MsgRestart msg, const PeerNet::conn_t &conn);
-  void handleRestart(MsgRestart msg);
-  void handle_reply_restart(MsgReplyRestart msg, const PeerNet::conn_t &conn);
-  void handleReplyRestart(MsgReplyRestart msg);
 
  public:
   Handler(KeysFun kf,

@@ -111,7 +111,6 @@ Nsgx_App_Cpp_Files := \
 	App/Block.cpp \
 	App/Cert.cpp \
 	App/FData.cpp \
-	App/FJust.cpp \
 	App/FVJust.cpp \
 	App/Handler.cpp \
 	App/Hash.cpp \
@@ -127,7 +126,6 @@ Nsgx_App_Cpp_Files := \
 	App/OPaccum.cpp \
 	App/OPprepare.cpp \
 	App/OPproposal.cpp \
-	App/PJust.cpp \
 	App/RBaccumNv.cpp \
 	App/RBaccumNvAuth.cpp \
 	App/RBaccumSync.cpp \
@@ -155,7 +153,6 @@ Nsgx_App_Cpp_Files := \
 	App/Views.cpp \
 	App/VJoins.cpp \
 	App/Void.cpp \
-	App/Vote.cpp \
 	App/Wish.cpp \
 	App/Wishes.cpp
 # Includes SGX files

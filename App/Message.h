@@ -8,21 +8,15 @@
 #include "Auth.h"
 #include "Auths.h"
 #include "RData.h"
-#include "FData.h"
 #include "Proposal.h"
 #include "Transaction.h"
-#include "CData.h"
 #include "Void.h"
 #include "Cert.h"
 #include "Accum.h"
-#include "HAccum.h"
 #include "JBlock.h"
-#include "CBlock.h"
-#include "PJust.h"
 #include "OPproposal.h"
 #include "OPprepare.h"
 #include "OPstore.h"
-#include "OPstoreCert.h"
 #include "OPvote.h"
 #include "OPaccum.h"
 #include "Join.h"
@@ -246,83 +240,6 @@ struct MsgCommit {
 
 
 /////////////////////////////////////////////////////
-// Basic version - Quick
-
-
-struct MsgNewViewAcc {
-  static const uint8_t opcode = HDR_NEWVIEW_ACCUM;
-  salticidae::DataStream serialized;
-  CData<Void,Cert> cdata;
-  Sign sign;
-  MsgNewViewAcc(const CData<Void,Cert> &cdata, const Sign &sign) : cdata(cdata),sign(sign) { serialized << cdata << sign; }
-  MsgNewViewAcc(salticidae::DataStream &&s) { s >> cdata >> sign; }
-  bool operator<(const MsgNewViewAcc& s) const {
-    if (sign < s.sign) { return true; }
-    return false;
-  }
-  std::string prettyPrint() {
-    return "NEWVIEW-ACCUM[" + cdata.prettyPrint() + "," + sign.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(CData<Void,Cert>) + sizeof(Sign)); }
-  //void serialize(salticidae::DataStream &s) const { s << cdata << sign; }
-};
-
-struct MsgLdrPrepareAcc {
-  static const uint8_t opcode = HDR_PREPARE_LDR_ACCUM;
-  salticidae::DataStream serialized;
-  CData<Block,Accum> cdata;
-  Sign sign;
-  MsgLdrPrepareAcc(const CData<Block,Accum> &cdata, const Sign &sign) : cdata(cdata),sign(sign) { serialized << cdata << sign; }
-  MsgLdrPrepareAcc(salticidae::DataStream &&s) { s >> cdata >> sign; }
-  bool operator<(const MsgLdrPrepareAcc& s) const {
-    if (sign < s.sign) { return true; }
-    return false;
-  }
-  std::string prettyPrint() {
-    return "PREPARE-LDR-ACCUM[" + cdata.prettyPrint() + "," + sign.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(CData<Block,Accum>) + sizeof(Sign)); }
-  //void serialize(salticidae::DataStream &s) const { s << cdata << sign; }
-};
-
-struct MsgPrepareAcc {
-  static const uint8_t opcode = HDR_PREPARE_ACCUM;
-  salticidae::DataStream serialized;
-  CData<Hash,Void> cdata;
-  Signs signs;
-  MsgPrepareAcc(const CData<Hash,Void> &cdata, const Signs &signs) : cdata(cdata),signs(signs) { serialized << cdata << signs; }
-  MsgPrepareAcc(salticidae::DataStream &&s) { s >> cdata >> signs; }
-  bool operator<(const MsgPrepareAcc& s) const {
-    if (signs < s.signs) { return true; }
-    return false;
-  }
-  std::string prettyPrint() {
-    return "PREPARE-ACCUM[" + cdata.prettyPrint() + "," + signs.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(CData<Hash,Void>) + sizeof(Signs)); }
-  //void serialize(salticidae::DataStream &s) const { s << cdata << signs; }
-};
-
-struct MsgPreCommitAcc {
-  static const uint8_t opcode = HDR_PRECOMMIT_ACCUM;
-  salticidae::DataStream serialized;
-  CData<Hash,Void> cdata;
-  Signs signs;
-  MsgPreCommitAcc(const CData<Hash,Void> &cdata, const Signs &signs) : cdata(cdata),signs(signs) { serialized << cdata << signs; }
-  MsgPreCommitAcc(salticidae::DataStream &&s) { s >> cdata >> signs; }
-  bool operator<(const MsgPreCommitAcc& s) const {
-    if (signs < s.signs) { return true; }
-    return false;
-  }
-  std::string prettyPrint() {
-    return "PRECOMMIT-ACCUM[" + cdata.prettyPrint() + "," + signs.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(CData<Hash,Void>) + sizeof(Signs)); }
-  //void serialize(salticidae::DataStream &s) const { s << cdata << signs; }
-};
-
-
-/////////////////////////////////////////////////////
 // Basic version - Cheap&Quick
 
 
@@ -397,190 +314,6 @@ struct MsgPreCommitComb {
   }
   unsigned int sizeMsg() { return (sizeof(RData) + sizeof(Signs)); }
   //void serialize(salticidae::DataStream &s) const { s << data << signs; }
-};
-
-
-/////////////////////////////////////////////////////
-// Basic version - FREE
-
-
-struct MsgNewViewFree {
-  static const uint8_t opcode = HDR_NEWVIEW_FREE;
-  salticidae::DataStream serialized;
-  FData data;
-  Auth auth;
-  MsgNewViewFree(const FData &data, const Auth &auth) : data(data),auth(auth) { serialized << data << auth; }
-  MsgNewViewFree(salticidae::DataStream &&s) { s >> data >> auth; }
-  bool operator<(const MsgNewViewFree& s) const {
-    if (auth < s.auth) { return true; }
-    return false;
-  }
-  std::string prettyPrint() {
-    return "NEWVIEW-FREE[" + data.prettyPrint() + "," + auth.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(FData) + sizeof(Auth)); }
-  //void serialize(salticidae::DataStream &s) const { s << data << auth; }
-};
-
-
-struct MsgLdrPrepareFree {
-  static const uint8_t opcode = HDR_PREPARE_LDR_FREE;
-  salticidae::DataStream serialized;
-  HAccum acc;
-  Block block;
-  //MsgLdrPrepareFree() : acc(HAccum()),block(Block()) { serialized << acc << block; }
-  //MsgLdrPrepareFree(const MsgLdrPrepareFree& m) : acc(m.acc),block(m.block) { serialized << acc << block; }
-  MsgLdrPrepareFree(const HAccum &acc, const Block &block) : acc(acc),block(block) { serialized << acc << block; }
-  MsgLdrPrepareFree(salticidae::DataStream &&s) { s >> acc >> block; }
-  bool operator<(const MsgLdrPrepareFree& s) const {
-    if (acc < s.acc) { return true; }
-    return false;
-  }
-  std::string prettyPrint() {
-    return "PREPARE-LDR-FREE[" + acc.prettyPrint() + "," + block.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(HAccum) + sizeof(Block)); }
-  //void serialize(salticidae::DataStream &s) const { s << acc << block; }
-};
-
-struct MsgBckPrepareFree {
-  static const uint8_t opcode = HDR_PREPARE_BCK_FREE;
-  salticidae::DataStream serialized;
-  View view;
-  Auth auth;
-  MsgBckPrepareFree(const View &view, const Auth &auth) : view(view),auth(auth) { serialized << view << auth; }
-  MsgBckPrepareFree(salticidae::DataStream &&s) { s >> view >> auth; }
-  bool operator<(const MsgBckPrepareFree& s) const {
-    if (auth < s.auth) { return true; }
-    return false;
-  }
-  std::string prettyPrint() {
-    return "PREPARE-BCK-FREE[" + std::to_string(view) + "," + auth.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(View) + sizeof(Auth)); }
-  //void serialize(salticidae::DataStream &s) const { s << view << auth; }
-};
-
-struct MsgPrepareFree {
-  static const uint8_t opcode = HDR_PREPARE_FREE;
-  salticidae::DataStream serialized;
-  PJust just;
-  MsgPrepareFree() : just(PJust(false)) { serialized << just; }
-  MsgPrepareFree(const MsgPrepareFree& m) : just(m.just) { serialized << just; }
-  MsgPrepareFree(const PJust &just) : just(just) { serialized << just; }
-  MsgPrepareFree(salticidae::DataStream &&s) { s >> just; }
-  bool operator<(const MsgPrepareFree& s) const {
-    if (just < s.just) { return true; }
-    return false;
-  }
-  std::string prettyPrint() {
-    return "PREPARE-FREE[" + just.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(PJust)); }
-  unsigned int sizeAuth() { return just.sizeAuth(); }
-  /*  void addAuth(Auth a) {
-    just.add(a);
-    serialized << just;
-    }*/
-  //void set(Hash h, View v, Auth a) { hash = h; view = v; auth = a; }
-  //void serialize(salticidae::DataStream &s) const { s << just; }
-};
-
-struct MsgPreCommitFree {
-  static const uint8_t opcode = HDR_PRECOMMIT_FREE;
-  salticidae::DataStream serialized;
-  View view;
-  Auths auths;
-  MsgPreCommitFree(const View &view, const Auths &auths) : view(view),auths(auths) { serialized << view << auths; }
-  MsgPreCommitFree(salticidae::DataStream &&s) { s >> view >> auths; }
-  bool operator<(const MsgPreCommitFree& s) const { return (auths < s.auths); }
-  std::string prettyPrint() {
-    return "PRECOMMIT-FREE[" + std::to_string(view) + "," + auths.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(View) + sizeof(Auths)); }
-  //void serialize(salticidae::DataStream &s) const { s << view << auths; }
-};
-
-
-struct MsgCounterRote {
-  static const uint8_t opcode = HDR_COUNTER_ROTE;
-  salticidae::DataStream serialized;
-  View view;
-  Auth auth;
-  MsgCounterRote(const View &view, const Auth &auth) : view(view),auth(auth) { serialized << view << auth; }
-  MsgCounterRote(salticidae::DataStream &&s) { s >> view >> auth; }
-  bool operator<(const MsgCounterRote& s) const { return (auth < s.auth); }
-  std::string prettyPrint() {
-    return "COUNTER-ROTE[" + std::to_string(view) + "," + auth.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(View) + sizeof(Auth)); }
-};
-
-struct MsgEchoRote {
-  static const uint8_t opcode = HDR_ECHO_ROTE;
-  salticidae::DataStream serialized;
-  View view;
-  PID  sender;
-  Auth auth;
-  MsgEchoRote(const View &view, const PID &sender, const Auth &auth) : view(view),sender(sender),auth(auth) { serialized << view << sender << auth; }
-  MsgEchoRote(salticidae::DataStream &&s) { s >> view >> sender >> auth; }
-  bool operator<(const MsgEchoRote& s) const {
-    return (view < s.view
-            || (view == s.view && sender < s.sender)
-            || (view == s.view && sender == s.sender && auth < s.auth));
-  }
-  std::string prettyPrint() {
-    return "ECHO-ROTE[" + std::to_string(view) + "," + std::to_string(sender) + "," + auth.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(View) + sizeof(PID) + sizeof(Auth)); }
-};
-
-struct MsgAckRote {
-  static const uint8_t opcode = HDR_ACK_ROTE;
-  salticidae::DataStream serialized;
-  View view;
-  PID  sender;
-  Auth auth;
-  MsgAckRote(const View &view, const PID &sender, const Auth &auth) : view(view),sender(sender),auth(auth) { serialized << view << sender << auth; }
-  MsgAckRote(salticidae::DataStream &&s) { s >> view >> sender >> auth; }
-  bool operator<(const MsgAckRote& s) const {
-    return (view < s.view
-            || (view == s.view && sender < s.sender)
-            || (view == s.view && sender == s.sender && auth < s.auth));
-  }
-  std::string prettyPrint() {
-    return "ACK-ROTE[" + std::to_string(view) + "," + std::to_string(sender) + "," + auth.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(View) + sizeof(PID) + sizeof(Auth)); }
-};
-
-struct MsgRequestCounterRote {
-  static const uint8_t opcode = HDR_REQ_COUNTER_ROTE;
-  salticidae::DataStream serialized;
-  View view;
-  Auth auth;
-  MsgRequestCounterRote(const View &view, const Auth &auth) : view(view),auth(auth) { serialized << view << auth; }
-  MsgRequestCounterRote(salticidae::DataStream &&s) { s >> view >> auth; }
-  bool operator<(const MsgRequestCounterRote& s) const { return (auth < s.auth); }
-  std::string prettyPrint() {
-    return "REQUEST-COUNTER-ROTE[" + std::to_string(view) + "," + auth.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(View) + sizeof(Auth)); }
-};
-
-struct MsgReplyCounterRote {
-  static const uint8_t opcode = HDR_REP_COUNTER_ROTE;
-  salticidae::DataStream serialized;
-  View view;
-  View counter;
-  Auth auth;
-  MsgReplyCounterRote(const View &view, const View &counter, const Auth &auth) : view(view),counter(counter),auth(auth) { serialized << view << counter << auth; }
-  MsgReplyCounterRote(salticidae::DataStream &&s) { s >> view >> counter >> auth; }
-  bool operator<(const MsgReplyCounterRote& s) const { return (auth < s.auth); }
-  std::string prettyPrint() {
-    return "REPLY-COUNTER-ROTE[" + std::to_string(view) + "," + std::to_string(counter) + "," + auth.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(View) + sizeof(View) + sizeof(Auth)); }
 };
 
 
@@ -1119,27 +852,6 @@ struct MsgNewViewChComb {
   //void serialize(salticidae::DataStream &s) const { s << data << sign; }
 };
 
-
-struct MsgLdrPrepareChComb {
-  static const uint8_t opcode = HDR_PREPARE_LDR_CH_COMB;
-  salticidae::DataStream serialized;
-  CBlock block;
-  Sign sign;
-  MsgLdrPrepareChComb() {}
-  MsgLdrPrepareChComb(const CBlock &block, const Sign &sign) : block(block),sign(sign) { serialized << block << sign; }
-  MsgLdrPrepareChComb(salticidae::DataStream &&s) { s >> block >> sign; }
-  bool operator<(const MsgLdrPrepareChComb& s) const {
-    if (sign < s.sign) { return true; }
-    return false;
-  }
-  std::string prettyPrint() {
-    return "LDRPREPARE[" + block.prettyPrint() + "," + sign.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(CBlock) + sizeof(Sign)); }
-  //void serialize(salticidae::DataStream &s) const { s << block << sign; }
-};
-
-
 struct MsgPrepareChComb {
   static const uint8_t opcode = HDR_PREPARE_CH_COMB;
   salticidae::DataStream serialized;
@@ -1415,41 +1127,6 @@ struct MsgPmSyncVoteQc {
     return "PM_SYNC_VOTE_QC[" + vote.prettyPrint() + "," + std::to_string(id) + "]";
   }
   unsigned int sizeMsg() { return (sizeof(PmSyncs) + sizeof(PID)); }
-};
-
-// Restart message sent in Achilles
-struct MsgRestart {
-  static const uint8_t opcode = HDR_RESTART;
-  salticidae::DataStream serialized;
-  Hash nonce;
-  Auth auth;
-  MsgRestart(const Hash &nonce, const Auth &auth) : nonce(nonce),auth(auth) { serialized << nonce << auth; }
-  MsgRestart(salticidae::DataStream &&s) { s >> nonce >> auth; }
-  bool operator<(const MsgRestart& s) const {
-    return (auth < s.auth);
-  }
-  std::string prettyPrint() {
-    return "RESTART[" + nonce.prettyPrint() + "," + auth.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(Hash) + sizeof(Auth)); }
-};
-
-// Reply to restart messages sent in Achilles
-struct MsgReplyRestart {
-  static const uint8_t opcode = HDR_REPLY_RESTART;
-  salticidae::DataStream serialized;
-  View view;
-  Hash nonce;
-  Auth auth;
-  MsgReplyRestart(const View &view, const Hash &nonce, const Auth &auth) : view(view),nonce(nonce),auth(auth) { serialized << view << nonce << auth; }
-  MsgReplyRestart(salticidae::DataStream &&s) { s >> view >> nonce >> auth; }
-  bool operator<(const MsgReplyRestart& s) const {
-    return (auth < s.auth);
-  }
-  std::string prettyPrint() {
-    return "REPLY-RESTART[" + std::to_string(view) + "," + nonce.prettyPrint() + "," + auth.prettyPrint() + "]";
-  }
-  unsigned int sizeMsg() { return (sizeof(View) + sizeof(Hash) + sizeof(Auth)); }
 };
 
 #endif

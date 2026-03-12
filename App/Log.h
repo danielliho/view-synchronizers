@@ -7,8 +7,6 @@
 
 
 #include "Just.h"
-#include "Proposal.h"
-#include "CData.h"
 #include "Void.h"
 #include "Cert.h"
 #include "Message.h"
@@ -23,23 +21,10 @@ class Log {
   std::map<View,std::set<MsgCommit>> commits;
   std::map<View,std::set<MsgLdrPrepare>> proposals;
 
-  std::map<View,std::set<MsgNewViewAcc>> newviewsAcc;
-  std::map<View,std::set<MsgPrepareAcc>> preparesAcc;
-  std::map<View,std::set<MsgPreCommitAcc>> precommitsAcc;
-  std::map<View,std::set<MsgLdrPrepareAcc>> ldrpreparesAcc;
-
   std::map<View,std::set<MsgNewViewComb>> newviewsComb;
   std::map<View,std::set<MsgPrepareComb>> preparesComb;
   std::map<View,std::set<MsgPreCommitComb>> precommitsComb;
   std::map<View,std::set<MsgLdrPrepareComb>> ldrpreparesComb;
-
-  std::map<View,std::set<MsgNewViewFree>> newviewsFree;
-  std::map<View,std::tuple<PJust>> preparesFree;
-  std::map<View,std::set<MsgPreCommitFree>> precommitsFree;
-  std::map<View,std::tuple<HAccum>> ldrpreparesFree;
-
-  std::map<View,Auths> echosRote;
-  std::map<View,Auths> acksRote;
 
   std::map<View,std::set<OPprepare>> newviewsOPa;
   std::map<View,std::set<OPnvblocks>> newviewsOPb;
@@ -48,9 +33,6 @@ class Log {
   std::map<View,std::set<OPprepare>> preparesOP;
   std::map<View,std::set<OPvote>> votesOP;
   std::map<View,std::set<OPaccum>> accumsOP;
-/*
-  std::map<View,std::tuple<MsgPrepareFree>> preparesOP;
-*/
 
   std::map<View,std::set<MsgNewViewCh>> newviewsCh;
   std::map<View,std::set<MsgPrepareCh>> preparesCh;
@@ -58,7 +40,6 @@ class Log {
 
   std::map<View,std::set<MsgNewViewChComb>> newviewsChComb;
   std::map<View,std::set<MsgPrepareChComb>> preparesChComb;
-  std::map<View,std::set<MsgLdrPrepareChComb>> ldrpreparesChComb;
 
   std::map<Session,std::set<Sync>> syncs;                  // leader -- all received syncs
   std::map<Session,std::set<MsgSyncTC>> synctcs;           // all received sync-tcs
@@ -75,9 +56,6 @@ class Log {
   std::map<View,std::tuple<RBstoreAuths>>   storesRB;    // a tuple of size 0 or 1
   std::map<View,std::tuple<RBproposal>>     proposalsRB; // a tuple of size 0 or 1
 
-  std::map<View,std::set<MsgReplyCounterRote>> repliesCounterRote;
-  std::map<Hash,std::set<MsgReplyRestart>> repliesRestart;
-
  public:
   Log();
 
@@ -88,24 +66,10 @@ class Log {
   unsigned int storeCom(MsgCommit msg);
   unsigned int storeProp(MsgLdrPrepare msg);
 
-  unsigned int storeNvAcc(MsgNewViewAcc msg);
-  unsigned int storePrepAcc(MsgPrepareAcc msg);
-  unsigned int storePcAcc(MsgPreCommitAcc msg);
-  unsigned int storeLdrPrepAcc(MsgLdrPrepareAcc msg);
-
   unsigned int storeNvComb(MsgNewViewComb msg);
   unsigned int storePrepComb(MsgPrepareComb msg);
   unsigned int storePcComb(MsgPreCommitComb msg);
   unsigned int storeLdrPrepComb(MsgLdrPrepareComb msg);
-
-  unsigned int storeNvFree(MsgNewViewFree msg);
-  unsigned int storePrepFree(PJust msg);
-  unsigned int storeBckPrepFree(MsgBckPrepareFree msg);
-  unsigned int storePcFree(MsgPreCommitFree msg);
-  unsigned int storeLdrPrepFree(HAccum msg);
-
-  unsigned int storeEchoRote(MsgEchoRote msg, unsigned int limit);
-  unsigned int storeAckRote(MsgAckRote msg, unsigned int limit);
 
   std::set<RBnewviewAuth> getNewViewRB(View view, unsigned int n);
   unsigned int storeNvRB(RBnewviewAuth msg);
@@ -140,7 +104,6 @@ class Log {
 
   unsigned int storeNvChComb(MsgNewViewChComb msg);
   unsigned int storePrepChComb(MsgPrepareChComb msg);
-  unsigned int storeLdrPrepChComb(MsgLdrPrepareChComb msg);
 
   // finds the justification of the highest message in the 'newviews' log for view 'view'
   Just findHighestNv(View view);
@@ -158,14 +121,6 @@ class Log {
   // collects the signatures of the messages in the 'commits' log for view 'view', upto 'n' signatures
   Signs getCommit(View view, unsigned int n);
 
-  std::set<MsgNewViewAcc> getNewViewAcc(View view, unsigned int n);
-  Signs getPrepareAcc(View view, unsigned int n);
-  Signs getPrecommitAcc(View view, unsigned int n);
-
-  MsgLdrPrepareAcc firstLdrPrepareAcc(View view);
-  MsgPrepareAcc firstPrepareAcc(View view);
-  MsgPreCommitAcc firstPrecommitAcc(View view);
-
   std::set<MsgNewViewComb> getNewViewComb(View view, unsigned int n);
   Signs getPrepareComb(View view, unsigned int n);
   Signs getPrecommitComb(View view, unsigned int n);
@@ -173,13 +128,6 @@ class Log {
   MsgLdrPrepareComb firstLdrPrepareComb(View view);
   MsgPrepareComb firstPrepareComb(View view);
   MsgPreCommitComb firstPrecommitComb(View view);
-
-  std::set<MsgNewViewFree> getNewViewFree(View view, unsigned int n);
-  PJust getPrepareFree(View view);
-  HAccum getLdrPrepareFree(View view);
-  MsgPreCommitFree firstPrecommitFree(View view);
-  Auths getPrecommitFree(View view, unsigned int n);
-  bool inPrecommitFree(View view, PID id);
 
   std::set<MsgNewViewCh> getNewViewCh(View view, unsigned int n);
   Signs getPrepareCh(View view, unsigned int n);
@@ -192,7 +140,6 @@ class Log {
   std::set<MsgNewViewChComb> getNewViewChComb(View view, unsigned int n);
   Signs getPrepareChComb(View view, unsigned int n);
 
-  MsgLdrPrepareChComb firstLdrPrepareChComb(View view);
   MsgPrepareChComb firstPrepareChComb(View view);
 
   Just findHighestNvChComb(View view);
@@ -229,15 +176,6 @@ class Log {
   bool storedOwnJoinVote(View v);
   MsgJoinVote getOwnJoinVote(View v);
 */
-
-  bool inReplyCounterRote(View v, MsgReplyCounterRote m);
-  unsigned int storeReplyCounterRote(View v, MsgReplyCounterRote msg);
-  MsgReplyCounterRote getHighestReplyCounterRote(View v);
-
-  bool inReplyRestart(Hash nonce, MsgReplyRestart m);
-  unsigned int storeReplyRestart(Hash nonce, MsgReplyRestart msg);
-  MsgReplyRestart getHighestReplyRestart(Hash nonce);
-  bool gotReplyRestartFrom(Hash nonce, PID id);
 
   // generates a string to pretty print logs
   std::string prettyPrint();

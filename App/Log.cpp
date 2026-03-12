@@ -64,49 +64,6 @@ bool msgLdrPrepareFrom(std::set<MsgLdrPrepare> msgs, std::set<PID> signers) {
   return false;
 }
 
-bool msgNewViewAccFrom(std::set<MsgNewViewAcc> msgs, PID signer) {
-  for (std::set<MsgNewViewAcc>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
-    MsgNewViewAcc msg = (MsgNewViewAcc)*it;
-    PID k = msg.sign.getSigner();
-    if (signer == k) { return true; }
-  }
-  return false;
-}
-
-bool msgPrepareAccFrom(std::set<MsgPrepareAcc> msgs, std::set<PID> signers) {
-  for (std::set<MsgPrepareAcc>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
-    MsgPrepareAcc msg = (MsgPrepareAcc)*it;
-    std::set<PID> k = msg.signs.getSigners();
-    for (std::set<PID>::iterator it2=k.begin(); it2!=k.end(); ++it2) {
-      signers.erase((PID)*it2);
-      if (signers.empty()) { return true; }
-    }
-  }
-  return false;
-}
-
-bool msgLdrPrepareAccFrom(std::set<MsgLdrPrepareAcc> msgs, PID signer) {
-  for (std::set<MsgLdrPrepareAcc>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
-    MsgLdrPrepareAcc msg = (MsgLdrPrepareAcc)*it;
-    PID k = msg.sign.getSigner();
-    if (signer == k) { return true; }
-  }
-  return false;
-}
-
-bool msgPreCommitAccFrom(std::set<MsgPreCommitAcc> msgs, std::set<PID> signers) {
-  for (std::set<MsgPreCommitAcc>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
-    MsgPreCommitAcc msg = (MsgPreCommitAcc)*it;
-    std::set<PID> k = msg.signs.getSigners();
-    for (std::set<PID>::iterator it2=k.begin(); it2!=k.end(); ++it2) {
-      signers.erase((PID)*it2);
-      if (signers.empty()) { return true; }
-    }
-  }
-  return false;
-}
-
-
 bool msgNewViewCombFrom(std::set<MsgNewViewComb> msgs, PID signer) {
   for (std::set<MsgNewViewComb>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
     MsgNewViewComb msg = (MsgNewViewComb)*it;
@@ -141,35 +98,6 @@ bool msgPreCommitCombFrom(std::set<MsgPreCommitComb> msgs, std::set<PID> signers
   for (std::set<MsgPreCommitComb>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
     MsgPreCommitComb msg = (MsgPreCommitComb)*it;
     std::set<PID> k = msg.signs.getSigners();
-    for (std::set<PID>::iterator it2=k.begin(); it2!=k.end(); ++it2) {
-      signers.erase((PID)*it2);
-      if (signers.empty()) { return true; }
-    }
-  }
-  return false;
-}
-
-bool msgNewViewFreeFrom(std::set<MsgNewViewFree> msgs, PID signer) {
-  for (std::set<MsgNewViewFree>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
-    MsgNewViewFree msg = (MsgNewViewFree)*it;
-    PID k = msg.auth.getId();
-    if (signer == k) { return true; }
-  }
-  return false;
-}
-
-bool msgPrepareFreeFrom(PJust msg, PID signer) {
-  if (signer == msg.getAuth().getId()) { return true; }
-  for (int i = 0; i < msg.getAuths().getSize(); i++) {
-    if (signer == msg.getAuths().get(i).getId()) { return true; }
-  }
-  return false;
-}
-
-bool msgPreCommitFreeFrom(std::set<MsgPreCommitFree> msgs, std::set<PID> signers) {
-  for (std::set<MsgPreCommitFree>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
-    MsgPreCommitFree msg = (MsgPreCommitFree)*it;
-    std::set<PID> k = msg.auths.getSigners();
     for (std::set<PID>::iterator it2=k.begin(); it2!=k.end(); ++it2) {
       signers.erase((PID)*it2);
       if (signers.empty()) { return true; }
@@ -312,154 +240,6 @@ unsigned int Log::storeProp(MsgLdrPrepare msg) {
   }
 
   return 0;
-}
-
-
-unsigned int Log::storeNvAcc(MsgNewViewAcc msg) {
-  CData<Void,Cert> data = msg.cdata;
-  View v = data.getView();
-  PID signer = msg.sign.getSigner();
-
-  std::map<View,std::set<MsgNewViewAcc>>::iterator it1 = this->newviewsAcc.find(v);
-  if (it1 != this->newviewsAcc.end()) { // there is already an entry for this view
-    std::set<MsgNewViewAcc> msgs = it1->second;
-
-    // We only add 'msg' to the log if the sender hasn't already sent a new-view message for this view
-    if (!msgNewViewAccFrom(msgs,signer)) {
-      msgs.insert(msg);
-      this->newviewsAcc[v]=msgs;
-      //if (DEBUG) { std::cout << KGRN << "updated entry; #=" << msgs.size() << KNRM << std::endl; }
-      return msgs.size();
-      //k[hdr]=msgs;
-      //log[v]=k;
-    }
-  } else { // there is no entry for this view
-    this->newviewsAcc[v]={msg};
-    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
-    return 1;
-  }
-
-  return 0;
-}
-
-
-std::set<MsgNewViewAcc> Log::getNewViewAcc(View view, unsigned int n) {
-  std::set<MsgNewViewAcc> ret;
-  std::map<View,std::set<MsgNewViewAcc>>::iterator it1 = this->newviewsAcc.find(view);
-  if (it1 != this->newviewsAcc.end()) { // there is already an entry for this view
-    std::set<MsgNewViewAcc> msgs = it1->second;
-    for (std::set<MsgNewViewAcc>::iterator it=msgs.begin(); ret.size() < n && it!=msgs.end(); ++it) {
-      MsgNewViewAcc msg = (MsgNewViewAcc)*it;
-      ret.insert(msg);
-    }
-  }
-  return ret;
-}
-
-
-unsigned int Log::storePrepAcc(MsgPrepareAcc msg) {
-  CData<Hash,Void> data = msg.cdata;
-  View v = data.getView();
-  std::set<PID> signers = msg.signs.getSigners();
-
-  std::map<View,std::set<MsgPrepareAcc>>::iterator it1 = this->preparesAcc.find(v);
-  if (it1 != this->preparesAcc.end()) { // there is already an entry for this view
-    std::set<MsgPrepareAcc> msgs = it1->second;
-
-    // We only add 'msg' to the log if the sender hasn't already sent a new-view message for this view
-    if (!msgPrepareAccFrom(msgs,signers)) {
-      msgs.insert(msg);
-      this->preparesAcc[v]=msgs;
-      //if (DEBUG) { std::cout << KGRN << "updated entry; #=" << msgs.size() << KNRM << std::endl; }
-      return msgs.size();
-    }
-  } else { // there is no entry for this view
-    this->preparesAcc[v]={msg};
-    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
-    return 1;
-  }
-
-  return 0;
-}
-
-
-unsigned int Log::storeLdrPrepAcc(MsgLdrPrepareAcc msg) {
-  CData<Block,Accum> data = msg.cdata;
-  View v = data.getView();
-  PID signer = msg.sign.getSigner();
-
-  std::map<View,std::set<MsgLdrPrepareAcc>>::iterator it1 = this->ldrpreparesAcc.find(v);
-  if (it1 != this->ldrpreparesAcc.end()) { // there is already an entry for this view
-    std::set<MsgLdrPrepareAcc> msgs = it1->second;
-
-    // We only add 'msg' to the log if the sender hasn't already sent a new-view message for this view
-    if (!msgLdrPrepareAccFrom(msgs,signer)) {
-      msgs.insert(msg);
-      this->ldrpreparesAcc[v]=msgs;
-      //if (DEBUG) { std::cout << KGRN << "updated entry; #=" << msgs.size() << KNRM << std::endl; }
-      return msgs.size();
-    }
-  } else { // there is no entry for this view
-    this->ldrpreparesAcc[v]={msg};
-    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
-    return 1;
-  }
-
-  return 0;
-}
-
-
-Signs Log::getPrepareAcc(View view, unsigned int n) {
-  Signs signs;
-  std::map<View,std::set<MsgPrepareAcc>>::iterator it1 = this->preparesAcc.find(view);
-  if (it1 != this->preparesAcc.end()) { // there is already an entry for this view
-    std::set<MsgPrepareAcc> msgs = it1->second;
-    for (std::set<MsgPrepareAcc>::iterator it=msgs.begin(); signs.getSize() < n && it!=msgs.end(); ++it) {
-      MsgPrepareAcc msg = (MsgPrepareAcc)*it;
-      Signs others = msg.signs;
-      signs.addUpto(others,n);
-    }
-  }
-  return signs;
-}
-
-
-unsigned int Log::storePcAcc(MsgPreCommitAcc msg) {
-  CData<Hash,Void> data = msg.cdata;
-  View v = data.getView();
-  std::set<PID> signers = msg.signs.getSigners();
-
-  std::map<View,std::set<MsgPreCommitAcc>>::iterator it1 = this->precommitsAcc.find(v);
-  if (it1 != this->precommitsAcc.end()) { // there is already an entry for this view
-    std::set<MsgPreCommitAcc> msgs = it1->second;
-
-    if (!msgPreCommitAccFrom(msgs,signers)) {
-      msgs.insert(msg);
-      this->precommitsAcc[v]=msgs;
-      return msgs.size();
-    }
-  } else { // there is no entry for this view
-    this->precommitsAcc[v]={msg};
-    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
-    return 1;
-  }
-
-  return 0;
-}
-
-
-Signs Log::getPrecommitAcc(View view, unsigned int n) {
-  Signs signs;
-  std::map<View,std::set<MsgPreCommitAcc>>::iterator it1 = this->precommitsAcc.find(view);
-  if (it1 != this->precommitsAcc.end()) { // there is already an entry for this view
-    std::set<MsgPreCommitAcc> msgs = it1->second;
-    for (std::set<MsgPreCommitAcc>::iterator it=msgs.begin(); signs.getSize() < n && it!=msgs.end(); ++it) {
-      MsgPreCommitAcc msg = (MsgPreCommitAcc)*it;
-      Signs others = msg.signs;
-      signs.addUpto(others,n);
-    }
-  }
-  return signs;
 }
 
 
@@ -610,262 +390,7 @@ Signs Log::getPrecommitComb(View view, unsigned int n) {
   return signs;
 }
 
-unsigned int Log::storeNvFree(MsgNewViewFree msg) {
-  FData data = msg.data;
-  View v = data.getView();
-  PID signer = msg.auth.getId();
-
-  std::map<View,std::set<MsgNewViewFree>>::iterator it1 = this->newviewsFree.find(v);
-  if (it1 != this->newviewsFree.end()) { // there is already an entry for this view
-    std::set<MsgNewViewFree> msgs = it1->second;
-
-    // We only add 'msg' to the log if the sender hasn't already sent a new-view message for this view
-    if (!msgNewViewFreeFrom(msgs,signer)) {
-      msgs.insert(msg);
-      this->newviewsFree[v]=msgs;
-      //if (DEBUG) { std::cout << KGRN << "updated entry; #=" << msgs.size() << KNRM << std::endl; }
-      return msgs.size();
-      //k[hdr]=msgs;
-      //log[v]=k;
-    }
-
-    //return msgs.size();
-  } else { // there is no entry for this view
-    this->newviewsFree[v]={msg};
-    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
-    return 1;
-  }
-
-  return 0;
-}
-
-
-std::set<MsgNewViewFree> Log::getNewViewFree(View view, unsigned int n) {
-  std::set<MsgNewViewFree> ret;
-  std::map<View,std::set<MsgNewViewFree>>::iterator it1 = this->newviewsFree.find(view);
-  if (it1 != this->newviewsFree.end()) { // there is already an entry for this view
-    std::set<MsgNewViewFree> msgs = it1->second;
-    for (std::set<MsgNewViewFree>::iterator it=msgs.begin(); ret.size() < n && it!=msgs.end(); ++it) {
-      MsgNewViewFree msg = (MsgNewViewFree)*it;
-      ret.insert(msg);
-    }
-  }
-  return ret;
-}
-
-
-unsigned int Log::storePrepFree(PJust msg) {
-  View v = msg.getView();
-
-  std::map<View,std::tuple<PJust>>::iterator it1 = this->preparesFree.find(v);
-  if (it1 != this->preparesFree.end()) { // there is already an entry for this view
-    if (DEBUG5) { std::cout << KGRN << "updating prep for view (" << v << ")" << KNRM << std::endl; }
-    // We update the entry with the new info
-    PJust prep = std::get<0>(it1->second);
-    PJust just(msg.getHash(),msg.getView(),msg.getAuth(),prep.getAuths());
-    it1->second = std::make_tuple(just);
-    return prep.sizeAuth();
-  } else { // there is no entry for this view
-    if (DEBUG5) { std::cout << KGRN << "storing prep for view (" << v << ")" << KNRM << std::endl; }
-    this->preparesFree[v] = std::make_tuple(msg);
-    if (DEBUG5) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
-    return 1;
-  }
-
-  return 0;
-}
-
-
-
-unsigned int Log::storeBckPrepFree(MsgBckPrepareFree msg) {
-  if (DEBUG1) std::cout << KLBLU << "storeBckPrepFree-0" << KNRM << std::endl;
-  View v = msg.view;
-  PID signer = msg.auth.getId();
-
-  std::map<View,std::tuple<PJust>>::iterator it1 = this->preparesFree.find(v);
-  if (it1 != this->preparesFree.end()) { // there is already an entry for this view
-    PJust prep = std::get<0>(it1->second);
-    if (DEBUG1) std::cout << KLBLU << "storeBckPrepFree-1" << KNRM << std::endl;
-
-    // We only add 'msg' to the log if the sender hasn't already sent a new-view message for this view
-    if (!msgPrepareFreeFrom(prep,signer)) {
-      //Auths auths = prep.auths;
-      //auths.add(msg.auth);
-      //MsgPrepareFree newprep = MsgPrepareFree(prep.hash,prep.view,prep.auth,auths);
-      //it1->second = newprep;
-      //this->preparesFree[v].setAuths(auths);
-      if (DEBUG1) { std::cout << KGRN << "updating bck prep for view (" << v << ")" << KNRM << std::endl; }
-      prep.add(msg.auth);
-      it1->second = std::make_tuple(prep);
-      unsigned int s = prep.sizeAuth();
-      if (DEBUG1) std::cout << KLBLU << "storeBckPrepFree-4(" << s << ")" << KNRM << std::endl;
-      //if (DEBUG) { std::cout << KGRN << "updated entry; #=" << msgs.size() << KNRM << std::endl; }
-      return s;
-    }
-  } else { // there is no entry for this view
-    PJust newprep = PJust(Hash(false),msg.view,Auth(false),Auths(msg.auth));
-    if (DEBUG1) { std::cout << KGRN << "storing bck prep for view (" << v << ")" << KNRM << std::endl; }
-    this->preparesFree[v] = std::make_tuple(newprep);
-    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
-    return 1;
-  }
-
-  return 0;
-}
-
-
-unsigned int Log::storeLdrPrepFree(HAccum msg) {
-  View v = msg.getView();
-
-  std::map<View,std::tuple<HAccum>>::iterator it1 = this->ldrpreparesFree.find(v);
-  if (it1 != this->ldrpreparesFree.end()) { // there is already an entry for this view
-    return 1;
-  } else { // there is no entry for this view
-    this->ldrpreparesFree[v] = std::make_tuple(msg);
-    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
-    return 1;
-  }
-
-  return 0;
-}
-
-
-PJust Log::getPrepareFree(View view) {
-  std::map<View,std::tuple<PJust>>::iterator it1 = this->preparesFree.find(view);
-  if (it1 != this->preparesFree.end()) { // there is already an entry for this view
-    return std::get<0>(it1->second);
-  }
-  PJust msg(Hash(false),0,Auth(false),Auths());
-  return msg;
-}
-
-
-unsigned int Log::storePcFree(MsgPreCommitFree msg) {
-  View v = msg.view;
-  std::set<PID> signers = msg.auths.getSigners();
-
-  std::map<View,std::set<MsgPreCommitFree>>::iterator it1 = this->precommitsFree.find(v);
-  if (it1 != this->precommitsFree.end()) { // there is already an entry for this view
-    std::set<MsgPreCommitFree> msgs = it1->second;
-
-    if (!msgPreCommitFreeFrom(msgs,signers)) {
-      if (DEBUG) { std::cout << KGRN << "before #=" << msgs.size() << KNRM << std::endl; }
-      msgs.insert(msg);
-      if (DEBUG) { std::cout << KGRN << "after #=" << msgs.size() << KNRM << std::endl; }
-      this->precommitsFree[v]=msgs;
-      return msgs.size();
-    }
-  } else { // there is no entry for this view
-    this->precommitsFree[v]={msg};
-    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
-    return 1;
-  }
-
-  return 0;
-}
-
-
-Auths Log::getPrecommitFree(View view, unsigned int n) {
-  Auths auths;
-  std::map<View,std::set<MsgPreCommitFree>>::iterator it1 = this->precommitsFree.find(view);
-  if (it1 != this->precommitsFree.end()) { // there is already an entry for this view
-    std::set<MsgPreCommitFree> msgs = it1->second;
-    for (std::set<MsgPreCommitFree>::iterator it=msgs.begin(); auths.getSize() < n && it!=msgs.end(); ++it) {
-      MsgPreCommitFree msg = (MsgPreCommitFree)*it;
-      Auths others = msg.auths;
-      if (DEBUG) { std::cout << KGRN << "adding:" << others.prettyPrint() << KNRM << std::endl; }
-      auths.addUpto(others,n);
-    }
-  }
-  return auths;
-}
-
-bool Log::inPrecommitFree(View view, PID id) {
-  std::map<View,std::set<MsgPreCommitFree>>::iterator it1 = this->precommitsFree.find(view);
-  if (it1 != this->precommitsFree.end()) { // there is already an entry for this view
-    std::set<MsgPreCommitFree> msgs = it1->second;
-    for (std::set<MsgPreCommitFree>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
-      MsgPreCommitFree msg = (MsgPreCommitFree)*it;
-      if (msg.auths.in(id)) { return true; }
-    }
-  }
-  return false;
-}
-
-
 ///////////////////
-
-
-unsigned int Log::storeEchoRote(MsgEchoRote msg, unsigned int limit) {
-  View v = msg.view;
-  Auth a = msg.auth;
-  PID signer = msg.auth.getId();
-
-  std::map<View,Auths>::iterator it1 = this->echosRote.find(v);
-  if (it1 != this->echosRote.end()) { // there is already an entry for this view
-    Auths auths = it1->second;
-    unsigned int n1 = auths.getSize();
-
-    if (n1 < limit && !auths.in(signer)) {
-      auths.add(a);
-      this->echosRote[v]=auths;
-      return auths.getSize();
-    }
-
-  } else { // there is no entry for this view
-    Auths auths = Auths(a);
-    this->echosRote[v]=auths;
-    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
-    return 1;
-  }
-
-  return 0;
-}
-
-unsigned int Log::storeAckRote(MsgAckRote msg, unsigned int limit) {
-  View v = msg.view;
-  Auth a = msg.auth;
-  PID signer = msg.auth.getId();
-
-  std::map<View,Auths>::iterator it1 = this->acksRote.find(v);
-  if (it1 != this->acksRote.end()) { // there is already an entry for this view
-    Auths auths = it1->second;
-    unsigned int n1 = auths.getSize();
-
-    if (DEBUG) { std::cout << KGRN << "entries for view (" << v << "): " << auths.prettyPrint()
-                           << " - new entry: " << a.prettyPrint()
-                           << KNRM << std::endl; }
-
-    if (n1 < limit) {
-
-      if (!auths.in(signer)) {
-        auths.add(a);
-        this->acksRote[v]=auths;
-        unsigned int n2 = auths.getSize();
-        if (DEBUG) { std::cout << KGRN << "added an entry for signer (" << signer << ") view (" << v << ")"
-                               << " - before (" << n1 << ") after (" << n2 << ")"
-                               << KNRM << std::endl; }
-        return n2;
-      } else {
-        // will then return 0
-        if (DEBUG) { std::cout << KGRN << "already an entry for signer (" << signer << ") view (" << v << ")"
-                               << KNRM << std::endl; }
-      }
-
-    } else {
-        // will then return 0
-        if (DEBUG) { std::cout << KGRN << "already enough entries (" << n1 << ") limit is (" << limit << ")"
-                               << KNRM << std::endl; }
-    }
-  } else { // there is no entry for this view
-    Auths auths = Auths(a);
-    this->acksRote[v]=auths;
-    if (DEBUG) { std::cout << KGRN << "no entry for view (" << v << ") before; #=1" << KNRM << std::endl; }
-    return 1;
-  }
-
-  return 0;
-}
 
 
 ///////////////////
@@ -1055,7 +580,7 @@ LdrPrepareOP Log::getLdrPrepareOp(View view) {
     LdrPrepareOP msg = std::get<0>(it->second);
     return msg;
   }
-  LdrPrepareOP msg; //(HAccum(),Block());
+  LdrPrepareOP msg;
   return msg;
 }
 
@@ -1377,15 +902,6 @@ bool msgPrepareChCombFrom(std::set<MsgPrepareChComb> msgs, PID signer) {
   return false;
 }
 
-bool msgLdrPrepareChCombFrom(std::set<MsgLdrPrepareChComb> msgs, PID signer) {
-  for (std::set<MsgLdrPrepareChComb>::iterator it=msgs.begin(); it!=msgs.end(); ++it) {
-    MsgLdrPrepareChComb msg = (MsgLdrPrepareChComb)*it;
-    PID k = msg.sign.getSigner();
-    if (signer == k) { return true; }
-  }
-  return false;
-}
-
 unsigned int Log::storeNvChComb(MsgNewViewChComb msg) {
   RData data = msg.data;
   View v = data.getPropv();
@@ -1454,32 +970,6 @@ unsigned int Log::storePrepChComb(MsgPrepareChComb msg) {
 }
 
 
-unsigned int Log::storeLdrPrepChComb(MsgLdrPrepareChComb msg) {
-  CBlock block = msg.block;
-  View v = block.getView();
-  PID signer = msg.sign.getSigner();
-
-  std::map<View,std::set<MsgLdrPrepareChComb>>::iterator it1 = this->ldrpreparesChComb.find(v);
-  if (it1 != this->ldrpreparesChComb.end()) { // there is already an entry for this view
-    std::set<MsgLdrPrepareChComb> msgs = it1->second;
-
-    // We only add 'msg' to the log if the sender hasn't already sent a new-view message for this view
-    if (!msgLdrPrepareChCombFrom(msgs,signer)) {
-      msgs.insert(msg);
-      this->ldrpreparesChComb[v]=msgs;
-      //if (DEBUG) { std::cout << KGRN << "updated entry; #=" << msgs.size() << KNRM << std::endl; }
-      return msgs.size();
-    }
-  } else { // there is no entry for this view
-    this->ldrpreparesChComb[v]={msg};
-    if (DEBUG) { std::cout << KGRN << "no entry for this view (" << v << ") before; #=1" << KNRM << std::endl; }
-    return 1;
-  }
-
-  return 0;
-}
-
-
 Signs Log::getPrepareChComb(View view, unsigned int n) {
   Signs signs;
   std::map<View,std::set<MsgPrepareChComb>>::iterator it1 = this->preparesChComb.find(view);
@@ -1509,18 +999,6 @@ Just Log::findHighestNvChComb(View view) {
     }
   }
   return just;
-}
-
-
-MsgLdrPrepareChComb Log::firstLdrPrepareChComb(View view) {
-  std::map<View,std::set<MsgLdrPrepareChComb>>::iterator it = this->ldrpreparesChComb.find(view);
-  if (it != this->ldrpreparesChComb.end()) { // there is already an entry for this view
-    std::set<MsgLdrPrepareChComb> msgs = it->second;
-    if (0 < msgs.size()) { // We return the first element
-      return (MsgLdrPrepareChComb)*(msgs.begin());
-    }
-  }
-  return MsgLdrPrepareChComb(CBlock(),Sign());
 }
 
 ////////////////
@@ -1559,31 +1037,6 @@ std::string Log::prettyPrint() {
     View v = it1->first;
     std::set<MsgLdrPrepare> msgs = it1->second;
     text += "proposals;view=" + std::to_string(v) + ";#=" + std::to_string(msgs.size()) + "\n";
-  }
-
-  //newviewsAcc
-  for (std::map<View,std::set<MsgNewViewAcc>>::iterator it1=this->newviewsAcc.begin(); it1!=this->newviewsAcc.end();++it1) {
-    View v = it1->first;
-    std::set<MsgNewViewAcc> msgs = it1->second;
-    text += "newviews-acc;view=" + std::to_string(v) + ";#=" + std::to_string(msgs.size()) + "\n";
-  }
-  //preparesAcc
-  for (std::map<View,std::set<MsgPrepareAcc>>::iterator it1=this->preparesAcc.begin(); it1!=this->preparesAcc.end();++it1) {
-    View v = it1->first;
-    std::set<MsgPrepareAcc> msgs = it1->second;
-    text += "prepares-acc;view=" + std::to_string(v) + ";#=" + std::to_string(msgs.size()) + "\n";
-  }
-  //ldrpreparesAcc
-  for (std::map<View,std::set<MsgLdrPrepareAcc>>::iterator it1=this->ldrpreparesAcc.begin(); it1!=this->ldrpreparesAcc.end();++it1) {
-    View v = it1->first;
-    std::set<MsgLdrPrepareAcc> msgs = it1->second;
-    text += "pre-prepares-acc;view=" + std::to_string(v) + ";#=" + std::to_string(msgs.size()) + "\n";
-  }
-  //precommitsAcc
-  for (std::map<View,std::set<MsgPreCommitAcc>>::iterator it1=this->precommitsAcc.begin(); it1!=this->precommitsAcc.end();++it1) {
-    View v = it1->first;
-    std::set<MsgPreCommitAcc> msgs = it1->second;
-    text += "precommits-acc;view=" + std::to_string(v) + ";#=" + std::to_string(msgs.size()) + "\n";
   }
 
   //newviewsComb
@@ -1641,12 +1094,6 @@ std::string Log::prettyPrint() {
     View v = it1->first;
     std::set<MsgPrepareChComb> msgs = it1->second;
     text += "prepares-ch-comb;view=" + std::to_string(v) + ";#=" + std::to_string(msgs.size()) + "\n";
-  }
-  //ldrpreparesChComb
-  for (std::map<View,std::set<MsgLdrPrepareChComb>>::iterator it1=this->ldrpreparesChComb.begin(); it1!=this->ldrpreparesChComb.end();++it1) {
-    View v = it1->first;
-    std::set<MsgLdrPrepareChComb> msgs = it1->second;
-    text += "pre-prepares-ch-comb;view=" + std::to_string(v) + ";#=" + std::to_string(msgs.size()) + "\n";
   }
 
   return text;
@@ -1802,49 +1249,6 @@ Signs Log::getCommit(View view, unsigned int n) {
 }
 
 
-MsgLdrPrepareAcc Log::firstLdrPrepareAcc(View view) {
-  std::map<View,std::set<MsgLdrPrepareAcc>>::iterator it = this->ldrpreparesAcc.find(view);
-  if (it != this->ldrpreparesAcc.end()) { // there is already an entry for this view
-    std::set<MsgLdrPrepareAcc> msgs = it->second;
-    if (0 < msgs.size()) { // We return the first element
-      return (MsgLdrPrepareAcc)*(msgs.begin());
-    }
-  }
-  CData<Block,Accum> cdata;
-  Sign sign;
-  MsgLdrPrepareAcc msg(cdata,sign);
-  return msg;
-}
-
-
-MsgPrepareAcc Log::firstPrepareAcc(View view) {
-  std::map<View,std::set<MsgPrepareAcc>>::iterator it = this->preparesAcc.find(view);
-  if (it != this->preparesAcc.end()) { // there is already an entry for this view
-    std::set<MsgPrepareAcc> msgs = it->second;
-    if (0 < msgs.size()) { // We return the first element
-      return (MsgPrepareAcc)*(msgs.begin());
-    }
-  }
-  CData<Hash,Void> cdata;
-  MsgPrepareAcc msg(cdata,{});
-  return msg;
-}
-
-
-MsgPreCommitAcc Log::firstPrecommitAcc(View view) {
-  std::map<View,std::set<MsgPreCommitAcc>>::iterator it = this->precommitsAcc.find(view);
-  if (it != this->precommitsAcc.end()) { // there is already an entry for this view
-    std::set<MsgPreCommitAcc> msgs = it->second;
-    if (0 < msgs.size()) { // We return the first element
-      return (MsgPreCommitAcc)*(msgs.begin());
-    }
-  }
-  CData<Hash,Void> cdata;
-  MsgPreCommitAcc msg(cdata,{});
-  return msg;
-}
-
-
 MsgLdrPrepareComb Log::firstLdrPrepareComb(View view) {
   std::map<View,std::set<MsgLdrPrepareComb>>::iterator it = this->ldrpreparesComb.find(view);
   if (it != this->ldrpreparesComb.end()) { // there is already an entry for this view
@@ -1857,17 +1261,6 @@ MsgLdrPrepareComb Log::firstLdrPrepareComb(View view) {
   Block block;
   Sign sign;
   MsgLdrPrepareComb msg(acc,block,sign);
-  return msg;
-}
-
-
-HAccum Log::getLdrPrepareFree(View view) {
-  std::map<View,std::tuple<HAccum>>::iterator it = this->ldrpreparesFree.find(view);
-  if (it != this->ldrpreparesFree.end()) { // there is already an entry for this view
-    HAccum msg = std::get<0>(it->second);
-    return msg;
-  }
-  HAccum msg; //(HAccum(),Block());
   return msg;
 }
 
@@ -1896,19 +1289,6 @@ MsgPreCommitComb Log::firstPrecommitComb(View view) {
   }
   RData data;
   MsgPreCommitComb msg(data,{});
-  return msg;
-}
-
-MsgPreCommitFree Log::firstPrecommitFree(View view) {
-  std::map<View,std::set<MsgPreCommitFree>>::iterator it = this->precommitsFree.find(view);
-  if (it != this->precommitsFree.end()) { // there is already an entry for this view
-    std::set<MsgPreCommitFree> msgs = it->second;
-    if (0 < msgs.size()) { // We return the first element
-      return (MsgPreCommitFree)*(msgs.begin());
-    }
-  }
-  View v = 0;
-  MsgPreCommitFree msg(view,{});
   return msg;
 }
 
@@ -2619,124 +1999,4 @@ std::set<MsgPmSyncTC> Log::getPmSyncTcs(View v) {
     msgs = it->second;
   }
   return msgs;
-}
-
-bool Log::inReplyCounterRote(View v, MsgReplyCounterRote m) {
-  std::map<View,std::set<MsgReplyCounterRote>>::iterator it = this->repliesCounterRote.find(v);
-  if (it != this->repliesCounterRote.end()) {
-    std::set<MsgReplyCounterRote> msgs = it->second;
-    for (std::set<MsgReplyCounterRote>::iterator it1=msgs.begin(); it1!=msgs.end(); ++it1) {
-      MsgReplyCounterRote msg = (MsgReplyCounterRote)*it1;
-      if (msg.auth.getId() == m.auth.getId()) { return true; }
-    }
-  }
-  return false;
-}
-
-unsigned int Log::storeReplyCounterRote(View v, MsgReplyCounterRote msg) {
-  unsigned int n = 0;
-
-  std::map<View,std::set<MsgReplyCounterRote>>::iterator it = this->repliesCounterRote.find(v);
-  if (it != this->repliesCounterRote.end()) {
-    std::set<MsgReplyCounterRote> msgs = it->second;
-
-    if (!inReplyCounterRote(v,msg)) {
-      msgs.insert(msg);
-      if (DEBUG) { std::cout << KGRN << "[ROTE] storing: " << msg.prettyPrint() << KNRM << std::endl; }
-      this->repliesCounterRote[v]=msgs;
-    }
-
-    n = msgs.size();
-  } else {
-    this->repliesCounterRote[v]={msg};
-    n = 1;
-  }
-
-  return n;
-}
-
-MsgReplyCounterRote Log::getHighestReplyCounterRote(View v) {
-  MsgReplyCounterRote m(v,0,Auth());
-
-  std::map<View,std::set<MsgReplyCounterRote>>::iterator it = this->repliesCounterRote.find(v);
-  if (it != this->repliesCounterRote.end()) {
-    std::set<MsgReplyCounterRote> msgs = it->second;
-
-    for (std::set<MsgReplyCounterRote>::iterator it1=msgs.begin(); it1!=msgs.end(); ++it1) {
-      MsgReplyCounterRote msg = (MsgReplyCounterRote)*it1;
-      if (DEBUG) { std::cout << KGRN << "[ROTE] entry: " << msg.prettyPrint() << KNRM << std::endl; }
-      if (msg.counter >= m.counter) { m = msg; }
-    }
-
-  }
-
-  return m;
-}
-
-bool Log::inReplyRestart(Hash nonce, MsgReplyRestart m) {
-  std::map<Hash,std::set<MsgReplyRestart>>::iterator it = this->repliesRestart.find(nonce);
-  if (it != this->repliesRestart.end()) {
-    std::set<MsgReplyRestart> msgs = it->second;
-    for (std::set<MsgReplyRestart>::iterator it1=msgs.begin(); it1!=msgs.end(); ++it1) {
-      MsgReplyRestart msg = (MsgReplyRestart)*it1;
-      if (msg.auth.getId() == m.auth.getId()) { return true; }
-    }
-  }
-  return false;
-}
-
-unsigned int Log::storeReplyRestart(Hash nonce, MsgReplyRestart msg) {
-  unsigned int n = 0;
-
-  std::map<Hash,std::set<MsgReplyRestart>>::iterator it = this->repliesRestart.find(nonce);
-  if (it != this->repliesRestart.end()) {
-    std::set<MsgReplyRestart> msgs = it->second;
-
-    if (!inReplyRestart(nonce,msg)) {
-      msgs.insert(msg);
-      if (DEBUG) { std::cout << KGRN << "[ACHILLES] storing: " << msg.prettyPrint() << KNRM << std::endl; }
-      this->repliesRestart[nonce]=msgs;
-    }
-
-    n = msgs.size();
-  } else {
-    this->repliesRestart[nonce]={msg};
-    n = 1;
-  }
-
-  return n;
-}
-
-MsgReplyRestart Log::getHighestReplyRestart(Hash nonce) {
-  MsgReplyRestart m(0,Hash(),Auth());
-
-  std::map<Hash,std::set<MsgReplyRestart>>::iterator it = this->repliesRestart.find(nonce);
-  if (it != this->repliesRestart.end()) {
-    std::set<MsgReplyRestart> msgs = it->second;
-
-    for (std::set<MsgReplyRestart>::iterator it1=msgs.begin(); it1!=msgs.end(); ++it1) {
-      MsgReplyRestart msg = (MsgReplyRestart)*it1;
-      if (DEBUG) { std::cout << KGRN << "[ACHILLES] entry: " << msg.prettyPrint() << KNRM << std::endl; }
-      if (msg.view >= m.view) { m = msg; }
-    }
-
-  }
-
-  return m;
-}
-
-
-bool Log::gotReplyRestartFrom(Hash nonce, PID id) {
-  std::map<Hash,std::set<MsgReplyRestart>>::iterator it = this->repliesRestart.find(nonce);
-  if (it != this->repliesRestart.end()) {
-    std::set<MsgReplyRestart> msgs = it->second;
-
-    for (std::set<MsgReplyRestart>::iterator it1=msgs.begin(); it1!=msgs.end(); ++it1) {
-      MsgReplyRestart msg = (MsgReplyRestart)*it1;
-      if (msg.auth.getId() == id) { return true; }
-    }
-
-  }
-
-  return false;
 }
