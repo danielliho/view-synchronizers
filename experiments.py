@@ -1,5 +1,5 @@
 ## Imports
-from subprocess import Popen
+from subprocess import CalledProcessError, Popen
 import subprocess
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -405,25 +405,7 @@ mybridge    = "damysusNet" # "bridge"
 ## Code
 
 class Protocol(Enum):
-    BASE      = "BASIC_BASELINE"           # basic baseline
-    CHEAP     = "BASIC_CHEAP"              # Checker only
-    QUICK     = "BASIC_QUICK"              # Accumulator only
-    COMB      = "BASIC_CHEAP_AND_QUICK"    # Damysus (Checker + Accumulator)
-    FREE      = "BASIC_FREE"               # hash & signature-free Damysus
-    DAMR      = "BASIC_DAMYSUS_ROTE"       # Damysus + kinda ROTE
-    DAMA      = "BASIC_DAMYSUS_ACHILLES"   # Damysus + Pacemaker + kinda Achilles
-    DAMP      = "BASIC_DAMYSUS_PACEMAKER"  # Damysus + Pacemaker
-    DAMQ      = "BASIC_DAMYSUS3_PACEMAKER" # Damysus + Pacemaker + 3f+1 nodes
     ROLL      = "BASIC_ROLL"               # rollback prevention
-    ONEP      = "BASIC_ONEP"               # 1+1/2 phase Damysus (case 1)
-    ONEPB     = "BASIC_ONEPB"              # 1+1/2 phase Damysus (case 2)
-    ONEPC     = "BASIC_ONEPC"              # 1+1/2 phase Damysus (case 3)
-    ONEPD     = "BASIC_ONEPD"              # 1+1/2 phase Damysus (case 4)
-    CHBASE    = "CHAINED_BASELINE"         # chained baseline
-    CHCOMB    = "CHAINED_CHEAP_AND_QUICK"  # chained Damysus
-    ## Debug versions
-    QUICKDBG  = "BASIC_QUICK_DEBUG"
-    CHCOMBDBG = "CHAINED_CHEAP_AND_QUICK_DEBUG" # chained Damysus - debug version
 
 
 ## generates a local config file
@@ -798,7 +780,7 @@ def terminateInstance(region,i):
             return True
         except CalledProcessError:
             print("oops, cannot terminate yet:", i)
-            sleep(1)
+            time.sleep(1)
 # End of terminateInstance
 
 
@@ -930,81 +912,10 @@ def runAWS():
 
             numDeadNodes = 0 #numFaults
 
-            # ------
-            # HotStuff-like baseline
-            if runBase:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # Cheap-HotStuff (TEE locked/prepared blocks)
-            if runCheap:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # Quick-HotStuff (Accumulator)
-            if runQuick:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # Quick-HotStuff (Accumulator) - debug version
-            if runQuickDbg:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # Combines Cheap&Quick-HotStuff
-            if runComb:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # Damysus + kinda ROTE
-            if runDamr:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMR,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # Damysus + kinda Achilles
-            if runDama:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMA,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # Damysus + Pacemaker
-            if runDamp:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # Damysus + Pacemaker + 3f+1 nodes
-            if runDamq:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMQ,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # Free
-            if runFree:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
             # Rollback prevention
             if runRoll:
                 executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ROLL,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
             # ------
-            # Onep
-            if runOnep:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # OnepB
-            if runOnepB:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # OnepC
-            if runOnepC:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # OnepD
-            if runOnepD:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # Chained HotStuff-like baseline
-            if runChBase:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # Chained Cheap&Quick
-            if runChComb:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # Chained Cheap&Quick - debug version
-            if runChCombDbg:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-            # ------
-            # We now terminate all instances just in case
-            #terminateAllInstances()
 
             # terminates the instances
             terminateInstances(instanceRepIds + instanceClIds)
@@ -1049,81 +960,10 @@ def runAWSJoin(numFaults,joiners):
 
             numDeadNodes = 0 #numFaults
 
-            # ------
-            # HotStuff-like baseline
-            if runBase:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # Cheap-HotStuff (TEE locked/prepared blocks)
-            if runCheap:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # Quick-HotStuff (Accumulator)
-            if runQuick:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # Quick-HotStuff (Accumulator) - debug version
-            if runQuickDbg:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # Combines Cheap&Quick-HotStuff
-            if runComb:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # Damysus + kinda ROTE
-            if runDamr:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMR,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # Damysus + kinda Achilles
-            if runDama:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMA,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # Damysus + Pacemaker
-            if runDamp:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # Damysus + Pacemaker + 3f+1 nodes
-            if runDamq:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.DAMQ,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # Free
-            if runFree:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
             # Rollback prevention
             if runRoll:
                 executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ROLL,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
             # ------
-            # Onep
-            if runOnep:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # OnepB
-            if runOnepB:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # OnepC
-            if runOnepC:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # OnepD
-            if runOnepD:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # Chained HotStuff-like baseline
-            if runChBase:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # Chained Cheap&Quick
-            if runChComb:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # Chained Cheap&Quick - debug version
-            if runChCombDbg:
-                executeAWS(instanceRepIds=instanceRepIds,instanceClIds=instanceClIds,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes)
-            # ------
-            # We now terminate all instances just in case
-            #terminateAllInstances()
 
             # terminates the instances
             terminateInstances(instanceRepIds + instanceClIds)
@@ -1512,78 +1352,10 @@ def runCluster():
     for numFaults in faults:
         numDeadNodes = 0 #numFaults
 
-        # ------
-        # HotStuff-like baseline
-        if runBase:
-            executeCluster(info=info,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # Cheap-HotStuff (TEE locked/prepared blocks)
-        if runCheap:
-            executeCluster(info=info,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # Quick-HotStuff (Accumulator)
-        if runQuick:
-            executeCluster(info=info,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # Quick-HotStuff (Accumulator) - debug version
-        if runQuickDbg:
-            executeCluster(info=info,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # Combines Cheap&Quick-HotStuff
-        if runComb:
-            executeCluster(info=info,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # Damysus + kinda ROTE
-        if runDamr:
-            executeCluster(info=info,protocol=Protocol.DAMR,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # Damysus + kinda Achilles
-        if runDama:
-            executeCluster(info=info,protocol=Protocol.DAMA,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # Damysus + Pacemaker
-        if runDamp:
-            executeCluster(info=info,protocol=Protocol.DAMP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # Damysus + Pacemaker + 3f+1 nodes
-        if runDamq:
-            executeCluster(info=info,protocol=Protocol.DAMQ,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # Free
-        if runFree:
-            executeCluster(info=info,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
         # Roll
         if runRoll:
             executeCluster(info=info,protocol=Protocol.ROLL,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
         # ------
-        # Onep
-        if runOnep:
-            executeCluster(info=info,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # OnepB
-        if runOnepB:
-            executeCluster(info=info,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # OnepC
-        if runOnepC:
-            executeCluster(info=info,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # OnepD
-        if runOnepD:
-            executeCluster(info=info,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # Chained HotStuff-like baseline
-        if runChBase:
-            executeCluster(info=info,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # Chained Cheap&Quick
-        if runChComb:
-            executeCluster(info=info,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
-        # ------
-        # Chained Cheap&Quick - debug version
-        if runChCombDbg:
-            executeCluster(info=info,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes)
 
     # cleanup
     for node in nodes:
@@ -1624,10 +1396,7 @@ def prepareCluster():
 
 ## Returns True if the protocol requires SGX
 def needsSGX(protocol):
-    if (protocol in [Protocol.BASE, Protocol.CHBASE, Protocol.QUICKDBG, Protocol.CHCOMBDBG]):
-        return False
-    else:
-        return True
+    return True
 # End of needsSGX
 
 
@@ -5794,112 +5563,10 @@ def runExperimentsFaults(numFaults):
     print("will test the following numbers of dead nodes: ", l)
 
     for numDeadNodes in l: # i.e., from 0 to numFaults
-        # ------
-        # HotStuff-like baseline
-        if runBase:
-            computeAvgStats(recompile,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Cheap-HotStuff (TEE locked/prepared blocks)
-        if runCheap:
-            computeAvgStats(recompile,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Quick-HotStuff (Accumulator)
-        if runQuick:
-            computeAvgStats(recompile,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Damysus-A (Accumulator) + Pacemaker
-        if runDamq:
-            computeAvgStats(recompile,protocol=Protocol.DAMQ,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Quick-HotStuff (Accumulator) - debug version
-        if runQuickDbg:
-            computeAvgStats(recompile,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Combines Cheap&Quick-HotStuff
-        if runComb:
-            computeAvgStats(recompile,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Damysus + kinda ROTE
-        if runDamr:
-            computeAvgStats(recompile,protocol=Protocol.DAMR,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Damysus + kinda Achilles
-        if runDama:
-            computeAvgStats(recompile,protocol=Protocol.DAMA,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Damysus + Pacemaker
-        if runDamp:
-            computeAvgStats(recompile,protocol=Protocol.DAMP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Free
-        if runFree:
-            computeAvgStats(recompile,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
+
         # Roll
         if runRoll:
             computeAvgStats(recompile,protocol=Protocol.ROLL,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Onep
-        if runOnep:
-            computeAvgStats(recompile,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # OnepB
-        if runOnepB:
-            computeAvgStats(recompile,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # OnepC
-        if runOnepC:
-            computeAvgStats(recompile,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # OnepD
-        if runOnepD:
-            computeAvgStats(recompile,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Chained HotStuff-like baseline
-        if runChBase:
-            computeAvgStats(recompile,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=2*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Chained Cheap&Quick
-        if runChComb:
-            computeAvgStats(recompile,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Chained Cheap&Quick - debug version
-        if runChCombDbg:
-            computeAvgStats(recompile,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=3*numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
 
@@ -5924,112 +5591,9 @@ def runExperiments():
     for numFaults in faults:
         numDeadNodes = 0 #numFaults
 
-        # ------
-        # HotStuff-like baseline
-        if runBase:
-            computeAvgStats(recompile,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Cheap-HotStuff (TEE locked/prepared blocks)
-        if runCheap:
-            computeAvgStats(recompile,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Quick-HotStuff (Accumulator)
-        if runQuick:
-            computeAvgStats(recompile,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Damysus-A (Accumulator) + Pacemaker
-        if runDamq:
-            computeAvgStats(recompile,protocol=Protocol.DAMQ,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Quick-HotStuff (Accumulator) - debug version
-        if runQuickDbg:
-            computeAvgStats(recompile,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Combines Cheap&Quick-HotStuff
-        if runComb:
-            computeAvgStats(recompile,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Damysus + kinda ROTE
-        if runDamr:
-            computeAvgStats(recompile,protocol=Protocol.DAMR,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Damysus + kinda Achilles
-        if runDama:
-            computeAvgStats(recompile,protocol=Protocol.DAMA,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Damysus + Pacemaker
-        if runDamp:
-            computeAvgStats(recompile,protocol=Protocol.DAMP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Free
-        if runFree:
-            computeAvgStats(recompile,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
         # Roll
         if runRoll:
             computeAvgStats(recompile,protocol=Protocol.ROLL,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Onep
-        if runOnep:
-            computeAvgStats(recompile,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # OnepB
-        if runOnepB:
-            computeAvgStats(recompile,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # OnepC
-        if runOnepC:
-            computeAvgStats(recompile,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # OnepD
-        if runOnepD:
-            computeAvgStats(recompile,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Chained HotStuff-like baseline
-        if runChBase:
-            computeAvgStats(recompile,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Chained Cheap&Quick
-        if runChComb:
-            computeAvgStats(recompile,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Chained Cheap&Quick - debug version
-        if runChCombDbg:
-            computeAvgStats(recompile,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=numJoiners,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
 
@@ -6055,114 +5619,12 @@ def runExperimentsJoin(numFaults,joiners):
     for j in joiners:
         print("number of joiners: ", j)
 
-        # ------
-        # HotStuff-like baseline
-        if runBase:
-            computeAvgStats(recompile,protocol=Protocol.BASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Cheap-HotStuff (TEE locked/prepared blocks)
-        if runCheap:
-            computeAvgStats(recompile,protocol=Protocol.CHEAP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Quick-HotStuff (Accumulator)
-        if runQuick:
-            computeAvgStats(recompile,protocol=Protocol.QUICK,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Damysus-A (Accumulator) + Pacemaker
-        if runDamq:
-            computeAvgStats(recompile,protocol=Protocol.DAMQ,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Quick-HotStuff (Accumulator) - debug version
-        if runQuickDbg:
-            computeAvgStats(recompile,protocol=Protocol.QUICKDBG,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Combines Cheap&Quick-HotStuff
-        if runComb:
-            computeAvgStats(recompile,protocol=Protocol.COMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Damysus + kinda ROTE
-        if runDamr:
-            computeAvgStats(recompile,protocol=Protocol.DAMR,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Damysus + kinda Achilles
-        if runDama:
-            computeAvgStats(recompile,protocol=Protocol.DAMA,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Damysus + Pacemaker
-        if runDamp:
-            computeAvgStats(recompile,protocol=Protocol.DAMP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Free
-        if runFree:
-            computeAvgStats(recompile,protocol=Protocol.FREE,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
         # Roll
         if runRoll:
             computeAvgStats(recompile,protocol=Protocol.ROLL,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
         else:
             (0.0,0.0,0.0,0.0)
-        # ------
-        # Onep
-        if runOnep:
-            computeAvgStats(recompile,protocol=Protocol.ONEP,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # OnepB
-        if runOnepB:
-            computeAvgStats(recompile,protocol=Protocol.ONEPB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # OnepC
-        if runOnepC:
-            computeAvgStats(recompile,protocol=Protocol.ONEPC,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # OnepD
-        if runOnepD:
-            computeAvgStats(recompile,protocol=Protocol.ONEPD,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Chained HotStuff-like baseline
-        if runChBase:
-            computeAvgStats(recompile,protocol=Protocol.CHBASE,constFactor=3,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Chained Cheap&Quick
-        if runChComb:
-            computeAvgStats(recompile,protocol=Protocol.CHCOMB,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
-        # ------
-        # Chained Cheap&Quick - debug version
-        if runChCombDbg:
-            computeAvgStats(recompile,protocol=Protocol.CHCOMBDBG,constFactor=2,numClTrans=numClTrans,sleepTime=sleepTime,numViews=numViews,cutOffBound=cutOffBound,numFaults=numFaults,numJoiners=j,numDeadNodes=numDeadNodes,numRepeats=repeats)
-        else:
-            (0.0,0.0,0.0,0.0)
+
 
     print("num complete runs=", completeRuns)
     print("num aborted runs=", abortedRuns)
@@ -6572,136 +6034,6 @@ def TVL():
     global numClients
     numClients = numNonChCls
 
-    # HotStuff-like baseline
-    if runBase:
-        oneTVL(protocol=Protocol.BASE,
-               constFactor=3,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # Cheap-HotStuff
-    if runCheap:
-        oneTVL(protocol=Protocol.CHEAP,
-               constFactor=2,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # Quick-HotStuff
-    if runQuick:
-        oneTVL(protocol=Protocol.QUICK,
-               constFactor=3,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # Damysus + Pacemaker + 3f+1 nodes
-    if runDamq:
-        oneTVL(protocol=Protocol.DAMQ,
-               constFactor=3,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # Quick-HotStuff - debug version
-    if runQuickDbg:
-        oneTVL(protocol=Protocol.QUICKDBG,
-               constFactor=3,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # Cheap&Quick-HotStuff
-    if runComb:
-        oneTVL(protocol=Protocol.COMB,
-               constFactor=2,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # Damysus + kinda ROTE
-    if runDamr:
-        oneTVL(protocol=Protocol.DAMR,
-               constFactor=2,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # Damysus + kinda Achilles
-    if runDama:
-        oneTVL(protocol=Protocol.DAMA,
-               constFactor=2,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # Damysus + Pacemaker
-    if runDamp:
-        oneTVL(protocol=Protocol.DAMP,
-               constFactor=2,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # Free
-    if runFree:
-        oneTVL(protocol=Protocol.FREE,
-               constFactor=2,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
     # Roll
     if runRoll:
         oneTVL(protocol=Protocol.ROLL,
@@ -6710,99 +6042,6 @@ def TVL():
                numTransPerBlock=numTransPerBlock,
                payloadSize=payloadSize,
                numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # Onep
-    if runOnep:
-        oneTVL(protocol=Protocol.ONEP,
-               constFactor=2,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # OnepB
-    if runOnepB:
-        oneTVL(protocol=Protocol.ONEPB,
-               constFactor=2,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # OnepC
-    if runOnepC:
-        oneTVL(protocol=Protocol.ONEPC,
-               constFactor=2,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # OnepD
-    if runOnepD:
-        oneTVL(protocol=Protocol.ONEPD,
-               constFactor=2,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTrans,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    numClients = numChCls
-
-    # Chained HotStuff-like baseline
-    if runChBase:
-        oneTVL(protocol=Protocol.CHBASE,
-               constFactor=3,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTransCh,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # Chained Cheap&Quick-HotStuff
-    if runChComb:
-        oneTVL(protocol=Protocol.CHCOMB,
-               constFactor=2,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTransCh,
-               numViews=numViews,
-               cutOffBound=cutOffBound,
-               sleepTimes=sleepTimes,
-               repeats=repeats)
-
-    # Chained Cheap&Quick-HotStuff - debug version
-    if runChCombDbg:
-        oneTVL(protocol=Protocol.CHCOMBDBG,
-               constFactor=2,
-               numFaults=numFaults,
-               numTransPerBlock=numTransPerBlock,
-               payloadSize=payloadSize,
-               numClTrans=numClTransCh,
                numViews=numViews,
                cutOffBound=cutOffBound,
                sleepTimes=sleepTimes,
@@ -6912,141 +6151,6 @@ def TVLaws():
     numReps = (3 * numFaults) + 1
     (allRepIds, allClIds) = startInstances(numReps,numClients)
 
-    if runBase:
-        oneTVLaws(protocol=Protocol.BASE,
-                  constFactor=3,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runCheap:
-        oneTVLaws(protocol=Protocol.CHEAP,
-                  constFactor=2,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runQuick:
-        oneTVLaws(protocol=Protocol.QUICK,
-                  constFactor=3,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runDamq:
-        oneTVLaws(protocol=Protocol.DAMQ,
-                  constFactor=3,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runComb:
-        oneTVLaws(protocol=Protocol.COMB,
-                  constFactor=2,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runDamr:
-        oneTVLaws(protocol=Protocol.DAMR,
-                  constFactor=2,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runDama:
-        oneTVLaws(protocol=Protocol.DAMA,
-                  constFactor=2,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runDamp:
-        oneTVLaws(protocol=Protocol.DAMP,
-                  constFactor=2,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runFree:
-        oneTVLaws(protocol=Protocol.FREE,
-                  constFactor=2,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
     if runRoll:
         oneTVLaws(protocol=Protocol.ROLL,
                   constFactor=2,
@@ -7057,103 +6161,6 @@ def TVLaws():
                   payloadSize=payloadSize,
                   numCl=numClients,
                   numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runOnep:
-        oneTVLaws(protocol=Protocol.ONEP,
-                  constFactor=2,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runOnepB:
-        oneTVLaws(protocol=Protocol.ONEPB,
-                  constFactor=2,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runOnepC:
-        oneTVLaws(protocol=Protocol.ONEPC,
-                  constFactor=2,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runOnepD:
-        oneTVLaws(protocol=Protocol.ONEPD,
-                  constFactor=2,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClients,
-                  numClTrans=numClTrans,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-
-    ## Chained Versions
-
-    if runChBase or runChComb:
-        terminateInstances(allRepIds + allClIds)
-        (allRepIds, allClIds) = startInstances(numReps,numClientsCh)
-
-    if runChBase:
-        oneTVLaws(protocol=Protocol.CHBASE,
-                  constFactor=3,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClientsCh,
-                  numClTrans=numClTransCh,
-                  numViews=numViews,
-                  cutOffBound=cutOffBound,
-                  sleepTimes=sleepTimes,
-                  repeats=repeats)
-
-    if runChComb:
-        oneTVLaws(protocol=Protocol.CHCOMB,
-                  constFactor=2,
-                  numFaults=numFaults,
-                  allRepIds=allRepIds,
-                  allClIds=allClIds,
-                  numTransPerBlock=numTransPerBlock,
-                  payloadSize=payloadSize,
-                  numCl=numClientsCh,
-                  numClTrans=numClTransCh,
                   numViews=numViews,
                   cutOffBound=cutOffBound,
                   sleepTimes=sleepTimes,
@@ -7943,25 +6950,3 @@ elif args.joining and args.numjoiners:
 else:
     print("Throughput and Latency")
     runExperiments()
-
-
-#### Run the experiments to compute throughputs & latencies
-#runExperiments()
-
-## Debug
-#tup = computeAvgStats(recompile=False,protocol=Protocol.COMB,constFactor=2,numFaults=1,numRepeats=1)
-#print(tup)
-#createPlot(plotFile)
-#createPlot("points-01-Apr-2021-15:48:12.821672")
-#createPlot("stats/points-08-Apr-2021-15:57:31.873203")
-#mkApp(protocol=Protocol.CHEAP,constFactor=2,numFaults=1,numTrans=numTrans,payloadSize=payloadSize)
-#createPlot("stats/points-13-Apr-2021-10:18:28.616683")
-#createPlot("stats/points-14-Apr-2021-10:58:41.589782")
-#createPlot("stats/points-15-Apr-2021-01:10:01.920476")
-
-#### Run the experiments to compute throughput vs. latency
-#TVL()
-
-## Debug
-#createTVLplot("stats/clients-10-Apr-2021-00:44:17.638744")
-#createTVLplot("stats/clients-15-Apr-2021-02:40:47.929625")

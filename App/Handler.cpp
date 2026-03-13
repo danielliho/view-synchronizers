@@ -5120,7 +5120,7 @@ Sync Handler::highestSync(std::set<Sync> *syncs) {
 }
 
 // For leaders to handle sync messages
-void Handler::handleSync(Sync sync) {
+void Handler::handleSync(Sync sync) {                                                                                 //Aegis line 11.
   auto start = std::chrono::steady_clock::now();
   if (DEBUG1V) std::cout << KBLU << nfo() << "handling:" << sync.prettyPrint() << KNRM << std::endl;
 
@@ -5208,7 +5208,7 @@ void Handler::handle_sync(MsgSync msg, const PeerNet::conn_t &conn) {
 }
 
 // For backups to handle sync "quorum certificates"
-void Handler::handleSyncTC(MsgSyncTC qc) {
+void Handler::handleSyncTC(MsgSyncTC qc) {                                                                              //Aegis line 21.
   auto start = std::chrono::steady_clock::now();
   if (DEBUG1V) std::cout << KBLU << nfo() << "handling:" << qc.prettyPrint() << KNRM << std::endl;
 
@@ -5333,7 +5333,7 @@ void Handler::handle_sync_tc(MsgSyncTC msg, const PeerNet::conn_t &conn) {
 }
 
 // For leaders to handle votes to sync
-void Handler::handleSyncVote(MsgSyncVote msg) {
+void Handler::handleSyncVote(MsgSyncVote msg) {                                                                         //Aegis line 38.
   auto start = std::chrono::steady_clock::now();
   if (DEBUG1U) std::cout << KBLU << nfo() << "handling:" << msg.prettyPrint() << KNRM << std::endl;
 
@@ -5400,7 +5400,7 @@ void Handler::handle_sync_vote(MsgSyncVote msg, const PeerNet::conn_t &conn) {
 }
 
 // For nodes to handle vote qcs
-void Handler::handleSyncVoteQc(MsgSyncVoteQc qc) {
+void Handler::handleSyncVoteQc(MsgSyncVoteQc qc) {                                                                      //Aegis line 46.
   auto start = std::chrono::steady_clock::now();
   if (DEBUG1U) std::cout << KBLU << nfo() << "handling:" << qc.prettyPrint() << KNRM << std::endl;
 
@@ -5654,7 +5654,7 @@ void Handler::startNewViewOrJoinRB(RBstoreAuth store) {
 
 // For nodes to start a new view
 // TODO: also trigger new-views when there is a timeout
-void Handler::startNewViewRB(RBstoreAuth store) {
+void Handler::startNewViewRB(RBstoreAuth store) {                                                             // Aegis line 7.
   if (DEBUG1) std::cout << KBLU << nfo() << "starting a new view" << KNRM << std::endl;
 
   // extracts just one of the stores
