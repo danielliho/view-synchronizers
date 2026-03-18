@@ -5120,7 +5120,7 @@ Sync Handler::highestSync(std::set<Sync> *syncs) {
 }
 
 // For leaders to handle sync messages
-void Handler::handleSync(Sync sync) {                                                                                 //Aegis line 11.
+void Handler::handleSync(Sync sync) {
   auto start = std::chrono::steady_clock::now();
   if (DEBUG1V) std::cout << KBLU << nfo() << "handling:" << sync.prettyPrint() << KNRM << std::endl;
 
@@ -5333,7 +5333,7 @@ void Handler::handle_sync_tc(MsgSyncTC msg, const PeerNet::conn_t &conn) {
 }
 
 // For leaders to handle votes to sync
-void Handler::handleSyncVote(MsgSyncVote msg) {                                                                         //Aegis line 38.
+void Handler::handleSyncVote(MsgSyncVote msg) {
   auto start = std::chrono::steady_clock::now();
   if (DEBUG1U) std::cout << KBLU << nfo() << "handling:" << msg.prettyPrint() << KNRM << std::endl;
 
@@ -5400,7 +5400,7 @@ void Handler::handle_sync_vote(MsgSyncVote msg, const PeerNet::conn_t &conn) {
 }
 
 // For nodes to handle vote qcs
-void Handler::handleSyncVoteQc(MsgSyncVoteQc qc) {                                                                      //Aegis line 46.
+void Handler::handleSyncVoteQc(MsgSyncVoteQc qc) {
   auto start = std::chrono::steady_clock::now();
   if (DEBUG1U) std::cout << KBLU << nfo() << "handling:" << qc.prettyPrint() << KNRM << std::endl;
 
@@ -5756,7 +5756,7 @@ RBBlock Handler::createNewRBBlock(Hash hash) {
 
 // For leaders to send prepare certificates to backups at the beginning of the pre-commit phase
 // This auth is a backup auth, not the leader's
-void Handler::preCommitRB(View view) {
+void Handler::preCommitRB(View view) {                                                                                  //send cert to all
   if (DEBUG1) std::cout << KLBLU << nfo() << "pre-committing:" << view << KNRM << std::endl;
 
   RBprepareAuths preps = (this->log).getPrepareRB(view);
@@ -5787,7 +5787,7 @@ std::string newviews2string(std::set<RBnewviewAuth> newviews) {
 }
 
 // For leaders to begin a view (prepare phase) -- in the RollBack-prevention mode
-void Handler::prepareRB() {
+void Handler::prepareRB() {                                                                                           //Aegis line 14.
   if (DEBUG1) std::cout << KBLU << nfo() << "leader trying to prepare" << KNRM << std::endl;
   std::set<RBnewviewAuth> newviews = this->log.getNewViewRB(this->view,this->qsize);
   if (newviews.size() == this->qsize) {
@@ -5832,7 +5832,7 @@ void Handler::prepareRB() {
       // This one goes to the backups
       MsgLdrPrepareRB msgLdrPrep(block,prep,acc);
       Peers recipients = remove_from_peers(this->myid);
-      sendMsgLdrPrepareRB(msgLdrPrep,recipients);
+      sendMsgLdrPrepareRB(msgLdrPrep,recipients);                                                             //Send acc(sync) to all
 
       auto end = std::chrono::steady_clock::now();
       double time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -5854,7 +5854,7 @@ void Handler::prepareRB() {
 }
 
 // Run by the leader
-void Handler::handleNewviewRB(MsgNewViewRB msg) {
+void Handler::handleNewviewRB(MsgNewViewRB msg) {                                                                                   //Aegis line 11.
   auto start = std::chrono::steady_clock::now();
   if (DEBUG1) std::cout << KBLU << nfo() << "handling:" << msg.prettyPrint() << KNRM << std::endl;
   Session s = msg.newview.getNewview().getSession();
@@ -5910,7 +5910,7 @@ void Handler::respondToLdrPrepareRB(Hash Hblock, RBaccumNvAuth acc) {
 
 
 // Run by the backups in the prepare phase
-void Handler::handleLdrPrepareRB(RBBlock block, RBprepareAuth prep, RBaccumNvAuth acc) {
+void Handler::handleLdrPrepareRB(RBBlock block, RBprepareAuth prep, RBaccumNvAuth acc) {                                            //Aegis line 21.
   if (DEBUGT) printNowTime(KBLU, "handle MsgLdrPrepareRB");
   auto start = std::chrono::steady_clock::now();
   if (DEBUG1) std::cout << KBLU << nfo()
@@ -6037,7 +6037,7 @@ void Handler::handle_ldrprepareRB(MsgLdrPrepareRB msg, const PeerNet::conn_t &co
 
 
 // For leaders to handle votes on their proposals (pre-prepare)
-void Handler::handleBckPrepareRB(MsgBckPrepareRB msg) {
+void Handler::handleBckPrepareRB(MsgBckPrepareRB msg) {                                                         //Aegis line 38
   auto start = std::chrono::steady_clock::now();
   if (DEBUG1) std::cout << KBLU << nfo() << "handling:" << msg.prettyPrint() << KNRM << std::endl;
   Session s = msg.prep.getPrepare().getSession();
@@ -6116,7 +6116,7 @@ void Handler::acceptJoins() {
 }
 
 // For backups to respond to MsgLdrPreCommitRB messages receveid from leaders - containing prepare certificates
-void Handler::respondToLdrPreCommitRB(RBprepareAuths prep) {
+void Handler::respondToLdrPreCommitRB(RBprepareAuths prep) {                                                              //Aegis line 46.
   this->lastRBprep = prep;
   RBstoreAuth store = callTEEstoreRB(prep);
   this->lastRBstore = store;

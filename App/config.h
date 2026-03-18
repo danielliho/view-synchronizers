@@ -11,10 +11,10 @@
 #define DEBUG1X false
 #define DEBUG1Y false
 #define DEBUG1Z false
-#define DEBUG1W false //true //false
+#define DEBUG1W true //true //false
 #define DEBUG1V false //true //false
 #define DEBUG1U false //true //false
-#define DEBUG1  false //true //false
+#define DEBUG1  true //true //false
 #define DEBUG2  false
 #define DEBUG3  false
 #define DEBUG4  false //true //false

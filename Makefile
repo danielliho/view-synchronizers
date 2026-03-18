@@ -173,7 +173,7 @@ else
 		App_C_Flags += -DNDEBUG -UEDEBUG -UDEBUG
 endif
 
-App_Cpp_Flags := $(App_C_Flags) -std=c++14 -ffunction-sections -fdata-sections $(CFLAGS)
+App_Cpp_Flags := $(App_C_Flags) -std=c++14 -ffunction-sections -fdata-sections $(CFLAGS) -Wno-deprecated-declarations -Wno-unused-result
 App_Link_Flags := $(SGX_COMMON_CFLAGS) -Wl,--gc-sections -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -L$(SGXSSL_UNTRUSTED_LIB_PATH) -lsgx_usgxssl $(LDLIBS) $(Salticidae_Lib_Paths) -lsalticidae
 # -lpthread
 
@@ -211,7 +211,7 @@ Enclave_Cpp_Files := Enclave/EnclaveShare.cpp Enclave/Enclave.cpp Enclave/Enclav
 Enclave_Include_Paths := -IEnclave -I$(SGX_SDK)/include -I$(SGX_SDK)/include/libcxx -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/stlport -I$(SGXSSL_INCLUDE_PATH)
 
 Enclave_C_Flags := $(SGX_COMMON_CFLAGS) -nostdinc -fvisibility=hidden -fpie -fstack-protector $(Enclave_Include_Paths) #-include "tsgxsslio.h"
-Enclave_Cpp_Flags := $(Enclave_C_Flags) -std=c++11 -nostdinc++
+Enclave_Cpp_Flags := $(Enclave_C_Flags) -std=c++11 -nostdinc++ -Wno-deprecated-declarations
 
 #Security_Link_Flags := -Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now -pie
 
@@ -293,11 +293,11 @@ App/%.o: App/%.cpp
 	@echo "CXX  <=  $<"
 
 $(App_Name): App/Server.cpp App/Enclave_u.o $(App_Cpp_Objects)
-	@$(CXX) $^ -o $@ $(App_Link_Flags) $(App_Include_Paths)
+	@$(CXX) $(App_Cpp_Flags) $^ -o $@ $(App_Link_Flags) $(App_Include_Paths)
 	@echo "LINK =>  $@"
 
 sgxclient: App/Client.cpp App/Stats.o App/Signs.o App/Sign.o App/Nodes.o App/NodeInfo.o App/KeysFun.o App/Transaction.o #App/Enclave_u.o $(App_Cpp_Objects)
-	@$(CXX) $^ -o $@ $(App_Link_Flags) $(App_Include_Paths)
+	@$(CXX) $(App_Cpp_Flags) $^ -o $@ $(App_Link_Flags) $(App_Include_Paths)
 	@echo "LINK <= $@"
 
 sgxkeys: App/Keys.cpp App/KeysFun.o

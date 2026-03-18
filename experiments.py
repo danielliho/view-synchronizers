@@ -22,20 +22,14 @@ import mmap
 
 #############
 ## Notes:
-## (1) The nodes get started by a MsgStart message, which is currently sent by clients
-## (2) The nodes will stop if there is no activity for 'numViews' views,
-##     in the sense that no client transactions are processed, only dummy transactions
-##     So for performance measurement of the nodes themselves, one can set 'numClTrans'
-##     to 1, and nodes will only process dummy transactions
-##     TODO: to set it to 0, I have to find a way to stop clients cleanly
-## (3) View-changes on timeouts are not implemented yet, currently nodes simply stop when
-##     they timeout.
-##     TODO: once they are implemented, I have to find a way to stop nodes cleanly
-## (4) If 'sleepTime' is too high and 'newViews' too low, then the nodes will give up before
-##     they process all the clients' requests because they'll think they've been idle for too
-##     long.  Therefore, at the moment for throughput vs. latency measurement, it's better to
-##     set 'newViews' to 0, in which case the nodes keep going for ever (until they timeout).
-##     The experiments will be stopped after 'cutOffBound' in that case.
+## (1) This script is currently Athena-focused (see --p9 handling below).
+## (2) Some comments in older versions referred to legacy protocol behavior.
+##     Keep protocol assumptions aligned with Athena paths when updating this file.
+## (3) Runs are bounded by replica completion signals and/or 'cutOffBound'.
+## (4) For low-client-load runs (e.g., numClTrans=1), replicas may still make progress
+##     due to protocol-internal activity, so completion is not only tied to client sends.
+## (5) If client sleepTime is too high relative to the configured run bounds, experiments
+##     may finish before all intended client activity is observed.
 ####
 
 
@@ -58,8 +52,8 @@ numChCls       = 1     # number of clients for the chained versions
 numClTrans     = 1     # number of transactions sent by each clients
 sleepTime      = 0     # time clients sleep between 2 sends (in microseconds)
 timeout        = 5     # timeout before changing changing leader (in seconds)
-timeoutMul     = 4     # factor used to multiply the timeout with when timing out
-timeoutDiv     = 2     # factor used to divide the timeout with when making progress
+timeoutMul     = 1     # factor used to multiply the timeout with when timing out
+timeoutDiv     = 1     # factor used to divide the timeout with when making progress
 #
 syncPeriod     = 0     # constrains the number of views between 2 synchronization (rollback-resilient protocol)
 joinPeriod     = 0     # constrains the number of sessions between 2 joins (rollback-resilient protocol)
@@ -122,6 +116,7 @@ whichExp = ""
 
 # For some experiments we start with f nodes dead
 deadNodes    = False #True
+numDeadNodesCfg = 0
 # if deadNodes then we go with less views and give ourselves more time
 if deadNodes:
     numViews = numViews // timeout
@@ -5589,7 +5584,7 @@ def runExperiments():
     g.close()
 
     for numFaults in faults:
-        numDeadNodes = 0 #numFaults
+        numDeadNodes = numDeadNodesCfg if deadNodes else 0
 
         # Roll
         if runRoll:
@@ -5614,7 +5609,7 @@ def runExperimentsJoin(numFaults,joiners):
 
     print("will test the following number of joiners: ", joiners)
 
-    numDeadNodes = 0
+    numDeadNodes = numDeadNodesCfg if deadNodes else 0
 
     for j in joiners:
         print("number of joiners: ", j)
@@ -6566,7 +6561,7 @@ parser.add_argument("--timeout",    type=int, default=0,   help="timeout before 
 parser.add_argument("--timeoutMul", type=int, default=0,   help="factor used to mulitply the timeout with when timeouts occur")
 parser.add_argument("--timeoutDiv", type=int, default=0,   help="factor used to divide the timeout with when making progress")
 parser.add_argument("--opdist",     type=int, default=0,   help="OP cases")
-parser.add_argument("--dead",       action="store_true",   help="to run experiments based on the number of nodes instead of faults")
+parser.add_argument("--dead",       type=int, nargs="?", const=1, default=-1, help="number of replicas to start as dead from the beginning (default: disabled)")
 parser.add_argument("--syncperiod", type=int, default=0,   help="synchronization period")
 parser.add_argument("--joinperiod", type=int, default=0,   help="joining period")
 parser.add_argument("--joining",    action="store_true",   help="to run experiments varying the number of joining nodes (rollback-resilient protocol)")
@@ -6932,12 +6927,12 @@ elif args.latest > 0:
         copyOneShotExperiments()
     else:
         copyOneShotAWSExperiments()
-elif args.dead:
-    deadNodes = True
-    if len(faults) > 0:
-        runExperimentsFaults(faults[0])
-    else:
-        runExperimentsFaults(2) # some random default value so that we have a few points
+elif args.dead >= 0:
+    numDeadNodesCfg = max(0, args.dead)
+    deadNodes = (0 < numDeadNodesCfg)
+    print("Throughput and Latency")
+    print("starting with dead replicas:", numDeadNodesCfg)
+    runExperiments()
 elif args.joining and args.numjoiners:
     joining = True
     joiners = list(map(lambda x: int(x), args.numjoiners.split(",")))

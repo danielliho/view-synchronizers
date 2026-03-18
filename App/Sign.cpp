@@ -112,7 +112,7 @@ void signText(std::string text, EC_key priv, unsigned char sign[SIGN_LEN]) {
   for (int k = 0; k < SHA256_DIGEST_LENGTH; k++) { buf[k]='0'; }
 
   if (!ECDSA_sign(NID_sha256, hash, SHA256_DIGEST_LENGTH, buf, &signLen, priv)) {
-    printf(("ECDSA_sign failed(len=" + std::to_string(signLen) + ")").c_str());
+    printf("%s", ("ECDSA_sign failed(len=" + std::to_string(signLen) + ")").c_str());
   }
 
   for (int k = 0; k < SHA256_DIGEST_LENGTH; k++) { sign[k]=buf[k]; }
