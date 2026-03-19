@@ -10,7 +10,6 @@
 #include "Nodes.h"
 #include "Log.h"
 #include "Stats.h"
-#include "HJust.h"
 #include "VJust.h"
 #include "FVJust.h"
 #include "RBBlock.h"
@@ -167,9 +166,6 @@ class Handler {
 
   void printNowTime(std::string col, std::string msg);
 
-  // returns the total number of nodes
-  unsigned int getTotal();
-
   // returns the leader of view 'v'
   unsigned int getLeaderOf(View v);
 
@@ -209,28 +205,6 @@ class Handler {
   void sendMsgPreCommit(MsgPreCommit msg, Peers recipients);
   void sendMsgCommit(MsgCommit msg, Peers recipients);
 
-  //void sendMsgReply(MsgReply msg, ClientNet::conn_t recipient);
-
-  void sendMsgNewViewComb(MsgNewViewComb msg, Peers recipients);
-  void sendMsgLdrPrepareComb(MsgLdrPrepareComb msg, Peers recipients);
-  void sendMsgPrepareComb(MsgPrepareComb msg, Peers recipients);
-  void sendMsgPreCommitComb(MsgPreCommitComb msg, Peers recipients);
-
-  void sendMsgLdrPrepareOPA(MsgLdrPrepareOPA msg, Peers recipients);
-  void sendMsgLdrPrepareOPB(MsgLdrPrepareOPB msg, Peers recipients);
-  void sendMsgLdrPrepareOPC(MsgLdrPrepareOPC msg, Peers recipients);
-  void sendMsgPreCommitOP(MsgPreCommitOP msg, Peers recipients);
-  void sendMsgNewViewOP(MsgNewViewOPA msg, Peers recipients);
-  void sendMsgNewViewOP(MsgNewViewOPB msg, Peers recipients);
-  void sendMsgNewViewOP(MsgNewViewOPBB msg, Peers recipients);
-  void sendMsgBckPrepareOP(MsgBckPrepareOP msg, Peers recipients);
-  void sendMsgLdrAddOP(MsgLdrAddOP msg, Peers recipients);
-  void sendMsgBckAddOP(MsgBckAddOP msg, Peers recipients);
-
-  void sendMsgNewViewCh(MsgNewViewCh msg, Peers recipients);
-  void sendMsgPrepareCh(MsgPrepareCh msg, Peers recipients);
-  void sendMsgLdrPrepareCh(MsgLdrPrepareCh msg, Peers recipients);
-
   // for leaders to start the phase where nodes will log prepare certificates
   void initiatePrepare(RData rdata);
   // for leaders to start the phase where nodes will log lock certificates
@@ -243,9 +217,6 @@ class Handler {
   //bool verifyStart(MsgStart msg);
 
   bool verifyJust(Just just);
-
-  bool verifyLdrPrepareComb(MsgLdrPrepareComb msg);
-  bool verifyPreCommitCombCert(MsgPreCommitComb msg);
 
   // To start the code
   void getStarted();
@@ -275,7 +246,6 @@ class Handler {
   Just callTEEsign();
   Just callTEEstore(Just j);
   Just callTEEprepare(Hash h, Just j);
-  bool callTEEverify(Just j);
 
   void handleNewview(MsgNewView msg);
   void handlePrepare(MsgPrepare msg);
@@ -290,146 +260,7 @@ class Handler {
   void handle_start(MsgStart msg, const ClientNet::conn_t &conn);
   //void handle_stop(MsgStop msg, const ClientNet::conn_t &conn);
 
-
-  // ------------------------------------------------------------
-  // Cheap&Quick
-  // ------
-
-  void executeComb(RData rdata);
-  void handleEarlierMessagesComb();
-  void startNewViewCombOn(Just just);
-  void startNewViewComb();
-
-  // For leaders to start preparing
-  void prepareComb();
-  // For leaders to start pre-committing
-  void preCommitComb(RData data);
-  // For leaders to start deciding
-  void decideComb(RData data);
-
-  // For backups to respond to correct MsgLdrPrepareComb messages received from leaders
-  void respondToLdrPrepareComb(Block block, Accum acc);
-  // For backups to respond to MsgPrepareComb messages receveid from leaders
-  void respondToPrepareComb(MsgPrepareComb msg);
-  // For backups to respond to MsgPreCommitComb messages receveid from leaders
-  void respondToPreCommitComb(MsgPreCommitComb msg);
-
-  Accum newviews2accComb(std::set<MsgNewViewComb> newviews);
-
-  Accum callTEEaccumComb(Just justs[MAX_NUM_SIGNATURES]);
-  Accum callTEEaccumCombSp(just_t just);
-  Just callTEEsignComb();
-  Just callTEEprepareComb(Hash h, Accum acc);
-  Just callTEEstoreComb(Just j);
-
-  void handleNewviewComb(MsgNewViewComb msg);
-  void handlePrepareComb(MsgPrepareComb msg);
-  void handleLdrPrepareComb(MsgLdrPrepareComb msg);
-  void handlePreCommitComb(MsgPreCommitComb msg);
-
-  void handle_newviewcomb(MsgNewViewComb msg, const PeerNet::conn_t &conn);
-  void handle_preparecomb(MsgPrepareComb msg, const PeerNet::conn_t &conn);
-  void handle_ldrpreparecomb(MsgLdrPrepareComb msg, const PeerNet::conn_t &conn);
-  void handle_precommitcomb(MsgPreCommitComb msg, const PeerNet::conn_t &conn);
-  // ------------------------------------------------------------
-  // 1/2 PHASE
-  // ------
-
-  void handleEarlierMessagesOP();
-
-  MsgNewViewOPB genMsgNewViewOPB();
-  MsgNewViewOPBB genMsgNewViewOPBB();
-
-  OPproposal callTEEprepareOP(Hash h);
-  OPstore callTEEstoreOP(OPproposal prop);
-  bool callTEEverifyOP(Auths auths, std::string s);
-  OPaccum callTEEaccumOp(OPstore high, OPstore justs[MAX_NUM_SIGNATURES-1]);
-  OPaccum callTEEaccumOpSp(OPprepare just);
-  OPvote callTEEvoteOP(Hash h);
-
-  bool verifyPrepareOP(OPprepare cert);
-  bool verifyLdrPrepareOP(MsgLdrPrepareOPA msg);
-  bool verifyLdrPrepareOP(MsgLdrPrepareOPB msg);
-  bool verifyLdrPrepareOP(MsgLdrPrepareOPC msg);
-
-  void startNewViewOPA(OPprepare prep);
-  void startNewViewOPB();
-  void startNewViewOP();
-
-  void executeOP(OPprepare cert);
-  void preCommitOP(View v);
-  void prepareOp(OPprepare prep);
-  void prepareOp_debug(OPprepare prep);
-  void prepareOpAcc(OPaccum acc, OPstore store, OPprepare prep);
-  void prepareOpVote(OPvote vote);
-  OPnvblock highestNewViewOpb(std::set<OPnvblock> *newviews);
-  OPaccum newviews2accOp(OPnvblock high, std::set<OPnvcert> others);
-  void prepareOpb(View v);
-  void respondToLdrPrepareOP(Block block, OPproposal prop, OPcert cert);
-  void respondToPreCommitOP(OPprepare cert);
-
-  void startNewViewOnTimeoutOP();
-  bool validAddOp(View v, OPaccum acc, OPnvblock nv);
-  bool validOPvote(OPvote vote);
-
-  void handleNewviewOP(OPprepare prep);
-  void handleNewviewOP(MsgNewViewOPA msg);
-  void handleNewviewOP(MsgNewViewOPB msg);
-  void handleNewviewOP(MsgNewViewOPBB msg);
-  void handlePreCommitOP(MsgPreCommitOP msg);
-  void handleLdrPrepareOP(MsgLdrPrepareOPA msg);
-  void handleLdrPrepareOP(MsgLdrPrepareOPB msg);
-  void handleLdrPrepareOP(MsgLdrPrepareOPC msg);
-  void handleBckPrepareOP(MsgBckPrepareOP msg);
-  void handleLdrAddOP(MsgLdrAddOP msg);
-  void handleBckAddOP(OPvote vote);
-
-  void handle_newviewopa(MsgNewViewOPA msg, const PeerNet::conn_t &conn);
-  void handle_newviewopb(MsgNewViewOPB msg, const PeerNet::conn_t &conn);
-  void handle_newviewopbb(MsgNewViewOPBB msg, const PeerNet::conn_t &conn);
-  void handle_precommitop(MsgPreCommitOP msg, const PeerNet::conn_t &conn);
-  void handle_ldrprepareopa(MsgLdrPrepareOPA msg, const PeerNet::conn_t &conn);
-  void handle_ldrprepareopb(MsgLdrPrepareOPB msg, const PeerNet::conn_t &conn);
-  void handle_ldrprepareopc(MsgLdrPrepareOPC msg, const PeerNet::conn_t &conn);
-  void handle_bckprepareop(MsgBckPrepareOP msg, const PeerNet::conn_t &conn);
-  void handle_ldraddop(MsgLdrAddOP msg, const PeerNet::conn_t &conn);
-  void handle_bckaddop(MsgBckAddOP msg, const PeerNet::conn_t &conn);
-
-
-  // ------------------------------------------------------------
-  // Baseline Chained
-  // ------
-
   Just justNV;
-
-  void startNewViewCh();
-
-  Just callTEEsignCh();
-  Just callTEEprepareCh(JBlock block, JBlock block0, JBlock block1);
-
-  JBlock createNewBlockCh();
-
-  Just ldrPrepareCh2just(MsgLdrPrepareCh msg);
-
-  void tryExecuteCh(JBlock block, JBlock block0, JBlock block1);
-  void voteCh(JBlock block);
-  void prepareCh();
-  void checkNewJustCh(RData data);
-  void handleEarlierMessagesCh();
-
-  void handleNewviewCh(MsgNewViewCh msg);
-  void handlePrepareCh(MsgPrepareCh msg);
-  void handleLdrPrepareCh(MsgLdrPrepareCh msg);
-
-  void handle_newview_ch(MsgNewViewCh msg, const PeerNet::conn_t &conn);
-  void handle_prepare_ch(MsgPrepareCh msg, const PeerNet::conn_t &conn);
-  void handle_ldrprepare_ch(MsgLdrPrepareCh msg, const PeerNet::conn_t &conn);
-
-
-
-  // ------------------------------------------------------------
-  // Chained Cheap&Quick
-  // ------
 
   // ------------------------------------------------------------
   // Pacemaker
@@ -508,29 +339,6 @@ class Handler {
   void handle_ldrprecommitRB(MsgLdrPreCommitRB msg, const PeerNet::conn_t &conn);
   void handle_bckprecommitRB(MsgBckPreCommitRB msg, const PeerNet::conn_t &conn);
   void handle_decideRB(MsgDecideRB msg, const PeerNet::conn_t &conn);
-
-  void handle_pm_sync(MsgPmSync msg, const PeerNet::conn_t &conn);
-  void handle_pm_sync_tc(MsgPmSyncTC msg, const PeerNet::conn_t &conn);
-  void handle_pm_sync_vote(MsgPmSyncVote msg, const PeerNet::conn_t &conn);
-  void handle_pm_sync_vote_qc(MsgPmSyncVoteQc msg, const PeerNet::conn_t &conn);
-
-  void handlePmSync(PmSync msg);
-  void handlePmSyncTC(MsgPmSyncTC qc);
-  void handlePmSyncVote(PmSync msg);
-  void handlePmSyncVoteQc(MsgPmSyncVoteQc qc);
-
-  PmSync callTEEpmSync(FVJust store);
-  PmSync callTEEpmSyncVote(PmSync sync);
-  FVJust callTEEpmSyncEnd(PmSyncs votes);
-
-  void sendMsgPmSync(MsgPmSync msg, Peers recipients);
-  void sendMsgPmSyncTC(MsgPmSyncTC msg, Peers recipients);
-  void sendMsgPmSyncVote(MsgPmSyncVote msg, Peers recipients);
-  void sendMsgPmSyncVoteQc(MsgPmSyncVoteQc msg, Peers recipients);
-
-  void handleEarlierMessagesPmSync();
-  void wishToAdvanceOnPmSync(MsgPmSync msg, PID leader);
-  void wishToAdvancePm();
 
  public:
   Handler(KeysFun kf,
