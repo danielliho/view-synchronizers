@@ -7,7 +7,7 @@
 
 // debug switches
 #define DEBUG   false //true //false
-#define DEBUG0  true
+#define DEBUG0  false
 #define DEBUG1X false
 #define DEBUG1Y false
 #define DEBUG1Z false
@@ -24,9 +24,10 @@
 // adds ocalls to profile crypto in enclaves
 #define DEBUGOT false
 // to print 'EXECUTE' messages
-#define DEBUGE  true
+#define DEBUGE  false
 // to print client messages
 #define DEBUGC  false //true //false
+#define DEBUGD  true //true //false
 
 
 #define NO_SOCKET          -1

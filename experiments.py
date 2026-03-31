@@ -122,6 +122,7 @@ whichExp = ""
 
 # For some experiments we start with f nodes dead
 deadNodes    = False #True
+numDeadNodesCfg = 0
 # if deadNodes then we go with less views and give ourselves more time
 if deadNodes:
     numViews = numViews // timeout
@@ -1720,7 +1721,7 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
     genLocalConf(numReps,addresses)
 
     print("initial number of nodes:", numReps)
-    if deadNodes:
+    if numDeadNodes > 0:
         numReps = numReps - numDeadNodes
     print("number of nodes to actually run:", numReps)
 
@@ -5922,7 +5923,7 @@ def runExperiments():
     g.close()
 
     for numFaults in faults:
-        numDeadNodes = 0 #numFaults
+        numDeadNodes = numDeadNodesCfg
 
         # ------
         # HotStuff-like baseline
@@ -6050,7 +6051,7 @@ def runExperimentsJoin(numFaults,joiners):
 
     print("will test the following number of joiners: ", joiners)
 
-    numDeadNodes = 0
+    numDeadNodes = numDeadNodesCfg
 
     for j in joiners:
         print("number of joiners: ", j)
@@ -7559,7 +7560,7 @@ parser.add_argument("--timeout",    type=int, default=0,   help="timeout before 
 parser.add_argument("--timeoutMul", type=int, default=0,   help="factor used to mulitply the timeout with when timeouts occur")
 parser.add_argument("--timeoutDiv", type=int, default=0,   help="factor used to divide the timeout with when making progress")
 parser.add_argument("--opdist",     type=int, default=0,   help="OP cases")
-parser.add_argument("--dead",       action="store_true",   help="to run experiments based on the number of nodes instead of faults")
+parser.add_argument("--dead",       type=int, nargs='?', const=1, default=-1, help="start with N dead replicas (default 1 if no value)")
 parser.add_argument("--syncperiod", type=int, default=0,   help="synchronization period")
 parser.add_argument("--joinperiod", type=int, default=0,   help="joining period")
 parser.add_argument("--joining",    action="store_true",   help="to run experiments varying the number of joining nodes (rollback-resilient protocol)")
@@ -7641,6 +7642,12 @@ if args.timeoutDiv > 0:
 if args.opdist > 0:
     opdist = args.opdist
     print("SUCCESSFULLY PARSED ARGUMENT - opdist is now:", opdist)
+
+
+if args.dead >= 0:
+    numDeadNodesCfg = args.dead
+    deadNodes = (numDeadNodesCfg > 0)
+    print("SUCCESSFULLY PARSED ARGUMENT - number of dead replicas at startup:", numDeadNodesCfg)
 
 
 if args.rate > 0:
@@ -8018,12 +8025,8 @@ elif args.latest > 0:
         copyOneShotExperiments()
     else:
         copyOneShotAWSExperiments()
-elif args.dead:
-    deadNodes = True
-    if len(faults) > 0:
-        runExperimentsFaults(faults[0])
-    else:
-        runExperimentsFaults(2) # some random default value so that we have a few points
+elif args.dead >= 0:
+    runExperiments()
 elif args.joining and args.numjoiners:
     joining = True
     joiners = list(map(lambda x: int(x), args.numjoiners.split(",")))

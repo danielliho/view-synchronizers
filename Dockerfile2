@@ -50,8 +50,22 @@ RUN echo "deb [trusted=yes arch=amd64] file:/opt/intel/linux-sgx/linux/installer
 RUN echo "# deb-src [trusted=yes arch=amd64] file:/opt/intel/linux-sgx/linux/installer/deb/sgx_debian_local_repo jammy main" >> /etc/apt/sources.list
 RUN apt update
 
-# install psw
-RUN apt-get install -y libsgx-launch libsgx-urts libsgx-epid libsgx-quote-ex libsgx-dcap-ql
+# install psw (package names vary across SGX/Ubuntu releases)
+RUN set -eux; \
+    pkgs="libsgx-launch libsgx-urts libsgx-epid libsgx-quote-ex libsgx-dcap-ql"; \
+    install_pkgs=""; \
+    for p in $pkgs; do \
+        if apt-cache show "$p" >/dev/null 2>&1; then \
+            install_pkgs="$install_pkgs $p"; \
+        else \
+            echo "Skipping unavailable SGX package: $p"; \
+        fi; \
+    done; \
+    if [ -n "$install_pkgs" ]; then \
+        apt-get install -y --no-install-recommends $install_pkgs; \
+    else \
+        echo "No SGX PSW runtime packages found in local repo; continuing."; \
+    fi
 
 RUN cd /opt/intel/linux-sgx/external/dcap_source/QuoteVerification/sgxssl/Linux \
     && ./build_openssl.sh \
@@ -61,7 +75,7 @@ RUN cd /opt/intel/linux-sgx/external/dcap_source/QuoteVerification/sgxssl/Linux 
 # install salticidae
 RUN git clone https://github.com/vrahli/salticidae.git \
     && cd salticidae \
-    && cmake . -DCMAKE_INSTALL_PREFIX=. \
+    && cmake . -DCMAKE_INSTALL_PREFIX=. -DCMAKE_C_FLAGS="-Wno-deprecated-declarations -Wno-unused-result" -DCMAKE_CXX_FLAGS="-Wno-deprecated-declarations -Wno-unused-result" \
     && make \
     && make install \
     && pwd

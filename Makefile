@@ -109,7 +109,7 @@ Nsgx_App_Cpp_Files := $(filter-out App/test.cpp App/foo.cpp App/Start.cpp App/Ap
 App_Cpp_Files :=  $(Nsgx_App_Cpp_Files) App/sgx_utils/sgx_utils.cpp
 App_Include_Paths := -IApp -I$(SGX_SDK)/include $(Salticidae_Include_Paths) # -I$(SGXSSL_INCLUDE_PATH)
 
-App_C_Flags := $(SGX_COMMON_CFLAGS) -fPIC -Wno-attributes $(App_Include_Paths)
+App_C_Flags := $(SGX_COMMON_CFLAGS) -fPIC -Wno-attributes -Wno-deprecated-declarations -Wno-unused-result -Wno-format-security $(App_Include_Paths)
 
 # Three configuration modes - Debug, prerelease, release
 #   Debug - Macro DEBUG enabled.
@@ -160,7 +160,7 @@ Enclave_Cpp_Files := Enclave/EnclaveShare.cpp Enclave/Enclave.cpp Enclave/Enclav
 #Enclave_C_Files := Enclave/ecdsatest.c
 Enclave_Include_Paths := -IEnclave -I$(SGX_SDK)/include -I$(SGX_SDK)/include/libcxx -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/stlport -I$(SGXSSL_INCLUDE_PATH)
 
-Enclave_C_Flags := $(SGX_COMMON_CFLAGS) -nostdinc -fvisibility=hidden -fpie -fstack-protector $(Enclave_Include_Paths) #-include "tsgxsslio.h"
+Enclave_C_Flags := $(SGX_COMMON_CFLAGS) -nostdinc -fvisibility=hidden -fpie -fstack-protector -Wno-deprecated-declarations -Wno-unused-result -Wno-format-security $(Enclave_Include_Paths) #-include "tsgxsslio.h"
 Enclave_Cpp_Flags := $(Enclave_C_Flags) -std=c++11 -nostdinc++
 
 #Security_Link_Flags := -Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now -pie
@@ -242,15 +242,15 @@ App/%.o: App/%.cpp
 	@$(CXX) $(App_Cpp_Flags) -c $< -o $@
 	@echo "CXX  <=  $<"
 
-$(App_Name): App/Server.cpp App/Enclave_u.o $(App_Cpp_Objects)
+$(App_Name): App/Server.o App/Enclave_u.o $(App_Cpp_Objects)
 	@$(CXX) $^ -o $@ $(App_Link_Flags) $(App_Include_Paths)
 	@echo "LINK =>  $@"
 
-sgxclient: App/Client.cpp App/Stats.o App/Signs.o App/Sign.o App/Nodes.o App/NodeInfo.o App/KeysFun.o App/Transaction.o #App/Enclave_u.o $(App_Cpp_Objects)
+sgxclient: App/Client.o App/Stats.o App/Signs.o App/Sign.o App/Nodes.o App/NodeInfo.o App/KeysFun.o App/Transaction.o #App/Enclave_u.o $(App_Cpp_Objects)
 	@$(CXX) $^ -o $@ $(App_Link_Flags) $(App_Include_Paths)
 	@echo "LINK <= $@"
 
-sgxkeys: App/Keys.cpp App/KeysFun.o
+sgxkeys: App/Keys.o App/KeysFun.o
 	@$(CXX) $^ -o $@ $(App_Link_Flags) $(App_Include_Paths)
 	@echo "LINK <= $@"
 
