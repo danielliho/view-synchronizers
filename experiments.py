@@ -58,8 +58,8 @@ numChCls       = 1     # number of clients for the chained versions
 numClTrans     = 1     # number of transactions sent by each clients
 sleepTime      = 0     # time clients sleep between 2 sends (in microseconds)
 timeout        = 5     # timeout before changing changing leader (in seconds)
-timeoutMul     = 4     # factor used to multiply the timeout with when timing out
-timeoutDiv     = 2     # factor used to divide the timeout with when making progress
+timeoutMul     = 1     # factor used to multiply the timeout with when timing out
+timeoutDiv     = 1     # factor used to divide the timeout with when making progress
 #
 syncPeriod     = 0     # constrains the number of views between 2 synchronization (rollback-resilient protocol)
 joinPeriod     = 0     # constrains the number of sessions between 2 joins (rollback-resilient protocol)
