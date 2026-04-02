@@ -1452,4 +1452,37 @@ struct MsgReplyRestart {
   unsigned int sizeMsg() { return (sizeof(View) + sizeof(Hash) + sizeof(Auth)); }
 };
 
+// View synchronizer messages
+struct MsgWishToAdvanceView {
+  static const uint8_t opcode = HDR_WISH_TO_ADVANCE_VIEW;
+  salticidae::DataStream serialized;
+  View view;
+  MsgWishToAdvanceView() : view(0) { serialized << view; }
+  MsgWishToAdvanceView(const View &view) : view(view) { serialized << view; }
+  MsgWishToAdvanceView(salticidae::DataStream &&s) { s >> view; }
+  bool operator<(const MsgWishToAdvanceView& s) const {
+    return (view < s.view);
+  }
+  std::string prettyPrint() {
+    return "WISH-TO-ADVANCE-VIEW[" + std::to_string(view) + "]";
+  }
+  unsigned int sizeMsg() { return sizeof(View); }
+};
+
+struct MsgTimeCertificate {
+  static const uint8_t opcode = HDR_TIME_CERTIFICATE;
+  salticidae::DataStream serialized;
+  View view;
+  MsgTimeCertificate() : view(0) { serialized << view; }
+  MsgTimeCertificate(const View &view) : view(view) { serialized << view; }
+  MsgTimeCertificate(salticidae::DataStream &&s) { s >> view; }
+  bool operator<(const MsgTimeCertificate& s) const {
+    return (view < s.view);
+  }
+  std::string prettyPrint() {
+    return "TIME-CERTIFICATE[" + std::to_string(view) + "]";
+  }
+  unsigned int sizeMsg() { return sizeof(View); }
+};
+
 #endif

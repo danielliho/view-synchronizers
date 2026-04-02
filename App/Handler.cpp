@@ -1056,7 +1056,9 @@ void Handler::startNewViewOnTimeout() {
     }
   }
 #elif defined (BASIC_ONEP) || defined (BASIC_ONEPB) || defined (BASIC_ONEPC) || defined (BASIC_ONEPD)
-  startNewViewOP();
+//View synchronization stuff
+  if (DEBUGD) std::cout << KMAG << nfo() << "TIMEOUT, WISHING TO ADVANCE VIEW" << KNRM << std::endl;
+  wishToAdvanceView(this->view+1);
 #elif defined (CHAINED_BASELINE)
   startNewViewCh();
 #elif defined (CHAINED_CHEAP_AND_QUICK)
@@ -1066,6 +1068,52 @@ void Handler::startNewViewOnTimeout() {
 #endif
 }
 
+//View synchronization messages
+void Handler::wishToAdvanceView(View v) {
+  MsgWishToAdvanceView wish(v);
+  sendMsgWishToAdvanceView(wish, this->peers);
+  handleWishToAdvanceView(wish, this->myid);
+}
+
+void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
+  this->wishesToAdvanceView[msg.view].insert(sender);
+  unsigned int numWishes = this->wishesToAdvanceView[msg.view].size();
+
+  if (DEBUGD) {
+    std::cout << KBLU << nfo()
+              << "WISH-COUNT(view=" << msg.view << ")=" << numWishes
+              << "/" << this->qsize
+              << " (from=" << sender << ")"
+              << KNRM << std::endl;
+  }
+
+  if (msg.view > this->view && numWishes >= this->qsize) {
+    if (DEBUGD) std::cout << KBLU << nfo() << "STORING AND SENDING TC AND ADVANCING VIEW: " << msg.view << " > " << this->view << KNRM << std::endl;
+    MsgTimeCertificate tc(msg.view);
+    sendMsgTimeCertificate(tc, this->peers);
+    this->timeCertificates[tc.view] = tc;
+    startNewViewOP(tc.view);
+  }
+}
+
+void Handler::handleTimeCertificate(MsgTimeCertificate msg, PID sender) {
+  std::map<View,MsgTimeCertificate>::iterator it = this->timeCertificates.find(msg.view);
+  if (it != this->timeCertificates.end()) {
+    if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING TIME CERTIFICATE FOR VIEW " << msg.view
+                          << ", ALREADY STORED"
+                          << KNRM << std::endl;
+    return;
+  }
+
+  this->timeCertificates[msg.view] = msg;
+
+  if (DEBUGD) std::cout << KBLU << nfo() << "STORING RECEIVED TIME CERTIFICATE FOR VIEW " << msg.view
+                        << " (from=" << sender << ") AND ADVANCING"
+                        << KNRM << std::endl;
+
+  sendMsgTimeCertificate(msg, this->peers);
+  startNewViewOP(msg.view);
+}
 
 
 #if defined(BASIC_FREE)
@@ -1099,6 +1147,8 @@ const uint8_t MsgBckPrepareOP::opcode;
 const uint8_t MsgPreCommitOP::opcode;
 const uint8_t MsgLdrAddOP::opcode;
 const uint8_t MsgBckAddOP::opcode;
+const uint8_t MsgWishToAdvanceView::opcode;
+const uint8_t MsgTimeCertificate::opcode;
 #elif defined(BASIC_CHEAP_AND_QUICK)
 const uint8_t MsgNewViewComb::opcode;
 const uint8_t MsgLdrPrepareComb::opcode;
@@ -1352,6 +1402,10 @@ Handler::Handler(KeysFun k,
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_bckaddop,      this, _1, _2));
   /*this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_preparefree, this, _1, _2));
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_precommitfree, this, _1, _2));*/
+
+  //View synchronization stuff
+  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_wishtoadvanceview, this, _1, _2));
+  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_timecertificate, this, _1, _2));
 #elif defined(BASIC_CHEAP_AND_QUICK)
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewcomb,    this, _1, _2));
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrpreparecomb, this, _1, _2));
@@ -1576,6 +1630,64 @@ std::vector<salticidae::PeerId> getPeerids(Peers recipients) {
   return ret;
 }
 
+//View synchronization messages
+void Handler::sendMsgWishToAdvanceView(MsgWishToAdvanceView msg, Peers recipients) {
+  if (DEBUGD) std::cout << KBLU << nfo() << "SENDING:" << msg.prettyPrint() << "->" << recipients2string(recipients) << KNRM << std::endl;
+  this->pnet.multicast_msg(msg, getPeerids(recipients));
+}
+
+void Handler::handle_wishtoadvanceview(MsgWishToAdvanceView msg, const PeerNet::conn_t &conn) {
+  PID sender = this->myid;
+  bool found = false;
+  salticidae::PeerId senderPeerId = conn->get_peer_id();
+  for (Peers::iterator it = this->peers.begin(); it != this->peers.end(); ++it) {
+    Peer peer = *it;
+    if (std::get<1>(peer) == senderPeerId) {
+      sender = std::get<0>(peer);
+      found = true;
+      break;
+    }
+  }
+
+  if (DEBUGD) {
+    if (found) {
+      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM " << sender << KNRM << std::endl;
+    } else {
+      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM unknown-peer" << KNRM << std::endl;
+    }
+  }
+
+  handleWishToAdvanceView(msg, sender);
+}
+
+void Handler::sendMsgTimeCertificate(MsgTimeCertificate msg, Peers recipients) {
+  if (DEBUGD) std::cout << KBLU << nfo() << "SENDING:" << msg.prettyPrint() << "->" << recipients2string(recipients) << KNRM << std::endl;
+  this->pnet.multicast_msg(msg, getPeerids(recipients));
+}
+
+void Handler::handle_timecertificate(MsgTimeCertificate msg, const PeerNet::conn_t &conn) {
+  PID sender = this->myid;
+  bool found = false;
+  salticidae::PeerId senderPeerId = conn->get_peer_id();
+  for (Peers::iterator it = this->peers.begin(); it != this->peers.end(); ++it) {
+    Peer peer = *it;
+    if (std::get<1>(peer) == senderPeerId) {
+      sender = std::get<0>(peer);
+      found = true;
+      break;
+    }
+  }
+
+  if (DEBUGD) {
+    if (found) {
+      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM " << sender << KNRM << std::endl;
+    } else {
+      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM unknown-peer" << KNRM << std::endl;
+    }
+  }
+
+  handleTimeCertificate(msg, sender);
+}
 
 void Handler::sendMsgNewView(MsgNewView msg, Peers recipients) {
   if (DEBUG1) std::cout << KBLU << nfo() << "sending:" << msg.prettyPrint() << "->" << recipients2string(recipients) << KNRM << std::endl;
@@ -5946,8 +6058,9 @@ void Handler::startNewViewOnTimeoutOP() {
 }
 
 
-void Handler::startNewViewOP() {
-  if (DEBUG1) std::cout << KBLU << nfo() << "starting a new view" << "(current=" << this->view << "; moving to=" << this->view+1 << ")" << KNRM << std::endl;
+void Handler::startNewViewOP(int nextView) {
+  View targetView = (nextView >= 0) ? static_cast<View>(nextView) : (this->view + 1);
+  if (DEBUG1) std::cout << KBLU << nfo() << "starting a new view" << "(current=" << this->view << "; moving to=" << targetView << ")" << KNRM << std::endl;
 
   OPprepare prep = this->opprep;
   if (DEBUG1) std::cout << KBLU << nfo() << "new-view cert (" << prep.getView() << "," << this->view << ")" << KNRM << std::endl;
@@ -5960,9 +6073,9 @@ void Handler::startNewViewOP() {
   //    just = FJust(j.isSet(),j.getData(),j.getAuth2());
   //    this->nvjust = just;*/
   //  }
-  // increment the view
+  // Increment the view unless explicitly requested to jump to a specific view.
   // *** THE NODE HAS NOW MOVED TO THE NEW-VIEW ***
-  this->view++;
+  this->view = targetView;
 
   // We start the timer
   setTimer();

@@ -81,6 +81,8 @@ typedef uint8_t HEADER;
 #define HDR_PM_SYNC_TC          0x56
 #define HDR_PM_SYNC_VOTE        0x57
 #define HDR_PM_SYNC_VOTE_QC     0x58
+#define HDR_WISH_TO_ADVANCE_VIEW 0x59
+#define HDR_TIME_CERTIFICATE    0x60
 
 typedef uint8_t Phase1;
 
