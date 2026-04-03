@@ -42,6 +42,8 @@ Time curTime;
 
 Stats stats;                   // To collect statistics
 
+unsigned int viewSyncMsgsSent = 0; // total Wish/TimeCertificate messages sent (fanout count)
+
 
 // To generate uniformly distributed numbers in [0,1]
 std::random_device                  rand_dev;
@@ -1071,8 +1073,10 @@ void Handler::startNewViewOnTimeout() {
 //View synchronization messages
 void Handler::wishToAdvanceView(View v) {
   MsgWishToAdvanceView wish(v);
-  sendMsgWishToAdvanceView(wish, this->peers);
-  handleWishToAdvanceView(wish, this->myid);
+  sendMsgWishToAdvanceView(wish, getNextQsizeLeaders());
+  if (amNextQsizeLeader()) {
+    handleWishToAdvanceView(wish, this->myid);
+  }
 }
 
 void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
@@ -1620,6 +1624,28 @@ Peers Handler::keep_from_peers(PID id) {
   return ret;
 }
 
+Peers Handler::getNextQsizeLeaders() {
+  Peers ret;
+  std::set<PID> leaders;  // To avoid duplicates
+  for (unsigned int i = 0; i < this->qsize; i++) {
+    PID leader = getLeaderOf(this->view + i + 1);
+    if (leaders.find(leader) == leaders.end()) {
+      leaders.insert(leader);
+      Peers leaderPeers = keep_from_peers(leader);
+      ret.insert(ret.end(), leaderPeers.begin(), leaderPeers.end());
+    }
+  }
+  return ret;
+}
+
+bool Handler::amNextQsizeLeader() {
+  for (unsigned int i = 0; i < this->qsize; i++) {
+    if (this->myid == getLeaderOf(this->view + i + 1)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 std::vector<salticidae::PeerId> getPeerids(Peers recipients) {
   std::vector<salticidae::PeerId> ret;
@@ -1633,6 +1659,7 @@ std::vector<salticidae::PeerId> getPeerids(Peers recipients) {
 //View synchronization messages
 void Handler::sendMsgWishToAdvanceView(MsgWishToAdvanceView msg, Peers recipients) {
   if (DEBUGD) std::cout << KBLU << nfo() << "SENDING:" << msg.prettyPrint() << "->" << recipients2string(recipients) << KNRM << std::endl;
+  viewSyncMsgsSent += recipients.size();
   this->pnet.multicast_msg(msg, getPeerids(recipients));
 }
 
@@ -1662,6 +1689,7 @@ void Handler::handle_wishtoadvanceview(MsgWishToAdvanceView msg, const PeerNet::
 
 void Handler::sendMsgTimeCertificate(MsgTimeCertificate msg, Peers recipients) {
   if (DEBUGD) std::cout << KBLU << nfo() << "SENDING:" << msg.prettyPrint() << "->" << recipients2string(recipients) << KNRM << std::endl;
+  viewSyncMsgsSent += recipients.size();
   this->pnet.multicast_msg(msg, getPeerids(recipients));
 }
 
@@ -3330,6 +3358,9 @@ void Handler::recordStats() {
   // onepcs
   unsigned int onepcs = stats.getNumOnePCs();
 
+  // view synchronization messages (wish-to-advance-view + time-certificate)
+  unsigned int viewSyncMsgs = viewSyncMsgsSent;
+
   // Crypto
   double ctimeS  = stats.getCryptoSignTime();
   double cryptoS = (ctimeS / 1000); /* milli-seconds spent on crypto */
@@ -3347,6 +3378,7 @@ void Handler::recordStats() {
              << " " << std::to_string(timeouts)
              << " " << std::to_string(onepbs)
              << " " << std::to_string(onepcs)
+             << " " << std::to_string(viewSyncMsgs)
              << " " << std::to_string(stats.getCryptoSignNum())
              << " " << std::to_string(cryptoS)
              << " " << std::to_string(stats.getCryptoVerifNum())

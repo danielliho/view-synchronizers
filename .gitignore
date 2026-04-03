@@ -27,3 +27,4 @@ venv/
 
 # Logs
 *.log
+App/params.h

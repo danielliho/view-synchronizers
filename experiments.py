@@ -1921,6 +1921,9 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
     pcsVal=0
     pcsNum=0
 
+    viewSyncMsgsVal=0
+    viewSyncMsgsNum=0
+
     cryptoSignVal=0.0
     cryptoSignNum=0
 
@@ -1949,11 +1952,15 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
             f = open(filename, "r")
             s = f.read()
             f.close()
-            l = s.split(" ")
-            if not(len(l) == 10):
+            l = s.split()
+            if not(len(l) == 10 or len(l) == 11):
                 print("wrong vals file:", filename)
             else:
-                [thru,lat,hdl,tos,pbs,pcs,signNum,signTime,verifNum,verifTime] = l
+                if len(l) == 11:
+                    [thru,lat,hdl,tos,pbs,pcs,viewSyncMsgs,signNum,signTime,verifNum,verifTime] = l
+                else:
+                    [thru,lat,hdl,tos,pbs,pcs,signNum,signTime,verifNum,verifTime] = l
+                    viewSyncMsgs = "0"
 
                 valTH = float(thru)
                 throughputViewNum += 1
@@ -1985,6 +1992,11 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
                 pcsVal += valPC
                 printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"onepcs",valPC)
 
+                valVS = float(viewSyncMsgs)
+                viewSyncMsgsNum += 1
+                viewSyncMsgsVal += valVS
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"view-sync-msgs",valVS)
+
                 valST = float(signTime)
                 cryptoSignNum += 1
                 cryptoSignVal += valST
@@ -2009,6 +2021,7 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
     latencyView    = latencyViewVal/latencyViewNum       if latencyViewNum > 0    else 0.0
     handle         = handleVal/handleNum                 if handleNum > 0         else 0.0
     timeouts       = tosVal/tosNum                       if tosNum > 0            else 0.0
+    viewSyncMsgs   = viewSyncMsgsVal/viewSyncMsgsNum     if viewSyncMsgsNum > 0   else 0.0
     cryptoSign     = cryptoSignVal/cryptoSignNum         if cryptoSignNum > 0     else 0.0
     cryptoVerif    = cryptoVerifVal/cryptoVerifNum       if cryptoVerifNum > 0    else 0.0
     cryptoNumSign  = cryptoNumSignVal/cryptoNumSignNum   if cryptoNumSignNum > 0  else 0.0
@@ -2018,6 +2031,7 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
     print("latency-view:",     latencyView,    "out of", latencyViewNum)
     print("handle:",           handle,         "out of", handleNum)
     print("timeouts:",         timeouts,       "out of", tosNum)
+    print("view-sync-msgs:",   viewSyncMsgs,   "out of", viewSyncMsgsNum)
     print("crypto-sign:",      cryptoSign,     "out of", cryptoSignNum)
     print("crypto-verif:",     cryptoVerif,    "out of", cryptoVerifNum)
     print("crypto-num-sign:",  cryptoNumSign,  "out of", cryptoNumSignNum)

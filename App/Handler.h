@@ -312,6 +312,8 @@ class Handler {
   Peers from_to_peers(PID id1, PID id2);
   Peers remove_from_peers(PID id);
   Peers keep_from_peers(PID id);
+  Peers getNextQsizeLeaders();
+  bool amNextQsizeLeader();
 
   void startNewViewOnTimeout();
 
