@@ -906,7 +906,7 @@ def executeAWS(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,slee
                 time.sleep(1)
             print("stats done:",i)
 
-        (throughputView,latencyView,handle,timeouts,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats)
+        (throughputView,latencyView,handle,timeouts,viewSyncMsgs,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats)
 # End of executeAWS
 
 
@@ -1457,7 +1457,7 @@ def executeCluster(info,protocol,constFactor,numClTrans,sleepTime,numViews,cutOf
         clearStatsDir()
         # execute the experiment
         executeClusterInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,instance)
-        (throughputView,latencyView,handle,timeouts,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats)
+        (throughputView,latencyView,handle,timeouts,viewSyncMsgs,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats)
 
     for (n,i,node) in instanceRepIds + instanceClIds:
         instance = dockerBase + i
@@ -2037,7 +2037,7 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
     print("crypto-num-sign:",  cryptoNumSign,  "out of", cryptoNumSignNum)
     print("crypto-num-verif:", cryptoNumVerif, "out of", cryptoNumVerifNum)
 
-    return (throughputView, latencyView, handle, timeouts, cryptoSign, cryptoVerif, cryptoNumSign, cryptoNumVerif)
+    return (throughputView, latencyView, handle, timeouts, viewSyncMsgs, cryptoSign, cryptoVerif, cryptoNumSign, cryptoNumVerif)
 ## End of computeStats
 
 
@@ -2050,6 +2050,12 @@ def startContainers(numReps,numClients):
     lc = list(map(lambda x: (False, x, "c" + str(x)), list(range(numClients))))  # clients
     lall = lr + lc + [(False , 0, "x")]
 
+    # Batch cleanup is much faster than sequential stop/rm per container.
+    instances = list(map(lambda x: dockerBase + x[2], lall))
+    if len(instances) > 0:
+        subprocess.run([docker + " rm -f " + " ".join(instances)], shell=True)
+    subprocess.run([docker + " network rm " + mybridge], shell=True)
+
     subprocess.run([docker + " network create --driver=bridge " + mybridge], shell=True)
 
     # The 'x' containers are used in particular when we require less cpu so that we can compile in full-cpu
@@ -2057,9 +2063,6 @@ def startContainers(numReps,numClients):
     # used to compile, to the non-x instance that has the restrictions
     for (isRep, j, i) in lall:
         instance  = dockerBase + i
-        # We stop and remove the Doker instance if it is still exists
-        subprocess.run([docker + " stop " + instance], shell=True) #, check=True)
-        subprocess.run([docker + " rm " + instance], shell=True) #, check=True)
         # TODO: make sure to cover all the ports
         opt1  = "--expose=" + str(startRport+numReps) if isRep else ""
         opt2  = "--expose=" + str(startCport+numReps) if isRep else ""
@@ -2075,9 +2078,9 @@ def startContainers(numReps,numClients):
             opts = " ".join([opt1, opt2, opt3, opt4, opt5, opt6, opt7])          # without cpu/mem limitations
         # We start the Docker instance
         subprocess.run([docker + " run -td " + opts + " " + dockerBase], shell=True, check=True)
-        subprocess.run([docker + " exec -t " + instance + " bash -c \"" + srcsgx + "; mkdir " + statsdir + "\""], shell=True, check=True)
+        subprocess.run([docker + " exec -t " + instance + " bash -c \"" + srcsgx + "; mkdir -p " + statsdir + "\""], shell=True, check=True)
         # Set the network latency
-        if 0 < networkLat:
+        if 0 < networkLat and i != "x":
             print("----changing network latency to " + str(networkLat) + "ms")
             rate = ""
             if rateMbit > 0:
@@ -2092,16 +2095,15 @@ def startContainers(numReps,numClients):
             print(latcmd)
             #latcmd = "tc qdisc add dev eth0 root netem delay " + str(networkLat) + "ms"
             subprocess.run([docker + " exec -t " + instance + " bash -c \"" + latcmd + "\""], shell=True, check=True)
-        # Extract the IP address of the container
-        ipcmd = docker + " inspect " + instance + " | jq '.[].NetworkSettings.Networks." + mybridge + ".IPAddress'"
-        srch = re.search('\"(.+?)\"', subprocess.run(ipcmd, shell=True, capture_output=True, text=True).stdout)
-        if srch:
-            out = srch.group(1)
-            print("----container's address:" + out)
-            if isRep:
+        # Only replicas need their IP in ipsOfNodes.
+        if isRep:
+            ipcmd = docker + " inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' " + instance
+            out = subprocess.run(ipcmd, shell=True, capture_output=True, text=True).stdout.strip()
+            if out:
+                print("----container's address:" + out)
                 ipsOfNodes.update({int(i):out})
-        else:
-            print("----container's address: UNKNOWN")
+            else:
+                print("----container's address: UNKNOWN")
 ## End of startContainers
 
 
@@ -2112,10 +2114,9 @@ def stopContainers(numReps,numClients):
     lc = list(map(lambda x: (False, "c" + str(x)), list(range(numClients))))  # clients
     lall = lr + lc + [(False , "x")]
 
-    for (isRep, i) in lall:
-        instance = dockerBase + i
-        subprocess.run([docker + " stop " + instance], shell=True) #, check=True)
-        subprocess.run([docker + " rm " + instance], shell=True) #, check=True)
+    instances = list(map(lambda x: dockerBase + x[1], lall))
+    if len(instances) > 0:
+        subprocess.run([docker + " rm -f " + " ".join(instances)], shell=True)
 
     subprocess.run([docker + " network rm " + mybridge], shell=True)
 ## End of stopContainers
@@ -2151,6 +2152,7 @@ def computeAvgStats(recompile,
     throughputViews = []
     latencyViews    = []
     handles         = []
+    viewSyncs       = []
     cryptoSigns     = []
     cryptoVerifs    = []
     cryptoNumSigns  = []
@@ -2181,11 +2183,14 @@ def computeAvgStats(recompile,
         print("aborted runs so far:", aborted)
         clearStatsDir()
         execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numDeadNodes,numJoiners,i)
-        (throughputView,latencyView,handle,timeouts,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,i,numRepeats)
-        if throughputView > 0 and latencyView > 0 and handle > 0 and cryptoSign > 0 and cryptoVerif > 0 and cryptoNumSign > 0 and cryptoNumVerif > 0:
+        (throughputView,latencyView,handle,timeouts,viewSyncMsgs,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,i,numRepeats)
+        # Some protocols (e.g., OneShot variants) can legitimately report zero crypto metrics.
+        # Keep repeats as long as core performance metrics are valid.
+        if throughputView > 0 and latencyView > 0 and handle > 0:
             throughputViews.append(throughputView)
             latencyViews.append(latencyView)
             handles.append(handle)
+            viewSyncs.append(viewSyncMsgs)
             cryptoSigns.append(cryptoSign)
             cryptoVerifs.append(cryptoVerif)
             cryptoNumSigns.append(cryptoNumSign)
@@ -2198,6 +2203,7 @@ def computeAvgStats(recompile,
     throughputView = sum(throughputViews)/goodValues if goodValues > 0 else 0.0
     latencyView    = sum(latencyViews)/goodValues    if goodValues > 0 else 0.0
     handle         = sum(handles)/goodValues         if goodValues > 0 else 0.0
+    viewSyncMsgs   = sum(viewSyncs)/goodValues       if goodValues > 0 else 0.0
     cryptoSign     = sum(cryptoSigns)/goodValues     if goodValues > 0 else 0.0
     cryptoVerif    = sum(cryptoVerifs)/goodValues    if goodValues > 0 else 0.0
     cryptoNumSign  = sum(cryptoNumSigns)/goodValues  if goodValues > 0 else 0.0
@@ -2206,6 +2212,7 @@ def computeAvgStats(recompile,
     print("avg throughput (view):",  throughputView)
     print("avg latency (view):",     latencyView)
     print("avg handle:",             handle)
+    print("avg view-sync-msgs:",     viewSyncMsgs)
     print("avg crypto (sign):",      cryptoSign)
     print("avg crypto (verif):",     cryptoVerif)
     print("avg crypto (sign-num):",  cryptoNumSign)

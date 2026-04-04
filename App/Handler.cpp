@@ -1077,6 +1077,8 @@ void Handler::wishToAdvanceView(View v) {
   if (amNextQsizeLeader()) {
     handleWishToAdvanceView(wish, this->myid);
   }
+  // sendMsgWishToAdvanceView(wish, this->peers);
+  // handleWishToAdvanceView(wish, this->myid);
 }
 
 void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
@@ -1115,7 +1117,7 @@ void Handler::handleTimeCertificate(MsgTimeCertificate msg, PID sender) {
                         << " (from=" << sender << ") AND ADVANCING"
                         << KNRM << std::endl;
 
-  sendMsgTimeCertificate(msg, this->peers);
+  sendMsgTimeCertificate(msg, remove_from_peers(sender));
   startNewViewOP(msg.view);
 }
 
