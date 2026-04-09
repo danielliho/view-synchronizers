@@ -1110,13 +1110,19 @@ void Handler::handleTimeCertificate(MsgTimeCertificate msg, PID sender) {
                           << KNRM << std::endl;
     return;
   }
-
-  this->timeCertificates[msg.view] = msg;
-
+  
+  if (msg.view <= this->view) {
+    if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING TIME CERTIFICATE FOR VIEW " << msg.view
+                          << ", NOT HIGHER (current view=" << this->view << ")"
+                          << KNRM << std::endl;
+    return;
+  }
+  
   if (DEBUGD) std::cout << KBLU << nfo() << "STORING RECEIVED TIME CERTIFICATE FOR VIEW " << msg.view
-                        << " (from=" << sender << ") AND ADVANCING"
-                        << KNRM << std::endl;
-
+  << " (from=" << sender << ") AND ADVANCING"
+  << KNRM << std::endl;
+  
+  this->timeCertificates[msg.view] = msg;
   sendMsgTimeCertificate(msg, remove_from_peers(sender));
   startNewViewOP(msg.view);
 }
