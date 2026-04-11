@@ -1074,14 +1074,14 @@ void Handler::startNewViewOnTimeout() {
 //View synchronization messages
 void Handler::wishToAdvanceView(View v) {
   MsgWishToAdvanceView wish(v);
-  sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
-  if (amLeaderOf(v)) {
-    handleWishToAdvanceView(wish, this->myid);
-  }
-  // sendMsgWishToAdvanceView(wish, getNextQsizeLeaders(v));
-  // if (amNextQsizeLeader(v)) {
+  // sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
+  // if (amLeaderOf(v)) {
   //   handleWishToAdvanceView(wish, this->myid);
   // }
+  sendMsgWishToAdvanceView(wish, getNextQsizeLeaders(v));
+  if (amNextQsizeLeader(v)) {
+    handleWishToAdvanceView(wish, this->myid);
+  }
   // sendMsgWishToAdvanceView(wish, this->peers);
   // handleWishToAdvanceView(wish, this->myid);
 }
@@ -1102,20 +1102,11 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
     if (DEBUGD) std::cout << KBLU << nfo() << "STORING AND SENDING TC AND ADVANCING VIEW: " << msg.view << " > " << this->view << KNRM << std::endl;
     MsgTimeCertificate tc(msg.view);
     sendMsgTimeCertificate(tc, this->peers);
-    this->timeCertificates[tc.view] = tc;
     startNewViewOP(tc.view);
   }
 }
 
 void Handler::handleTimeCertificate(MsgTimeCertificate msg, PID sender) {
-  std::map<View,MsgTimeCertificate>::iterator it = this->timeCertificates.find(msg.view);
-  if (it != this->timeCertificates.end()) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING TIME CERTIFICATE FOR VIEW " << msg.view
-                          << ", ALREADY STORED"
-                          << KNRM << std::endl;
-    return;
-  }
-  
   if (msg.view <= this->view) {
     if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING TIME CERTIFICATE FOR VIEW " << msg.view
                           << ", NOT HIGHER (current view=" << this->view << ")"
@@ -1127,7 +1118,6 @@ void Handler::handleTimeCertificate(MsgTimeCertificate msg, PID sender) {
   << " (from=" << sender << ") AND ADVANCING"
   << KNRM << std::endl;
   
-  this->timeCertificates[msg.view] = msg;
   sendMsgTimeCertificate(msg, remove_from_peers(sender));
   startNewViewOP(msg.view);
 }

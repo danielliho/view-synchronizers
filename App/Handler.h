@@ -130,8 +130,6 @@ class Handler {
 
   // Tracks which replicas requested a jump to a given view.
   std::map<View,std::set<PID>> wishesToAdvanceView;
-  // Stores one time certificate per view.
-  std::map<View,MsgTimeCertificate> timeCertificates;
 
   std::set<Hash> acceptedNoncesAchilles; // set of nonces that led to a successful restart
 
