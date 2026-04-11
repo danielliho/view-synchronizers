@@ -1074,16 +1074,16 @@ void Handler::startNewViewOnTimeout() {
 //View synchronization messages
 void Handler::wishToAdvanceView(View v) {
   MsgWishToAdvanceView wish(v);
-  sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
-  if (amLeaderOf(v)) {
-    handleWishToAdvanceView(wish, this->myid);
-  }
-  // sendMsgWishToAdvanceView(wish, getNextQsizeLeaders());
-  // if (amNextQsizeLeader()) {
+  // sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
+  // if (amLeaderOf(v)) {
   //   handleWishToAdvanceView(wish, this->myid);
   // }
-  // sendMsgWishToAdvanceView(wish, this->peers);
-  // handleWishToAdvanceView(wish, this->myid);
+  sendMsgWishToAdvanceView(wish, getNextQsizeLeaders());
+  if (amNextQsizeLeader()) {
+    handleWishToAdvanceView(wish, this->myid);
+  }
+  sendMsgWishToAdvanceView(wish, this->peers);
+  handleWishToAdvanceView(wish, this->myid);
 }
 
 void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
@@ -1637,11 +1637,11 @@ Peers Handler::keep_from_peers(PID id) {
   return ret;
 }
 
-Peers Handler::getNextQsizeLeaders() {
+Peers Handler::getNextQsizeLeaders(View v) {
   Peers ret;
-  std::set<PID> leaders;  // To avoid duplicates
+  std::set<PID> leaders;
   for (unsigned int i = 0; i < this->qsize; i++) {
-    PID leader = getLeaderOf(this->view + i + 1);
+    PID leader = getLeaderOf(v + i);
     if (leaders.find(leader) == leaders.end()) {
       leaders.insert(leader);
       Peers leaderPeers = keep_from_peers(leader);
@@ -1651,9 +1651,9 @@ Peers Handler::getNextQsizeLeaders() {
   return ret;
 }
 
-bool Handler::amNextQsizeLeader() {
+bool Handler::amNextQsizeLeader(View v) {
   for (unsigned int i = 0; i < this->qsize; i++) {
-    if (this->myid == getLeaderOf(this->view + i + 1)) {
+    if (this->myid == getLeaderOf(v + i)) {
       return true;
     }
   }
