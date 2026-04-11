@@ -1074,16 +1074,16 @@ void Handler::startNewViewOnTimeout() {
 //View synchronization messages
 void Handler::wishToAdvanceView(View v) {
   MsgWishToAdvanceView wish(v);
-  // sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
-  // if (amLeaderOf(v)) {
-  //   handleWishToAdvanceView(wish, this->myid);
-  // }
-  sendMsgWishToAdvanceView(wish, getNextQsizeLeaders());
-  if (amNextQsizeLeader()) {
+  sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
+  if (amLeaderOf(v)) {
     handleWishToAdvanceView(wish, this->myid);
   }
-  sendMsgWishToAdvanceView(wish, this->peers);
-  handleWishToAdvanceView(wish, this->myid);
+  // sendMsgWishToAdvanceView(wish, getNextQsizeLeaders(v));
+  // if (amNextQsizeLeader(v)) {
+  //   handleWishToAdvanceView(wish, this->myid);
+  // }
+  // sendMsgWishToAdvanceView(wish, this->peers);
+  // handleWishToAdvanceView(wish, this->myid);
 }
 
 void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
