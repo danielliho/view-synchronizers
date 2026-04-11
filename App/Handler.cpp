@@ -1060,6 +1060,7 @@ void Handler::startNewViewOnTimeout() {
 #elif defined (BASIC_ONEP) || defined (BASIC_ONEPB) || defined (BASIC_ONEPC) || defined (BASIC_ONEPD)
 //View synchronization stuff
   if (DEBUGD) std::cout << KMAG << nfo() << "TIMEOUT, WISHING TO ADVANCE VIEW" << KNRM << std::endl;
+  //TODO with to avance view+2 if consecutive timeout
   wishToAdvanceView(this->view+1);
 #elif defined (CHAINED_BASELINE)
   startNewViewCh();
@@ -1073,10 +1074,14 @@ void Handler::startNewViewOnTimeout() {
 //View synchronization messages
 void Handler::wishToAdvanceView(View v) {
   MsgWishToAdvanceView wish(v);
-  sendMsgWishToAdvanceView(wish, getNextQsizeLeaders());
-  if (amNextQsizeLeader()) {
+  sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
+  if (amLeaderOf(v)) {
     handleWishToAdvanceView(wish, this->myid);
   }
+  // sendMsgWishToAdvanceView(wish, getNextQsizeLeaders());
+  // if (amNextQsizeLeader()) {
+  //   handleWishToAdvanceView(wish, this->myid);
+  // }
   // sendMsgWishToAdvanceView(wish, this->peers);
   // handleWishToAdvanceView(wish, this->myid);
 }

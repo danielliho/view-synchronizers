@@ -6567,7 +6567,7 @@ def TVL():
     numTransPerBlock = 400 #10
     payloadSize      = 0 #256
     numViews         = 0 # nodes don't stop
-    cutOffBound      = 90
+    cutOffBound      = 240
 
 
     ## For testing purposes, we use less repeats then
