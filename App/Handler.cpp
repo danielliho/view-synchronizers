@@ -1118,7 +1118,8 @@ void Handler::handleTimeCertificate(MsgTimeCertificate msg, PID sender) {
   << " (from=" << sender << ") AND ADVANCING"
   << KNRM << std::endl;
   
-  sendMsgTimeCertificate(msg, remove_from_peers(sender));
+  MsgTimeCertificate tc(msg.view);
+  sendMsgTimeCertificate(tc, remove_from_peers(sender));
   startNewViewOP(msg.view);
 }
 
