@@ -87,6 +87,7 @@ class Handler {
   Nodes nodes;                   // collection of the other nodes
   KEY priv;                      // private key
   View view = 0;                 // current view - initially 0
+  Epoch epoch = 0;
   unsigned int maxViews = 0;     // 0 means no constraints
   KeysFun kf;                    // To access crypto functions
 
@@ -107,6 +108,8 @@ class Handler {
   bool stopped = false;
   salticidae::TimerEvent timer;
   View timerView; // view at which the timer was started
+  View lastTimeoutWishedView = 0;
+  Epoch lastTimeoutWishedEpoch = 0;
 
   std::list<Transaction> transactions; // current waiting to be processed
   std::map<View,Block> blocks; // blocks received in each view
@@ -130,8 +133,8 @@ class Handler {
 
   // Tracks which replicas requested a jump to a given view.
   std::map<View,std::set<PID>> wishesToAdvanceView;
-  // Stores one time certificate per view.
-  std::map<View,MsgTimeCertificate> timeCertificates;
+  std::map<Epoch,std::set<PID>> wishesToAdvanceEpoch;
+  bool wishing = false;
 
   std::set<Hash> acceptedNoncesAchilles; // set of nonces that led to a successful restart
 
@@ -215,7 +218,6 @@ class Handler {
   // ture iff 'myid' is the leader of the current view
   bool amCurrentLeader();
   std::string amCurrentLeaderStr();
-
   // used to print debugging info
   std::string nfo();
 
@@ -315,8 +317,6 @@ class Handler {
   Peers getNextQsizeLeaders(View v);
   bool amNextQsizeLeader(View v);
 
-  void startNewViewOnTimeout();
-
   //View synchronization stuff
   void wishToAdvanceView(View v);
   
@@ -324,9 +324,18 @@ class Handler {
   void handle_wishtoadvanceview(MsgWishToAdvanceView msg, const PeerNet::conn_t &conn);
   void sendMsgWishToAdvanceView(MsgWishToAdvanceView msg, Peers recipients);
 
-  void handleTimeCertificate(MsgTimeCertificate msg, PID sender);
-  void handle_timecertificate(MsgTimeCertificate msg, const PeerNet::conn_t &conn);
-  void sendMsgTimeCertificate(MsgTimeCertificate msg, Peers recipients);
+  void handleViewCertificate(MsgViewCertificate msg, PID sender);
+  void handle_viewcertificate(MsgViewCertificate msg, const PeerNet::conn_t &conn);
+  void sendMsgViewCertificate(MsgViewCertificate msg, Peers recipients);
+
+  void wishToAdvanceEpoch(Epoch e);
+  void handleWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, PID sender);
+  void handle_wishtoadvanceepoch(MsgWishToAdvanceEpoch msg, const PeerNet::conn_t &conn);
+  void sendMsgWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, Peers recipients);
+
+  void handleEpochCertificate(MsgEpochCertificate msg, PID sender);
+  void handle_epochcertificate(MsgEpochCertificate msg, const PeerNet::conn_t &conn);
+  void sendMsgEpochCertificate(MsgEpochCertificate msg, Peers recipients);
 
 
   // ------------------------------------------------------------

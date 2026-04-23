@@ -82,7 +82,9 @@ typedef uint8_t HEADER;
 #define HDR_PM_SYNC_VOTE        0x57
 #define HDR_PM_SYNC_VOTE_QC     0x58
 #define HDR_WISH_TO_ADVANCE_VIEW 0x59
-#define HDR_TIME_CERTIFICATE    0x60
+#define HDR_VIEW_CERTIFICATE    0x60
+#define HDR_WISH_TO_ADVANCE_EPOCH 0x61
+#define HDR_EPOCH_CERTIFICATE   0x62
 
 typedef uint8_t Phase1;
 
@@ -110,6 +112,7 @@ typedef unsigned int TID; // transaction ids
 typedef unsigned int PORT;
 typedef unsigned int Session;
 typedef unsigned int View;
+typedef unsigned int Epoch;
 typedef unsigned int Value;
 
 //typedef std::array<unsigned char,SHA256_DIGEST_LENGTH> hasharray;

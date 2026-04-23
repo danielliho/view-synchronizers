@@ -31,6 +31,8 @@ std::mutex mu_trans;
 std::mutex mu_handle;
 
 Time startTime = std::chrono::steady_clock::now();
+Time epochStartTime = std::chrono::steady_clock::now();
+View epochStartView = 0;
 Time startView = std::chrono::steady_clock::now();
 Time timerTime = std::chrono::steady_clock::now();
 std::string statsVals;             // Throuput + latency + handle + crypto
@@ -42,7 +44,7 @@ Time curTime;
 
 Stats stats;                   // To collect statistics
 
-unsigned int viewSyncMsgsSent = 0; // total Wish/TimeCertificate messages sent (fanout count)
+unsigned int viewSyncMsgsSent = 0; // total view sync messages sent (fanout count)
 
 
 // To generate uniformly distributed numbers in [0,1]
@@ -64,10 +66,9 @@ std::string Handler::amCurrentLeaderStr() {
   return "B";
 }
 
-
 std::string Handler::nfo() {
   return ("[" + std::to_string(this->myid) + amCurrentLeaderStr() + "]"
-          + "{s" +  std::to_string(this->session)
+          + "{e" +  std::to_string(this->epoch)
           + ",v" +  std::to_string(this->view) + "}");
 }
 
@@ -967,123 +968,21 @@ int Handler::initializeSGX() {
 #endif
 // ------------------------------------
 
-
-
-void Handler::startNewViewOnTimeout() {
-  // TODO: start a new-view
-#if defined(BASIC_BASELINE)
-  if (DEBUG0) std::cout << KMAG << nfo() << "starting a new view" << KNRM << std::endl;
-  startNewView();
-#elif defined (BASIC_CHEAP)
-  startNewView();
-#elif defined (BASIC_QUICK)
-  startNewViewAcc();
-#elif defined (BASIC_CHEAP_AND_QUICK)
-  startNewViewComb();
-#elif defined (BASIC_FREE) || defined (BASIC_DAMYSUS_PACEMAKER) || defined (BASIC_DAMYSUS_ACHILLES) || defined (BASIC_DAMYSUS3_PACEMAKER) || defined (BASIC_DAMYSUS_ROTE)
-  startNewViewFree();
-#elif defined (BASIC_ROLL)
-  //if (DEBUG1) std::cout << KRED << nfo() << "TODO-startNewViewOnTimeout" << KNRM << std::endl;
-  //exit(0);
-  if (!this->rejoining) { // only nodes that are not rejoining participate
-    if (this->synchronizing) {
-      if (this->syncAttempts < this->qsize) {
-        Session s = this->session+1;
-        PID firstLeader = getLeaderOf(s);
-        PID oldLeader   = (firstLeader + this->syncAttempts - 1) % this->total;
-        PID newLeader   = (firstLeader + this->syncAttempts) % this->total;
-        this->syncAttempts++;
-
-        //Joins joins = getPreparedJoins(this->lastRBstore.getStore().getSession(),this->lastRBstore.getStore().getView());
-
-        while (this->agreedJoins.in(newLeader) || this->receivedJoins.in(newLeader)) {
-          PID leader = (newLeader + 1) % this->total;
-          if (DEBUG1W) std::cout << KLRED << nfo() << "potential leader (" << newLeader << ")"
-                                 << " is restarting, moving on to the next one (" << leader << ")"
-                                 << KNRM << std::endl;
-          newLeader = leader;
-        }
-
-        if (DEBUG1W) std::cout << KRED << nfo() << "TODO - timed-out while synchronizing"
-                              << " (attempt=" << this->syncAttempts << ") with leaders:"
-                              << " first-leader?=" << firstLeader
-                              << " old-leader?="   << oldLeader
-                              << " new-leader="    << newLeader
-                              << KNRM
-                              << std::endl;
-
-        // if (this->agreedJoins.in(newLeader)) {
-        //   if (DEBUG1) { std::cout << KLGRN << nfo() << "new synchronization leader (" << newLeader << ")"
-        //                           << " is known to be restarting and can be skipped"
-        //                           << KNRM << std::endl; }
-
-        //   // TODO: while/for loop instead!
-        //   startNewViewOnTimeout();
-
-        // } else {
-
-        // TODO - This is a very simple case of timeouts for now.
-        std::set<Sync> syncs = this->log.getSync(s);
-        if (syncs.size() > 0) {
-          std::set<Sync>::iterator it=syncs.begin();
-          Sync someSync = (Sync)*it; // 1st one
-          wishToAdvanceOnSync(someSync,newLeader);
-        } else {
-          if (DEBUG0) std::cout << KRED << nfo() << "FAILED: timed-out while synchronizing -- no previous sync recorded" << KNRM << std::endl;
-          if (DEBUG0) std::cout << KRED << nfo() << "EXIT!(0)" << KNRM << std::endl;
-          exit(0);
-        }
-      } else {
-        if (DEBUG0) std::cout << KRED << nfo() << "FAILED: timed-out while synchronizing -- too many attempts: " << this->syncAttempts << KNRM << std::endl;
-        if (DEBUG0) std::cout << KRED << nfo() << "EXIT!(1)" << KNRM << std::endl;
-        exit(0);
-      }
-    } else {
-      // Not synchronizing
-      PID oldLeader = getLeaderOf(this->view);
-      PID newLeader = getLeaderOf(this->view+1);
-      if (DEBUG1W) std::cout << KRED << nfo() << "starting new view on timeout -- leaders: " << oldLeader << " -> " << newLeader << KNRM << std::endl;
-      // TODO: Check that this->lastRBstore is for the current session and prepv
-      // TODO: Remove this check. This is just to check that nodes do not timeout too much
-      if (oldLeader < this->numJoiners) {
-        // timed-out most likely due to the fact that the old leader was a rejoiner
-        startNewViewOrSyncRB(this->lastRBstore);
-      } else {
-        if (DEBUG0) std::cout << KRED << nfo() << "FAILURE? not sure why a timeout, old leader (" << oldLeader << ") is not a rejoiner"
-                              << KNRM << std::endl;
-        //if (DEBUG0) std::cout << KRED << nfo() << "EXIT!" << KNRM << std::endl;
-        //exit(0);
-        startNewViewOrSyncRB(this->lastRBstore);
-      }
-    }
-  }
-#elif defined (BASIC_ONEP) || defined (BASIC_ONEPB) || defined (BASIC_ONEPC) || defined (BASIC_ONEPD)
-//View synchronization stuff
-  if (DEBUGD) std::cout << KMAG << nfo() << "TIMEOUT, WISHING TO ADVANCE VIEW" << KNRM << std::endl;
-  //TODO with to avance view+2 if consecutive timeout
-  wishToAdvanceView(this->view+1);
-#elif defined (CHAINED_BASELINE)
-  startNewViewCh();
-#elif defined (CHAINED_CHEAP_AND_QUICK)
-  startNewViewChComb();
-#else
-  recordStats();
-#endif
-}
-
 //View synchronization messages
 void Handler::wishToAdvanceView(View v) {
-  MsgWishToAdvanceView wish(v);
-  // sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
-  // if (amLeaderOf(v)) {
-  //   handleWishToAdvanceView(wish, this->myid);
-  // }
-  sendMsgWishToAdvanceView(wish, getNextQsizeLeaders());
-  if (amNextQsizeLeader()) {
+  MsgWishToAdvanceView wish(v, this->epoch);
+  sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
+  if (amLeaderOf(v)) {
     handleWishToAdvanceView(wish, this->myid);
   }
-  sendMsgWishToAdvanceView(wish, this->peers);
-  handleWishToAdvanceView(wish, this->myid);
+}
+
+void Handler::wishToAdvanceEpoch(Epoch e) {
+  MsgWishToAdvanceEpoch wish(e);
+  sendMsgWishToAdvanceEpoch(wish, getNextQsizeLeaders(e * this->qsize));
+  if (amNextQsizeLeader(e * this->qsize)) {
+    handleWishToAdvanceEpoch(wish, this->myid);
+  }
 }
 
 void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
@@ -1098,38 +997,74 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
               << KNRM << std::endl;
   }
 
-  if (msg.view > this->view && numWishes >= this->qsize) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "STORING AND SENDING TC AND ADVANCING VIEW: " << msg.view << " > " << this->view << KNRM << std::endl;
-    MsgTimeCertificate tc(msg.view);
-    sendMsgTimeCertificate(tc, this->peers);
-    this->timeCertificates[tc.view] = tc;
-    startNewViewOP(tc.view);
+  if (msg.view > this->view && msg.epoch == this->epoch && numWishes >= this->qsize) {
+    if (DEBUGD) std::cout << KBLU << nfo() << "SENDING VC AND ADVANCING VIEW: " << msg.view << " > " << this->view << KNRM << std::endl;
+    MsgViewCertificate vc(msg.view, msg.epoch);
+    sendMsgViewCertificate(vc, this->peers);
+    startNewViewOP(vc.view);
   }
 }
 
-void Handler::handleTimeCertificate(MsgTimeCertificate msg, PID sender) {
-  std::map<View,MsgTimeCertificate>::iterator it = this->timeCertificates.find(msg.view);
-  if (it != this->timeCertificates.end()) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING TIME CERTIFICATE FOR VIEW " << msg.view
-                          << ", ALREADY STORED"
-                          << KNRM << std::endl;
-    return;
-  }
-  
-  if (msg.view <= this->view) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING TIME CERTIFICATE FOR VIEW " << msg.view
+void Handler::handleViewCertificate(MsgViewCertificate msg, PID sender) {
+  if (msg.view <= this->view || msg.epoch != this->epoch) {
+    if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING VIEW CERTIFICATE FOR VIEW " << msg.view
                           << ", NOT HIGHER (current view=" << this->view << ")"
                           << KNRM << std::endl;
     return;
   }
   
-  if (DEBUGD) std::cout << KBLU << nfo() << "STORING RECEIVED TIME CERTIFICATE FOR VIEW " << msg.view
+  if (DEBUGD) std::cout << KBLU << nfo() << "RECEIVED VIEW CERTIFICATE FOR VIEW " << msg.view
   << " (from=" << sender << ") AND ADVANCING"
   << KNRM << std::endl;
   
-  this->timeCertificates[msg.view] = msg;
-  sendMsgTimeCertificate(msg, remove_from_peers(sender));
   startNewViewOP(msg.view);
+}
+
+void Handler::handleWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, PID sender) {
+  this->wishesToAdvanceEpoch[msg.epoch].insert(sender);
+  unsigned int numWishes = this->wishesToAdvanceEpoch[msg.epoch].size();
+
+  if (DEBUGD) {
+    std::cout << KBLU << nfo()
+              << "WISH-COUNT(epoch=" << msg.epoch << ")=" << numWishes
+              << "/" << this->qsize
+              << " (from=" << sender << ")"
+              << KNRM << std::endl;
+  }
+
+  if (msg.epoch > this->epoch && numWishes >= this->qsize) {
+    if (DEBUGD) std::cout << KBLU << nfo() << "SENDING EC AND ADVANCING EPOCH: " << msg.epoch << " > " << this->epoch << KNRM << std::endl;
+    this->epoch = msg.epoch;
+    epochStartTime = std::chrono::steady_clock::now();
+    epochStartView = this->view;
+    this->timer.del();
+    this->timer.add(this->timeout);
+    MsgEpochCertificate ec(msg.epoch);
+    sendMsgEpochCertificate(ec, this->peers);
+    wishToAdvanceView(msg.epoch * this->qsize);
+  }
+}
+
+void Handler::handleEpochCertificate(MsgEpochCertificate msg, PID sender) {
+  if (msg.epoch <= this->epoch) {
+    if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING EPOCH CERTIFICATE FOR EPOCH " << msg.epoch
+                          << ", NOT HIGHER (current epoch=" << this->epoch << ")"
+                          << KNRM << std::endl;
+    return;
+  }
+
+  if (DEBUGD) std::cout << KBLU << nfo() << "RECEIVED EPOCH CERTIFICATE FOR EPOCH " << msg.epoch
+  << " (from=" << sender << ") AND ADVANCING"
+  << KNRM << std::endl;
+
+  this->epoch = msg.epoch;
+  epochStartTime = std::chrono::steady_clock::now();
+  epochStartView = this->view;
+  this->timer.del();
+  this->timer.add(this->timeout);
+  MsgEpochCertificate ec(msg.epoch);
+  sendMsgEpochCertificate(ec, remove_from_peers(sender)); 
+  wishToAdvanceView(msg.epoch * this->qsize);
 }
 
 
@@ -1165,7 +1100,9 @@ const uint8_t MsgPreCommitOP::opcode;
 const uint8_t MsgLdrAddOP::opcode;
 const uint8_t MsgBckAddOP::opcode;
 const uint8_t MsgWishToAdvanceView::opcode;
-const uint8_t MsgTimeCertificate::opcode;
+const uint8_t MsgViewCertificate::opcode;
+const uint8_t MsgWishToAdvanceEpoch::opcode;
+const uint8_t MsgEpochCertificate::opcode;
 #elif defined(BASIC_CHEAP_AND_QUICK)
 const uint8_t MsgNewViewComb::opcode;
 const uint8_t MsgLdrPrepareComb::opcode;
@@ -1327,27 +1264,33 @@ Handler::Handler(KeysFun k,
                              });
 
   this->timer = salticidae::TimerEvent(pec, [this](salticidae::TimerEvent &) {
-    double newTimeout = this->timeoutMul*this->timeout;
-    PID oldLeader = getCurrentLeader();
-    PID newLeader = getLeaderOf(this->view+1);
-    if (DEBUG0) printNowTime(KLRED, "timer ran out (timeout:" + std::to_string(this->timeout) + "->" + std::to_string(newTimeout) + ") - leader=" + std::to_string(oldLeader) + "->" + std::to_string(newLeader));
     Time now = std::chrono::steady_clock::now();
-    // time in seconds since the timer was last set
-    double time = std::chrono::duration_cast<std::chrono::microseconds>(now - timerTime).count() / (1000 * 1000);
-    if (time < this->timeout) {
-      if (DEBUG1W) printNowTime(KLRED, "not yet time to timeout:" + std::to_string(time) + " < " + std::to_string(this->timeout));
-      double remTime = this->timeout - time;
-      this->timer.del();
-      this->timer.add(remTime);
-    } else {
-      if (DEBUG1W) printNowTime(KLRED, "time to timeout:" + std::to_string(time) + " >= " + std::to_string(this->timeout));
+    double elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - epochStartTime).count() / (1000.0 * 1000.0);
+
+    View expectedOffset = (View)(elapsed / this->timeout);
+    View nextView = epochStartView + expectedOffset + 1;
+    if (this->view + 1 < nextView) {
       stats.incTimeouts();
-      startNewViewOnTimeout();
-      this->timer.del();
-      this->timeout=newTimeout;
-      this->timer.add(this->timeout);
-      timerTime = std::chrono::steady_clock::now();
+      if (nextView % this->qsize == 0) {
+        Epoch targetEpoch = nextView / this->qsize;
+        if (targetEpoch > this->lastTimeoutWishedEpoch) {
+          if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), WISHING TO ADVANCE EPOCH (" << targetEpoch << ")" << KNRM << std::endl;
+          wishToAdvanceEpoch(targetEpoch);
+          this->lastTimeoutWishedEpoch = targetEpoch;
+        }
+      } else {
+        if (nextView > this->lastTimeoutWishedView) {
+          if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), WISHING TO ADVANCE VIEW (" << nextView << ")" << KNRM << std::endl;
+          wishToAdvanceView(nextView);
+          this->lastTimeoutWishedView = nextView;
+        }
+      }
     }
+
+    double nextBoundary = (expectedOffset + 1) * this->timeout;
+    double remTime = nextBoundary - elapsed;
+    if (remTime <= 0.0) { remTime = 0.01; }
+    this->timer.add(remTime);
   });
 
   HOST host = "127.0.0.1";
@@ -1422,7 +1365,9 @@ Handler::Handler(KeysFun k,
 
   //View synchronization stuff
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_wishtoadvanceview, this, _1, _2));
-  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_timecertificate, this, _1, _2));
+  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_viewcertificate, this, _1, _2));
+  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_wishtoadvanceepoch, this, _1, _2));
+  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_epochcertificate, this, _1, _2));
 #elif defined(BASIC_CHEAP_AND_QUICK)
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewcomb,    this, _1, _2));
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrpreparecomb, this, _1, _2));
@@ -1700,13 +1645,13 @@ void Handler::handle_wishtoadvanceview(MsgWishToAdvanceView msg, const PeerNet::
   handleWishToAdvanceView(msg, sender);
 }
 
-void Handler::sendMsgTimeCertificate(MsgTimeCertificate msg, Peers recipients) {
+void Handler::sendMsgWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, Peers recipients) {
   if (DEBUGD) std::cout << KBLU << nfo() << "SENDING:" << msg.prettyPrint() << "->" << recipients2string(recipients) << KNRM << std::endl;
   viewSyncMsgsSent += recipients.size();
   this->pnet.multicast_msg(msg, getPeerids(recipients));
 }
 
-void Handler::handle_timecertificate(MsgTimeCertificate msg, const PeerNet::conn_t &conn) {
+void Handler::handle_wishtoadvanceepoch(MsgWishToAdvanceEpoch msg, const PeerNet::conn_t &conn) {
   PID sender = this->myid;
   bool found = false;
   salticidae::PeerId senderPeerId = conn->get_peer_id();
@@ -1727,7 +1672,67 @@ void Handler::handle_timecertificate(MsgTimeCertificate msg, const PeerNet::conn
     }
   }
 
-  handleTimeCertificate(msg, sender);
+  handleWishToAdvanceEpoch(msg, sender);
+}
+
+void Handler::sendMsgViewCertificate(MsgViewCertificate msg, Peers recipients) {
+  if (DEBUGD) std::cout << KBLU << nfo() << "SENDING:" << msg.prettyPrint() << "->" << recipients2string(recipients) << KNRM << std::endl;
+  viewSyncMsgsSent += recipients.size();
+  this->pnet.multicast_msg(msg, getPeerids(recipients));
+}
+
+void Handler::handle_viewcertificate(MsgViewCertificate msg, const PeerNet::conn_t &conn) {
+  PID sender = this->myid;
+  bool found = false;
+  salticidae::PeerId senderPeerId = conn->get_peer_id();
+  for (Peers::iterator it = this->peers.begin(); it != this->peers.end(); ++it) {
+    Peer peer = *it;
+    if (std::get<1>(peer) == senderPeerId) {
+      sender = std::get<0>(peer);
+      found = true;
+      break;
+    }
+  }
+
+  if (DEBUGD) {
+    if (found) {
+      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM " << sender << KNRM << std::endl;
+    } else {
+      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM unknown-peer" << KNRM << std::endl;
+    }
+  }
+  
+  handleViewCertificate(msg, sender);
+}
+
+void Handler::sendMsgEpochCertificate(MsgEpochCertificate msg, Peers recipients) {
+  if (DEBUGD) std::cout << KBLU << nfo() << "SENDING:" << msg.prettyPrint() << "->" << recipients2string(recipients) << KNRM << std::endl;
+  viewSyncMsgsSent += recipients.size();
+  this->pnet.multicast_msg(msg, getPeerids(recipients));
+}
+
+void Handler::handle_epochcertificate(MsgEpochCertificate msg, const PeerNet::conn_t &conn) {
+  PID sender = this->myid;
+  bool found = false;
+  salticidae::PeerId senderPeerId = conn->get_peer_id();
+  for (Peers::iterator it = this->peers.begin(); it != this->peers.end(); ++it) {
+    Peer peer = *it;
+    if (std::get<1>(peer) == senderPeerId) {
+      sender = std::get<0>(peer);
+      found = true;
+      break;
+    }
+  }
+
+  if (DEBUGD) {
+    if (found) {
+      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM " << sender << KNRM << std::endl;
+    } else {
+      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM unknown-peer" << KNRM << std::endl;
+    }
+  }
+
+  handleEpochCertificate(msg, sender);
 }
 
 void Handler::sendMsgNewView(MsgNewView msg, Peers recipients) {
@@ -3109,6 +3114,8 @@ void Handler::setTimer() {
 void Handler::getStarted() {
   //if (DEBUG1) std::cout << KLRED << nfo() << "starting" << KNRM << std::endl;
   startTime = std::chrono::steady_clock::now();
+  epochStartTime = startTime;
+  epochStartView = this->view;
   startView = std::chrono::steady_clock::now();
   // Send new-view to the leader of the current view
 
@@ -3121,7 +3128,8 @@ void Handler::getStarted() {
   if (DEBUG1) std::cout << KBLU << nfo() << "... getting started ..." << KNRM << std::endl;
 
   // We start the timer
-  //setTimer();
+  this->timer.del();
+  this->timer.add(this->timeout);
 
 // CHEAP_AND_QUICK - DAMYSUS
 #if defined(BASIC_CHEAP_AND_QUICK)
@@ -5947,13 +5955,27 @@ MsgNewViewOPB Handler::genMsgNewViewOPB() {
     if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:no need to generate a new store, has one for " << (this->view-1) << KNRM << std::endl;
     store = OPstore(prep.getView(),prep.getHash(),prep.getV(),prep.getAuths().get(0));
   } else {
-    if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:generating a new store" << KNRM << std::endl;
-    //auto start2 = std::chrono::steady_clock::now();
-    store = callTEEstoreOP(prop);
-    //auto end2 = std::chrono::steady_clock::now();
-    //double time2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - start2).count();
-    //stats.addTotalGen2Time(time2);
-    this->log.storeStoreOp(store);
+    //View synchronization: protocol changes
+    if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:generating stores to catch up" << KNRM << std::endl;
+    View targetStoreView = (this->view == 0) ? 0 : this->view - 1;
+    unsigned int maxCatchupSteps = static_cast<unsigned int>(this->view + this->qsize + 1);
+
+    for (unsigned int i = 0; i < maxCatchupSteps && prep.getAuths().getSize() != 1; i++) {
+      OPstore generated = callTEEstoreOP(prop);
+      if (!generated.getAuth().getHash().getSet()) {
+        if (DEBUG1) std::cout << KBRED << nfo() << "genMsgNewViewOPB:failed to generate catch-up store at step " << i << KNRM << std::endl;
+        break;
+      }
+
+      store = generated;
+      this->log.storeStoreOp(store);
+      prep = this->log.getOPstores(targetStoreView,1);
+    }
+
+    if (prep.getAuths().getSize() == 1) {
+      store = OPstore(prep.getView(),prep.getHash(),prep.getV(),prep.getAuths().get(0));
+      if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:catch-up complete for " << targetStoreView << KNRM << std::endl;
+    }
   }
 
   OPnvblock nv(block,OPnvcert(store,cert));
@@ -5991,13 +6013,27 @@ MsgNewViewOPBB Handler::genMsgNewViewOPBB() {
     if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPBB:no need to generate a new store, has one for " << (this->view-1) << KNRM << std::endl;
     store = OPstore(prep.getView(),prep.getHash(),prep.getV(),prep.getAuths().get(0));
   } else {
-    if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPBB:generating a new store" << KNRM << std::endl;
-    //auto start2 = std::chrono::steady_clock::now();
-    store = callTEEstoreOP(prop);
-    //auto end2 = std::chrono::steady_clock::now();
-    //double time2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - start2).count();
-    //stats.addTotalGen2Time(time2);
-    this->log.storeStoreOp(store);
+    //View synchronization: protocol changes
+    if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPBB:generating stores to catch up" << KNRM << std::endl;
+    View targetStoreView = (this->view == 0) ? 0 : this->view - 1;
+    unsigned int maxCatchupSteps = static_cast<unsigned int>(this->view + this->qsize + 1);
+
+    for (unsigned int i = 0; i < maxCatchupSteps && prep.getAuths().getSize() != 1; i++) {
+      OPstore generated = callTEEstoreOP(prop);
+      if (!generated.getAuth().getHash().getSet()) {
+        if (DEBUG1) std::cout << KBRED << nfo() << "genMsgNewViewOPBB:failed to generate catch-up store at step " << i << KNRM << std::endl;
+        break;
+      }
+
+      store = generated;
+      this->log.storeStoreOp(store);
+      prep = this->log.getOPstores(targetStoreView,1);
+    }
+
+    if (prep.getAuths().getSize() == 1) {
+      store = OPstore(prep.getView(),prep.getHash(),prep.getV(),prep.getAuths().get(0));
+      if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPBB:catch-up complete for " << targetStoreView << KNRM << std::endl;
+    }
   }
 
   auto start2 = std::chrono::steady_clock::now();
@@ -6122,9 +6158,6 @@ void Handler::startNewViewOP(int nextView) {
   // *** THE NODE HAS NOW MOVED TO THE NEW-VIEW ***
   this->view = targetView;
 
-  // We start the timer
-  setTimer();
-
   // if the lastest justification we've generated is for what is now the current view (since we just incremented it)
   // and round 0, then send a new-view message
   if (prep.getView() == this->view - 1) {
@@ -6194,7 +6227,28 @@ void Handler::prepareOp(OPprepare prep) {
   if (DEBUG1) std::cout << KBLU << nfo() << "generated proposal:" << prop.prettyPrint() << KNRM << std::endl;
 
   if (prop.getView() != this->view) {
-    if (DEBUG1) std::cout << KBRED << nfo() << "bad proposal view (prepareOp):prop=" << prop.getView() << ",curr=" << this->view << KNRM << std::endl;
+    if (DEBUG1 || DEBUGD) std::cout << KBRED << nfo() << "bad proposal view (prepareOp):prop=" << prop.getView() << ",curr=" << this->view << KNRM << std::endl;
+
+    //TODO this works for now but a better solution is to include the latest prop in vc
+    
+    // Never broadcast a stale leader proposal. Still store locally to reset enclave
+    // phase and move enclave state forward so the node can recover on next view.
+    if (prop.getAuth().getHash().getSet()) {
+      OPstore localStore = callTEEstoreOP(prop);
+      if (localStore.getAuth().getHash().getSet()) {
+        this->log.storeStoreOp(localStore);
+      }
+    }
+
+    // Avoid retrying the same faulty prepare path for this view.
+    this->prepared[this->view] = true;
+
+    auto end = std::chrono::steady_clock::now();
+    double time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    stats.addTotalLPrepTime(time);
+    return;
+  } else {
+    if (DEBUGD) std::cout << KBGRN << nfo() << "good proposal view (prepareOp):prop=" << prop.getView() << ",curr=" << this->view << KNRM << std::endl;
   }
 
   if (prop.getAuth().getHash().getSet()) {
@@ -6940,13 +6994,19 @@ void Handler::executeOP(OPprepare cert) {
   if (DEBUG0 && DEBUGE) std::cout << KRED << nfo() << "OP-EXECUTE(" << this->view << "/" << this->maxViews << ":" << time << ")" << stats.toString() << KNRM << std::endl;
 #endif
 
+  if (DEBUGD || DEBUG1) std::cout << KGRN << nfo() << "VIEW " << this->view << " COMPLETED SUCCESSFULLY" << KNRM << std::endl;
+
   // Reply
   replyHash(cert.getHash());
 
   if (timeToStop()) {
     recordStats();
   } else {
-    startNewViewOP();
+    if ((this->view+1) % this->qsize == 0) {
+      wishToAdvanceEpoch(this->epoch+1);
+    } else {
+      wishToAdvanceView(this->view+1);
+    }
   }
 }
 
