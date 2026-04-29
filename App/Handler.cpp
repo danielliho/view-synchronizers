@@ -53,13 +53,15 @@ std::mt19937                        generator(rand_dev());
 std::uniform_int_distribution<int>  distr(0, 1);
 
 
-unsigned int Handler::getLeaderOf(View v) { return (v % this->total); }
+unsigned int Handler::getLeaderOf(View v) { return ((v / 2) % this->total); }
 
 unsigned int Handler::getCurrentLeader() { return getLeaderOf(this->view); }
 
 bool Handler::amLeaderOf(View v) { return (this->myid == getLeaderOf(v)); }
 
 bool Handler::amCurrentLeader() { return (this->myid == getCurrentLeader()); }
+
+bool Handler::isInitial(View v) { return v % 2 == 0; }
 
 std::string Handler::amCurrentLeaderStr() {
   if (amCurrentLeader()) { return "L"; }
@@ -68,8 +70,7 @@ std::string Handler::amCurrentLeaderStr() {
 
 std::string Handler::nfo() {
   return ("[" + std::to_string(this->myid) + amCurrentLeaderStr() + "]"
-          + "{e" +  std::to_string(this->epoch)
-          + ",v" +  std::to_string(this->view) + "}");
+          + "{v" +  std::to_string(this->view) + "}");
 }
 
 
@@ -970,19 +971,17 @@ int Handler::initializeSGX() {
 
 //View synchronization messages
 void Handler::wishToAdvanceView(View v) {
-  MsgWishToAdvanceView wish(v, this->epoch);
+  MsgWishToAdvanceView wish(v);
   sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
   if (amLeaderOf(v)) {
     handleWishToAdvanceView(wish, this->myid);
   }
 }
 
-void Handler::wishToAdvanceEpoch(Epoch e) {
-  MsgWishToAdvanceEpoch wish(e);
-  sendMsgWishToAdvanceEpoch(wish, getNextQsizeLeaders(e * this->qsize));
-  if (amNextQsizeLeader(e * this->qsize)) {
-    handleWishToAdvanceEpoch(wish, this->myid);
-  }
+void Handler::wishToAdvanceEpoch(View v) {
+  MsgWishToAdvanceEpoch wish(v);
+  sendMsgWishToAdvanceEpoch(wish, this->peers);
+  handleWishToAdvanceEpoch(wish, this->myid);
 }
 
 void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
@@ -997,16 +996,16 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
               << KNRM << std::endl;
   }
 
-  if (msg.view > this->view && msg.epoch == this->epoch && numWishes >= this->qsize) {
+  if (msg.view > this->view && numWishes >= this->qsize) {
     if (DEBUGD) std::cout << KBLU << nfo() << "SENDING VC AND ADVANCING VIEW: " << msg.view << " > " << this->view << KNRM << std::endl;
-    MsgViewCertificate vc(msg.view, msg.epoch);
+    bumpClock(msg.view);
+    MsgViewCertificate vc(msg.view);
     sendMsgViewCertificate(vc, this->peers);
-    startNewViewOP(vc.view);
   }
 }
 
 void Handler::handleViewCertificate(MsgViewCertificate msg, PID sender) {
-  if (msg.view <= this->view || msg.epoch != this->epoch) {
+  if (msg.view <= this->view) {
     if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING VIEW CERTIFICATE FOR VIEW " << msg.view
                           << ", NOT HIGHER (current view=" << this->view << ")"
                           << KNRM << std::endl;
@@ -1014,10 +1013,10 @@ void Handler::handleViewCertificate(MsgViewCertificate msg, PID sender) {
   }
   
   if (DEBUGD) std::cout << KBLU << nfo() << "RECEIVED VIEW CERTIFICATE FOR VIEW " << msg.view
-  << " (from=" << sender << ") AND ADVANCING"
+  << " (from=" << sender << ") AND BUMPING"
   << KNRM << std::endl;
   
-  startNewViewOP(msg.view);
+  bumpClock(msg.view);
 }
 
 void Handler::handleWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, PID sender) {
@@ -1032,23 +1031,20 @@ void Handler::handleWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, PID sender) {
               << KNRM << std::endl;
   }
 
-  if (msg.epoch > this->epoch && numWishes >= this->qsize) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "SENDING EC AND ADVANCING EPOCH: " << msg.epoch << " > " << this->epoch << KNRM << std::endl;
-    this->epoch = msg.epoch;
-    epochStartTime = std::chrono::steady_clock::now();
-    epochStartView = this->view;
-    this->timer.del();
-    this->timer.add(this->timeout);
+  if (msg.epoch > this->view && numWishes >= this->qsize) {
+    if (DEBUGD) std::cout << KBLU << nfo() << "SENDING EC AND ADVANCING EPOCH: " << msg.epoch << " > " << this->view << KNRM << std::endl;
+    startNewViewOP(msg.epoch);
+    resumeTimer();
+    bumpClock(msg.epoch);
     MsgEpochCertificate ec(msg.epoch);
     sendMsgEpochCertificate(ec, this->peers);
-    wishToAdvanceView(msg.epoch * this->qsize);
   }
 }
 
 void Handler::handleEpochCertificate(MsgEpochCertificate msg, PID sender) {
-  if (msg.epoch <= this->epoch) {
+  if (msg.epoch <= this->view) {
     if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING EPOCH CERTIFICATE FOR EPOCH " << msg.epoch
-                          << ", NOT HIGHER (current epoch=" << this->epoch << ")"
+                          << ", NOT HIGHER (current view=" << this->view << ")"
                           << KNRM << std::endl;
     return;
   }
@@ -1056,15 +1052,9 @@ void Handler::handleEpochCertificate(MsgEpochCertificate msg, PID sender) {
   if (DEBUGD) std::cout << KBLU << nfo() << "RECEIVED EPOCH CERTIFICATE FOR EPOCH " << msg.epoch
   << " (from=" << sender << ") AND ADVANCING"
   << KNRM << std::endl;
-
-  this->epoch = msg.epoch;
-  epochStartTime = std::chrono::steady_clock::now();
-  epochStartView = this->view;
-  this->timer.del();
-  this->timer.add(this->timeout);
-  MsgEpochCertificate ec(msg.epoch);
-  sendMsgEpochCertificate(ec, remove_from_peers(sender)); 
-  wishToAdvanceView(msg.epoch * this->qsize);
+  startNewViewOP(msg.epoch);
+  resumeTimer();
+  bumpClock(msg.epoch);
 }
 
 
@@ -1265,32 +1255,38 @@ Handler::Handler(KeysFun k,
 
   this->timer = salticidae::TimerEvent(pec, [this](salticidae::TimerEvent &) {
     Time now = std::chrono::steady_clock::now();
-    double elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - epochStartTime).count() / (1000.0 * 1000.0);
+    double elapsed = this->getElapsedSeconds(now);
+    bool pauseRequested = false;
 
     View expectedOffset = (View)(elapsed / this->timeout);
-    View nextView = epochStartView + expectedOffset + 1;
-    if (this->view + 1 < nextView) {
+    View nextView = epochStartView + expectedOffset;
+    if (this->view < nextView) {
       stats.incTimeouts();
-      if (nextView % this->qsize == 0) {
-        Epoch targetEpoch = nextView / this->qsize;
-        if (targetEpoch > this->lastTimeoutWishedEpoch) {
-          if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), WISHING TO ADVANCE EPOCH (" << targetEpoch << ")" << KNRM << std::endl;
-          wishToAdvanceEpoch(targetEpoch);
-          this->lastTimeoutWishedEpoch = targetEpoch;
+      if (nextView % (2 * this->qsize) == 0) {
+        if (nextView > this->lastTimeoutWishedView) {
+          if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), WISHING TO ADVANCE EPOCH (" << nextView << ")" << KNRM << std::endl;
+          pauseTimer();
+          pauseRequested = true;
+          wishToAdvanceEpoch(nextView);
+          this->lastTimeoutWishedView = nextView;
         }
       } else {
-        if (nextView > this->lastTimeoutWishedView) {
-          if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), WISHING TO ADVANCE VIEW (" << nextView << ")" << KNRM << std::endl;
+        if (nextView > this->lastTimeoutWishedView && isInitial(nextView)) {
+          if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), SENDING WISH AND ADVANCING VIEW (" << nextView << ")" << KNRM << std::endl;
+          startNewViewOP(nextView);
           wishToAdvanceView(nextView);
           this->lastTimeoutWishedView = nextView;
         }
       }
     }
 
-    double nextBoundary = (expectedOffset + 1) * this->timeout;
-    double remTime = nextBoundary - elapsed;
-    if (remTime <= 0.0) { remTime = 0.01; }
-    this->timer.add(remTime);
+    if (!pauseRequested && !this->timerPaused) {
+      double nextBoundary = (expectedOffset + 1) * this->timeout;
+      double remTime = nextBoundary - elapsed;
+      if (remTime <= 0.0) { remTime = 0.01; }
+      this->timerRemaining = remTime;
+      this->timer.add(remTime);
+    }
   });
 
   HOST host = "127.0.0.1";
@@ -3097,6 +3093,53 @@ MsgNewViewAcc Handler::createMsgNewViewAcc() {
   return msgNv;
 }
 
+double Handler::getElapsedSeconds(Time now) const {
+  auto elapsed = now - epochStartTime - this->timerPausedDuration;
+  double baseElapsed = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count() / (1000.0 * 1000.0);
+  return baseElapsed + this->timerForwardedSeconds;
+}
+
+double Handler::getRemainingSeconds(Time now) const {
+  double elapsed = getElapsedSeconds(now);
+  View expectedOffset = (View)(elapsed / this->timeout);
+  double nextBoundary = (expectedOffset + 1) * this->timeout;
+  double remTime = nextBoundary - elapsed;
+  if (remTime <= 0.0) { remTime = 0.01; }
+  return remTime;
+}
+
+void Handler::pauseTimer() {
+  if (this->timerPaused) { return; }
+  Time now = std::chrono::steady_clock::now();
+  this->timerRemaining = getRemainingSeconds(now);
+  this->timer.del();
+  this->timerPaused = true;
+  this->timerPauseStart = now;
+}
+
+void Handler::resumeTimer() {
+  if (!this->timerPaused) { return; }
+  Time now = std::chrono::steady_clock::now();
+  this->timerPausedDuration += now - this->timerPauseStart;
+  this->timerPaused = false;
+  this->timer.add(this->timerRemaining);
+}
+
+void Handler::bumpClock(View v) {
+  Time now = std::chrono::steady_clock::now();
+  double elapsed = getElapsedSeconds(now);
+  double targetElapsedSeconds = this->timeout * static_cast<double>(v + 1);
+  double remainingToMark = targetElapsedSeconds - elapsed;
+
+  if (remainingToMark > 0.0) {
+    this->timerForwardedSeconds += remainingToMark;
+  }
+
+  // Force immediate timeout processing after the bump.
+  this->timer.del();
+  this->timer.add(0.0);
+}
+
 
 // reset the timer, and record the current view
 void Handler::setTimer() {
@@ -3108,6 +3151,9 @@ void Handler::setTimer() {
   this->timer.add(this->timeout);
   this->timerView = this->view;
   timerTime = std::chrono::steady_clock::now();
+  this->timerPaused = false;
+  this->timerPausedDuration = std::chrono::steady_clock::duration::zero();
+  this->timerRemaining = this->timeout;
 }
 
 
@@ -3130,6 +3176,10 @@ void Handler::getStarted() {
   // We start the timer
   this->timer.del();
   this->timer.add(this->timeout);
+  this->timerPaused = false;
+  this->timerPausedDuration = std::chrono::steady_clock::duration::zero();
+  this->timerForwardedSeconds = 0.0;
+  this->timerRemaining = this->timeout;
 
 // CHEAP_AND_QUICK - DAMYSUS
 #if defined(BASIC_CHEAP_AND_QUICK)
@@ -3379,8 +3429,8 @@ void Handler::recordStats() {
   // onepcs
   unsigned int onepcs = stats.getNumOnePCs();
 
-  // view synchronization messages (wish-to-advance-view + time-certificate)
-  unsigned int viewSyncMsgs = viewSyncMsgsSent;
+  // view synchronization messages per view (wish-to-advance-view + time-certificate)
+  double viewSyncMsgsPerView = (totv.n > 0) ? ((viewSyncMsgsSent * 1.0) / totv.n) : 0.0;
 
   // Crypto
   double ctimeS  = stats.getCryptoSignTime();
@@ -3399,7 +3449,7 @@ void Handler::recordStats() {
              << " " << std::to_string(timeouts)
              << " " << std::to_string(onepbs)
              << " " << std::to_string(onepcs)
-             << " " << std::to_string(viewSyncMsgs)
+             << " " << std::to_string(viewSyncMsgsPerView)
              << " " << std::to_string(stats.getCryptoSignNum())
              << " " << std::to_string(cryptoS)
              << " " << std::to_string(stats.getCryptoVerifNum())
@@ -6391,6 +6441,14 @@ void Handler::prepareOpVote(OPvote vote) {
 // Run by the leader - called by handleNewviewOP on a MsgNewViewOPA
 void Handler::handleNewviewOP(OPprepare prep) {
   View v = prep.getView();
+  // Initial bootstrap must be handled before the generic v+1 path because
+  // repeated-leader schedules can make amLeaderOf(v+1) true at view 0.
+  if (v == 0 && this->view == 0 && amLeaderOf(0) && this->blocks.find(this->view) == this->blocks.end()) {
+    // special case of the initial view
+    if (DEBUG1) std::cout << KBLU << nfo() << "preparing for initial view " << KNRM << std::endl;
+    prepareOp(prep);
+    return;
+  }
   // The leader of view v+1 collects messages from view v (or we're handling the initial view)
   if (v+1 >= this->view && amLeaderOf(v+1)) {
     if (v+1 == this->view
@@ -6415,10 +6473,6 @@ void Handler::handleNewviewOP(OPprepare prep) {
       }
     }
     if (DEBUG1) std::cout << KBLU << nfo() << "handled new-view" << KNRM << std::endl;
-  } else if (v == 0 && this->view == 0 && amLeaderOf(0) && this->blocks.find(this->view) == this->blocks.end()) {
-    // special case of the initial view
-    if (DEBUG1) std::cout << KBLU << nfo() << "preparing for initial view " << KNRM << std::endl;
-    prepareOp(prep);
   } else {
     if (DEBUG1) std::cout << KMAG << nfo() << "discarded:" <<  this->view << "-" << prep.prettyPrint() << KNRM << std::endl;
   }
@@ -6602,6 +6656,18 @@ void Handler::handleNewviewOP(MsgNewViewOPB msg) {
   //std::array<Transaction,0> trans; // this works but not the above
 
   View v = msg.nv.cert.store.getView();
+  // Initial bootstrap must be handled before the generic v+1 path because
+  // repeated-leader schedules can make amLeaderOf(v+1) true at view 0.
+  if (v == 0 && this->view == 0 && amLeaderOf(0) && this->blocks.find(this->view) == this->blocks.end()) {
+    if (DEBUG0) std::cout << KBLU << nfo() << "preparing for initial view " << KNRM << std::endl;
+    prepareOp(this->opprep);
+
+    auto end = std::chrono::steady_clock::now();
+    double time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    stats.addTotalHandleTime(time);
+    stats.addTotalNvTime(time);
+    return;
+  }
   // The leader of view v+1 collects messages from view v (or we're handling the initial view)
   if (v+1 >= this->view && amLeaderOf(v+1)) {
 
@@ -6642,10 +6708,6 @@ void Handler::handleNewviewOP(MsgNewViewOPB msg) {
     if (DEBUG1) std::cout << KBLU << nfo() << "handled new-view" << KNRM << std::endl;
 */
 
-  } else if (v == 0 && this->view == 0 && amLeaderOf(0) && this->blocks.find(this->view) == this->blocks.end()) {
-    // special case of the initial view
-    if (DEBUG0) std::cout << KBLU << nfo() << "preparing for initial view " << KNRM << std::endl;
-    prepareOp(this->opprep);
   } else {
     if (DEBUG1) std::cout << KMAG << nfo() << "discarded:received=" << v << ":current=" << this->view << "-" << msg.prettyPrint() << KNRM << std::endl;
   }
@@ -7002,10 +7064,9 @@ void Handler::executeOP(OPprepare cert) {
   if (timeToStop()) {
     recordStats();
   } else {
-    if ((this->view+1) % this->qsize == 0) {
-      wishToAdvanceEpoch(this->epoch+1);
-    } else {
-      wishToAdvanceView(this->view+1);
+    bumpClock(cert.getView());
+    if (isInitial(cert.getView())) {
+      startNewViewOP(cert.getView() + 1);
     }
   }
 }

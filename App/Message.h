@@ -1457,42 +1457,40 @@ struct MsgWishToAdvanceView {
   static const uint8_t opcode = HDR_WISH_TO_ADVANCE_VIEW;
   salticidae::DataStream serialized;
   View view;
-  Epoch epoch;
-  MsgWishToAdvanceView() : view(0), epoch(0) { serialized << view << epoch; }
-  MsgWishToAdvanceView(const View &view, const Epoch &epoch) : view(view), epoch(epoch) { serialized << view << epoch; }
-  MsgWishToAdvanceView(salticidae::DataStream &&s) { s >> view >> epoch; }
+  MsgWishToAdvanceView() : view(0) { serialized << view; }
+  MsgWishToAdvanceView(const View &view) : view(view) { serialized << view; }
+  MsgWishToAdvanceView(salticidae::DataStream &&s) { s >> view; }
   bool operator<(const MsgWishToAdvanceView& s) const {
-    return (view < s.view || (view == s.view && epoch < s.epoch));
+    return (view < s.view);
   }
   std::string prettyPrint() {
-    return "WISH-TO-ADVANCE-VIEW[" + std::to_string(view) + "," + std::to_string(epoch) + "]";
+    return "WISH-TO-ADVANCE-VIEW[" + std::to_string(view) + "]";
   }
-  unsigned int sizeMsg() { return sizeof(View) + sizeof(Epoch); }
+  unsigned int sizeMsg() { return sizeof(View); }
 };
 
 struct MsgViewCertificate {
   static const uint8_t opcode = HDR_VIEW_CERTIFICATE;
   salticidae::DataStream serialized;
   View view;
-  Epoch epoch;
-  MsgViewCertificate() : view(0), epoch(0) { serialized << view << epoch; }
-  MsgViewCertificate(const View &view, const Epoch &epoch) : view(view), epoch(epoch) { serialized << view << epoch; }
-  MsgViewCertificate(salticidae::DataStream &&s) { s >> view >> epoch; }
+  MsgViewCertificate() : view(0) { serialized << view; }
+  MsgViewCertificate(const View &view) : view(view) { serialized << view; }
+  MsgViewCertificate(salticidae::DataStream &&s) { s >> view; }
   bool operator<(const MsgViewCertificate& s) const {
-    return (view < s.view || (view == s.view && epoch < s.epoch));
+    return (view < s.view);
   }
   std::string prettyPrint() {
-    return "VIEW-CERTIFICATE[" + std::to_string(view) + "," + std::to_string(epoch) + "]";
+    return "VIEW-CERTIFICATE[" + std::to_string(view) + "]";
   }
-  unsigned int sizeMsg() { return sizeof(View) + sizeof(Epoch); }
+  unsigned int sizeMsg() { return sizeof(View); }
 };
 
 struct MsgWishToAdvanceEpoch {
   static const uint8_t opcode = HDR_WISH_TO_ADVANCE_EPOCH;
   salticidae::DataStream serialized;
-  Epoch epoch;
+  View epoch;
   MsgWishToAdvanceEpoch() : epoch(0) { serialized << epoch; }
-  MsgWishToAdvanceEpoch(const Epoch &epoch) : epoch(epoch) { serialized << epoch; }
+  MsgWishToAdvanceEpoch(const View &epoch) : epoch(epoch) { serialized << epoch; }
   MsgWishToAdvanceEpoch(salticidae::DataStream &&s) { s >> epoch; }
   bool operator<(const MsgWishToAdvanceEpoch& s) const {
     return (epoch < s.epoch);
@@ -1500,15 +1498,15 @@ struct MsgWishToAdvanceEpoch {
   std::string prettyPrint() {
     return "WISH-TO-ADVANCE-EPOCH[" + std::to_string(epoch) + "]";
   }
-  unsigned int sizeMsg() { return sizeof(Epoch); }
+  unsigned int sizeMsg() { return sizeof(View); }
 };
 
 struct MsgEpochCertificate {
   static const uint8_t opcode = HDR_EPOCH_CERTIFICATE;
   salticidae::DataStream serialized;
-  Epoch epoch;
+  View epoch;
   MsgEpochCertificate() : epoch(0) { serialized << epoch; }
-  MsgEpochCertificate(const Epoch &epoch) : epoch(epoch) { serialized << epoch; }
+  MsgEpochCertificate(const View &epoch) : epoch(epoch) { serialized << epoch; }
   MsgEpochCertificate(salticidae::DataStream &&s) { s >> epoch; }
   bool operator<(const MsgEpochCertificate& s) const {
     return (epoch < s.epoch);
@@ -1516,7 +1514,7 @@ struct MsgEpochCertificate {
   std::string prettyPrint() {
     return "EPOCH-CERTIFICATE[" + std::to_string(epoch) + "]";
   }
-  unsigned int sizeMsg() { return sizeof(Epoch); }
+  unsigned int sizeMsg() { return sizeof(View); }
 };
 
 #endif

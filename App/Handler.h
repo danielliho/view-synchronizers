@@ -87,7 +87,6 @@ class Handler {
   Nodes nodes;                   // collection of the other nodes
   KEY priv;                      // private key
   View view = 0;                 // current view - initially 0
-  Epoch epoch = 0;
   unsigned int maxViews = 0;     // 0 means no constraints
   KeysFun kf;                    // To access crypto functions
 
@@ -109,7 +108,11 @@ class Handler {
   salticidae::TimerEvent timer;
   View timerView; // view at which the timer was started
   View lastTimeoutWishedView = 0;
-  Epoch lastTimeoutWishedEpoch = 0;
+  bool timerPaused = false;
+  Time timerPauseStart = std::chrono::steady_clock::now();
+  std::chrono::steady_clock::duration timerPausedDuration = std::chrono::steady_clock::duration::zero();
+  double timerForwardedSeconds = 0.0;
+  double timerRemaining = 0.0;
 
   std::list<Transaction> transactions; // current waiting to be processed
   std::map<View,Block> blocks; // blocks received in each view
@@ -203,6 +206,12 @@ class Handler {
 
   void printNowTime(std::string col, std::string msg);
 
+  double getElapsedSeconds(Time now) const;
+  double getRemainingSeconds(Time now) const;
+  void pauseTimer();
+  void resumeTimer();
+  void bumpClock(View v);
+
   // returns the total number of nodes
   unsigned int getTotal();
 
@@ -218,6 +227,7 @@ class Handler {
   // ture iff 'myid' is the leader of the current view
   bool amCurrentLeader();
   std::string amCurrentLeaderStr();
+  bool isInitial(View v);
   // used to print debugging info
   std::string nfo();
 

@@ -1995,7 +1995,7 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
                 valVS = float(viewSyncMsgs)
                 viewSyncMsgsNum += 1
                 viewSyncMsgsVal += valVS
-                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"view-sync-msgs",valVS)
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"view-sync-msgs-per-view",valVS)
 
                 valST = float(signTime)
                 cryptoSignNum += 1
@@ -2031,7 +2031,7 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
     print("latency-view:",     latencyView,    "out of", latencyViewNum)
     print("handle:",           handle,         "out of", handleNum)
     print("timeouts:",         timeouts,       "out of", tosNum)
-    print("view-sync-msgs:",   viewSyncMsgs,   "out of", viewSyncMsgsNum)
+    print("view-sync-msgs-per-view:", viewSyncMsgs, "out of", viewSyncMsgsNum)
     print("crypto-sign:",      cryptoSign,     "out of", cryptoSignNum)
     print("crypto-verif:",     cryptoVerif,    "out of", cryptoVerifNum)
     print("crypto-num-sign:",  cryptoNumSign,  "out of", cryptoNumSignNum)
@@ -2212,7 +2212,7 @@ def computeAvgStats(recompile,
     print("avg throughput (view):",  throughputView)
     print("avg latency (view):",     latencyView)
     print("avg handle:",             handle)
-    print("avg view-sync-msgs:",     viewSyncMsgs)
+    print("avg view-sync-msgs-per-view:", viewSyncMsgs)
     print("avg crypto (sign):",      cryptoSign)
     print("avg crypto (verif):",     cryptoVerif)
     print("avg crypto (sign-num):",  cryptoNumSign)
