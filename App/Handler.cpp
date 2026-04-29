@@ -1073,7 +1073,8 @@ void Handler::startNewViewOnTimeout() {
 
 //View synchronization messages
 void Handler::wishToAdvanceView(View v) {
-  MsgWishToAdvanceView wish(v);
+  Sign sign = Ssign(this->priv, this->myid, "WISH" + std::to_string(v));
+  MsgWishToAdvanceView wish(v, sign);
   // sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
   // if (amLeaderOf(v)) {
   //   handleWishToAdvanceView(wish, this->myid);
@@ -1087,8 +1088,26 @@ void Handler::wishToAdvanceView(View v) {
 }
 
 void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
-  this->wishesToAdvanceView[msg.view].insert(sender);
-  unsigned int numWishes = this->wishesToAdvanceView[msg.view].size();
+  if (this->wishesToAdvanceView[msg.view].hasSigned(sender)) {
+    return;
+  }
+
+  NodeInfo *senderInfo = this->nodes.find(sender);
+  if (!senderInfo) return;
+
+  auto start = std::chrono::steady_clock::now();
+  bool b = msg.sign.verify(senderInfo->getPub(), "WISH" + std::to_string(msg.view));
+  auto end = std::chrono::steady_clock::now();
+  double time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+  stats.addCryptoVerifTime(time);
+
+  if (!b) {
+    if (DEBUGD) std::cout << KRED << nfo() << "INVALID WISH SIGNATURE FROM " << sender << KNRM << std::endl;
+    return;
+  }
+
+  this->wishesToAdvanceView[msg.view].add(msg.sign);
+  unsigned int numWishes = this->wishesToAdvanceView[msg.view].getSize();
 
   if (DEBUGD) {
     std::cout << KBLU << nfo()
@@ -1100,7 +1119,7 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
 
   if (msg.view > this->view && numWishes >= this->qsize) {
     if (DEBUGD) std::cout << KBLU << nfo() << "STORING AND SENDING TC AND ADVANCING VIEW: " << msg.view << " > " << this->view << KNRM << std::endl;
-    MsgTimeCertificate tc(msg.view);
+    MsgTimeCertificate tc(msg.view, this->wishesToAdvanceView[msg.view]);
     sendMsgTimeCertificate(tc, this->peers);
     startNewViewOP(tc.view);
   }
@@ -1113,12 +1132,17 @@ void Handler::handleTimeCertificate(MsgTimeCertificate msg, PID sender) {
                           << KNRM << std::endl;
     return;
   }
+
+  if (msg.signs.getSize() < this->qsize || !Sverify(msg.signs, this->myid, this->nodes, "WISH" + std::to_string(msg.view))) {
+     if (DEBUGD) std::cout << KRED << nfo() << "INVALID TIME CERTIFICATE FOR VIEW " << msg.view << KNRM << std::endl;
+     return;
+  }
   
   if (DEBUGD) std::cout << KBLU << nfo() << "STORING RECEIVED TIME CERTIFICATE FOR VIEW " << msg.view
   << " (from=" << sender << ") AND ADVANCING"
   << KNRM << std::endl;
   
-  MsgTimeCertificate tc(msg.view);
+  MsgTimeCertificate tc(msg.view, msg.signs);
   sendMsgTimeCertificate(tc, remove_from_peers(sender));
   startNewViewOP(msg.view);
 }
@@ -3362,8 +3386,8 @@ void Handler::recordStats() {
   // onepcs
   unsigned int onepcs = stats.getNumOnePCs();
 
-  // view synchronization messages (wish-to-advance-view + time-certificate)
-  unsigned int viewSyncMsgs = viewSyncMsgsSent;
+    double viewSyncMsgs = (totv.n > 0) ? ((viewSyncMsgsSent * 1.0) / totv.n) : 0.0;
+
 
   // Crypto
   double ctimeS  = stats.getCryptoSignTime();
@@ -6930,6 +6954,8 @@ void Handler::executeOP(OPprepare cert) {
 #else
   if (DEBUG0 && DEBUGE) std::cout << KRED << nfo() << "OP-EXECUTE(" << this->view << "/" << this->maxViews << ":" << time << ")" << stats.toString() << KNRM << std::endl;
 #endif
+
+  if (DEBUGD || DEBUG1) std::cout << KGRN << nfo() << "VIEW " << this->view << " COMPLETED SUCCESSFULLY" << KNRM << std::endl;
 
   // Reply
   replyHash(cert.getHash());

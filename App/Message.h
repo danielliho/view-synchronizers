@@ -1457,32 +1457,36 @@ struct MsgWishToAdvanceView {
   static const uint8_t opcode = HDR_WISH_TO_ADVANCE_VIEW;
   salticidae::DataStream serialized;
   View view;
-  MsgWishToAdvanceView() : view(0) { serialized << view; }
-  MsgWishToAdvanceView(const View &view) : view(view) { serialized << view; }
-  MsgWishToAdvanceView(salticidae::DataStream &&s) { s >> view; }
+  Sign sign;
+  MsgWishToAdvanceView() : view(0) { serialized << view << sign; }
+  MsgWishToAdvanceView(const View &view, const Sign &sign) : view(view), sign(sign) { serialized << view << sign; }
+  MsgWishToAdvanceView(salticidae::DataStream &&s) { s >> view >> sign; }
   bool operator<(const MsgWishToAdvanceView& s) const {
+    if (view == s.view) return sign < s.sign;
     return (view < s.view);
   }
   std::string prettyPrint() {
-    return "WISH-TO-ADVANCE-VIEW[" + std::to_string(view) + "]";
+    return "WISH-TO-ADVANCE-VIEW[" + std::to_string(view) + "," + sign.prettyPrint() + "]";
   }
-  unsigned int sizeMsg() { return sizeof(View); }
+  unsigned int sizeMsg() { return sizeof(View) + sizeof(Sign); }
 };
 
 struct MsgTimeCertificate {
   static const uint8_t opcode = HDR_TIME_CERTIFICATE;
   salticidae::DataStream serialized;
   View view;
-  MsgTimeCertificate() : view(0) { serialized << view; }
-  MsgTimeCertificate(const View &view) : view(view) { serialized << view; }
-  MsgTimeCertificate(salticidae::DataStream &&s) { s >> view; }
+  Signs signs;
+  MsgTimeCertificate() : view(0) { serialized << view << signs; }
+  MsgTimeCertificate(const View &view, const Signs &signs) : view(view), signs(signs) { serialized << view << signs; }
+  MsgTimeCertificate(salticidae::DataStream &&s) { s >> view >> signs; }
   bool operator<(const MsgTimeCertificate& s) const {
+    if (view == s.view) return signs < s.signs;
     return (view < s.view);
   }
   std::string prettyPrint() {
-    return "TIME-CERTIFICATE[" + std::to_string(view) + "]";
+    return "TIME-CERTIFICATE[" + std::to_string(view) + "," + signs.prettyPrint() + "]";
   }
-  unsigned int sizeMsg() { return sizeof(View); }
+  unsigned int sizeMsg() { return sizeof(View) + sizeof(Signs); }
 };
 
 #endif

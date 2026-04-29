@@ -129,7 +129,7 @@ class Handler {
   std::map<PID,View> latestRoteCounters; // latest counters/views receveid in MsgCounterRote messages
 
   // Tracks which replicas requested a jump to a given view.
-  std::map<View,std::set<PID>> wishesToAdvanceView;
+  std::map<View,Signs> wishesToAdvanceView;
 
   std::set<Hash> acceptedNoncesAchilles; // set of nonces that led to a successful restart
 
