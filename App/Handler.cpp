@@ -1011,7 +1011,7 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
   }
 
   if (msg.view > this->view && numWishes >= this->qsize) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "SENDING VC AND ADVANCING VIEW: " << msg.view << " > " << this->view << KNRM << std::endl;
+    if (DEBUGD) std::cout << KBLU << nfo() << "SENDING VC AND BUMPING: " << msg.view << " > " << this->view << KNRM << std::endl;
     bumpClock(msg.view);
     MsgViewCertificate vc(msg.view, this->wishesToAdvanceView[msg.view]);
     sendMsgViewCertificate(vc, this->peers);
@@ -1300,7 +1300,7 @@ Handler::Handler(KeysFun k,
       stats.incTimeouts();
       if (nextView % (2 * this->qsize) == 0) {
         if (nextView > this->lastTimeoutWishedView) {
-          if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), WISHING TO ADVANCE EPOCH (" << nextView << ")" << KNRM << std::endl;
+          if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), WISHING TO ADVANCE EPOCH (" << nextView << ") " << std::chrono::duration_cast<std::chrono::milliseconds>(now - epochStartTime).count() << " ms" << KNRM << std::endl;
           pauseTimer();
           pauseRequested = true;
           wishToAdvanceEpoch(nextView);
@@ -1308,7 +1308,7 @@ Handler::Handler(KeysFun k,
         }
       } else {
         if (nextView > this->lastTimeoutWishedView && isInitial(nextView)) {
-          if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), SENDING WISH AND ADVANCING VIEW (" << nextView << ")" << KNRM << std::endl;
+          if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), SENDING WISH AND ADVANCING VIEW (" << nextView << ") " << std::chrono::duration_cast<std::chrono::milliseconds>(now - epochStartTime).count() << " ms" << KNRM << std::endl;
           startNewViewOP(nextView);
           wishToAdvanceView(nextView);
           this->lastTimeoutWishedView = nextView;
@@ -3164,13 +3164,13 @@ void Handler::resumeTimer() {
 void Handler::bumpClock(View v) {
   Time now = std::chrono::steady_clock::now();
   double elapsed = getElapsedSeconds(now);
-  double targetElapsedSeconds = this->timeout * static_cast<double>(v + 1);
+  double targetElapsedSeconds = this->timeout * v;
   double remainingToMark = targetElapsedSeconds - elapsed;
 
   if (remainingToMark > 0.0) {
     this->timerForwardedSeconds += remainingToMark;
   }
-
+  if (DEBUGD) std::cout << KYEL << nfo() << "BUMPING TO: " << getElapsedSeconds(now) << ", TIME SINCE START: " << std::chrono::duration_cast<std::chrono::milliseconds>(now - epochStartTime).count() << " ms" << KNRM << std::endl;
   // Force immediate timeout processing after the bump.
   this->timer.del();
   this->timer.add(0.0);
@@ -7100,7 +7100,7 @@ void Handler::executeOP(OPprepare cert) {
   if (timeToStop()) {
     recordStats();
   } else {
-    bumpClock(cert.getView());
+    bumpClock(cert.getView() + 1);
     if (isInitial(cert.getView())) {
       startNewViewOP(cert.getView() + 1);
     }
