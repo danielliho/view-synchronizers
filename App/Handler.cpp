@@ -987,6 +987,7 @@ void Handler::wishToAdvanceEpoch(View v) {
 }
 
 void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
+  if (msg.view <= this->view) return;
   if (this->wishesToAdvanceView[msg.view].hasSigned(sender)) return;
   NodeInfo *senderInfo = this->nodes.find(sender);
   if (!senderInfo) return;
@@ -1038,6 +1039,7 @@ void Handler::handleViewCertificate(MsgViewCertificate msg, PID sender) {
 }
 
 void Handler::handleWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, PID sender) {
+  if (msg.epoch <= this->view) return;
   if (this->wishesToAdvanceEpoch[msg.epoch].hasSigned(sender)) return;
   NodeInfo *senderInfo = this->nodes.find(sender);
   if (!senderInfo) return;
