@@ -1088,6 +1088,8 @@ void Handler::wishToAdvanceView(View v) {
 }
 
 void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
+  if (msg.view <= this->view) return;
+
   if (this->wishesToAdvanceView[msg.view].hasSigned(sender)) {
     return;
   }
