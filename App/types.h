@@ -3,6 +3,14 @@
 
 
 #include <stdint.h>
+#include <openssl/sha.h>
+#ifdef __cplusplus
+#include <array>
+typedef std::array<unsigned char,SHA256_DIGEST_LENGTH> hasharray;
+#else
+typedef unsigned char hasharray[SHA256_DIGEST_LENGTH];
+#endif
+#include <openssl/sha.h>
 
 
 enum unit { tt };
@@ -112,7 +120,6 @@ typedef unsigned int Session;
 typedef unsigned int View;
 typedef unsigned int Value;
 
-//typedef std::array<unsigned char,SHA256_DIGEST_LENGTH> hasharray;
 
 typedef uint8_t OPphase;
 

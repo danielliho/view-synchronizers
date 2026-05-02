@@ -6965,7 +6965,7 @@ void Handler::executeOP(OPprepare cert) {
   if (timeToStop()) {
     recordStats();
   } else {
-    startNewViewOP();
+    wishToAdvanceView(this->view+1);
   }
 }
 
