@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=damysus-das5
+#SBATCH --job-name=oneshot-das5
 #SBATCH --output=slurm-%j.out
 #SBATCH --error=slurm-%j.err
 #SBATCH --time=00:15:00

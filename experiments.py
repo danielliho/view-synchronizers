@@ -1759,6 +1759,47 @@ def mkParams(protocol,constFactor,numFaults,numTrans,payloadSize):
 # End of mkParams
 
 
+def readParams():
+    values = {}
+    if not os.path.exists(params):
+        return values
+
+    with open(params, 'r') as f:
+        for line in f:
+            srch = re.match(r"#define\s+(\S+)(?:\s+(.+))?", line.strip())
+            if srch:
+                key = srch.group(1)
+                val = srch.group(2)
+                values[key] = "" if val is None else val.strip()
+    return values
+# End of readParams
+
+
+def checkParams(protocol,constFactor,numFaults,numTrans,payloadSize):
+    values = readParams()
+    expectedNodes = str((constFactor*numFaults)+1)
+    expectedSigs  = str((constFactor*numFaults)+1-numFaults)
+    expectedTrans = str(numTrans)
+    expectedPay   = str(payloadSize)
+
+    problems = []
+    if protocol.value not in values:
+        problems.append("missing protocol define " + protocol.value)
+    if values.get("MAX_NUM_NODES") != expectedNodes:
+        problems.append("MAX_NUM_NODES is " + values.get("MAX_NUM_NODES", "missing") + ", expected " + expectedNodes)
+    if values.get("MAX_NUM_SIGNATURES") != expectedSigs:
+        problems.append("MAX_NUM_SIGNATURES is " + values.get("MAX_NUM_SIGNATURES", "missing") + ", expected " + expectedSigs)
+    if values.get("MAX_NUM_TRANSACTIONS") != expectedTrans:
+        problems.append("MAX_NUM_TRANSACTIONS is " + values.get("MAX_NUM_TRANSACTIONS", "missing") + ", expected " + expectedTrans)
+    if values.get("PAYLOAD_SIZE") != expectedPay:
+        problems.append("PAYLOAD_SIZE is " + values.get("PAYLOAD_SIZE", "missing") + ", expected " + expectedPay)
+
+    if len(problems) > 0:
+        raise RuntimeError("App/params.h does not match this --nocompil run: " + "; ".join(problems)
+                           + ". Rebuild on fs0/login for this protocol/fault/payload first.")
+# End of checkParams
+
+
 def mkApp(protocol,constFactor,numFaults,numTrans,payloadSize):
     ncores = 1
     if useMultiCores:
@@ -2292,6 +2333,8 @@ def computeAvgStats(recompile,
     # building App with correct parameters
     if recompile:
         mkApp(protocol,constFactor,numFaults,numTrans,payloadSize)
+    else:
+        checkParams(protocol,constFactor,numFaults,numTrans,payloadSize)
 
     goodValues = 0
 
@@ -8227,4 +8270,3 @@ else:
 ## Debug
 #createTVLplot("stats/clients-10-Apr-2021-00:44:17.638744")
 #createTVLplot("stats/clients-15-Apr-2021-02:40:47.929625")
-
