@@ -45,8 +45,8 @@ Salticidae_Lib_Paths = -L$(SALTICIDAE)/lib
 # for rpath
 #export LD_RUN_PATH     := ${LD_RUN_PATH}:$(LOCAL)/lib
 
-CFLAGS = `pkg-config --cflags libcrypto openssl libuv` # gio-2.0 openssl
-LDLIBS = `pkg-config --libs   libcrypto openssl libuv` #-lgmp # gio-2.0 openssl
+CFLAGS = $(shell pkg-config --cflags libcrypto openssl libuv 2>/dev/null) $(EXTRA_CFLAGS) # gio-2.0 openssl
+LDLIBS = $(shell pkg-config --libs   libcrypto openssl libuv 2>/dev/null) $(EXTRA_LDLIBS) -lcrypto -lssl -luv -lpthread #-lgmp # gio-2.0 openssl
 
 
 ######## SGX SDK Settings ########
@@ -90,9 +90,10 @@ endif
 
 ######## SGX-SSL ########
 
-SGXSSL_UNTRUSTED_LIB_PATH := /opt/intel/sgxssl/lib64/
-SGXSSL_TRUSTED_LIB_PATH := /opt/intel/sgxssl/lib64/
-SGXSSL_INCLUDE_PATH := /opt/intel/sgxssl/include/
+SGXSSL_ROOT ?= /opt/intel/sgxssl
+SGXSSL_UNTRUSTED_LIB_PATH ?= $(SGXSSL_ROOT)/lib64/
+SGXSSL_TRUSTED_LIB_PATH ?= $(SGXSSL_ROOT)/lib64/
+SGXSSL_INCLUDE_PATH ?= $(SGXSSL_ROOT)/include/
 
 ######## App Settings ########
 
@@ -285,4 +286,4 @@ $(Signed_Enclave_Name): $(Enclave_Name)
 .PHONY: clean
 
 clean:
-	@rm -f $(App_Name) sgxclient sgxkeys $(Enclave_Name) $(Signed_Enclave_Name) $(App_Cpp_Objects) App/Keys.o App/Client.o App/Server.o App/Enclave_u.* $(Enclave_Cpp_Objects) Enclave/Enclave_t.*
+	@rm -f $(App_Name) sgxclient sgxkeys $(Enclave_Name) $(Signed_Enclave_Name) $(App_Cpp_Objects) App/Keys.o App/Client.o App/Server.o App/Enclave_u.o $(Enclave_Cpp_Objects) Enclave/Enclave_t.*
