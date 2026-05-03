@@ -15,6 +15,14 @@ stats/
 stats.json
 config
 App/params.h
+*.o
+*.so
+sgxclient
+sgxserver
+sgxkeys
+slurm-*.out*
+slurm-*.err*
+
 
 # OS
 .DS_Store
@@ -30,3 +38,4 @@ venv/
 App/params.h
 log.ansi
 log1.ansi
+log2.ansi

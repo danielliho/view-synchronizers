@@ -18,6 +18,7 @@ import shutil
 from shutil import copyfile
 import re
 import mmap
+import shlex
 
 
 #############
@@ -42,7 +43,7 @@ import mmap
 ## Parameters
 sgxmode        = "SIM"
 #sgxmode       = "HW"
-srcsgx         = "source /opt/intel/sgxsdk/environment" # this is where the sdk is supposed to be installed
+srcsgx         = "source \"${SGX_SDK:-$HOME/opt/intel/sgxsdk}/environment\"" # use SGX_SDK when set, otherwise fall back to the home installation
 faults         = [1] #[1,2,4,10] #[1,2,4,10,20,30,40] #[1,2,4,6,8,10,12,14,20,30] # list of numbers of faults
 #faults        = [1,10,20,30,40,50]
 #faults        = [40]
@@ -402,6 +403,12 @@ clusterFile = "nodes"
 clusterNet  = "damysusNet" # "bridge"
 mybridge    = "damysusNet" # "bridge"
 
+## DAS-5/SLURM parameters
+
+runDas5        = False
+das5Nodes      = []          # hostnames allocated by SLURM
+das5AddressCmd = "hostname -f"
+
 
 ## Code
 
@@ -446,6 +453,94 @@ def genLocalConf(n,filename):
         f.write("id:"+str(i)+" host:"+host+" port:"+str(rport)+" port:"+str(cport)+"\n")
     f.close()
 # End of genLocalConf
+
+
+def slurmAvailable():
+    return "SLURM_JOB_ID" in os.environ
+# End of slurmAvailable
+
+
+def shellJoin(args):
+    return " ".join(map(shlex.quote,args))
+# End of shellJoin
+
+
+def readDas5Nodes():
+    if len(das5Nodes) > 0:
+        return das5Nodes
+
+    nodelist = os.environ.get("SLURM_NODELIST") or os.environ.get("SLURM_JOB_NODELIST")
+    if not nodelist:
+        raise RuntimeError("--das5 must run inside a SLURM allocation; SLURM_NODELIST is not set")
+
+    try:
+        result = subprocess.run(["scontrol", "show", "hostnames", nodelist],
+                                check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                universal_newlines=True)
+        nodes = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        nodes = [line.strip() for line in nodelist.splitlines() if line.strip()]
+
+    if len(nodes) == 0:
+        raise RuntimeError("could not determine DAS-5 nodes from SLURM_NODELIST=" + nodelist)
+
+    das5Nodes.extend(nodes)
+    print("DAS-5 nodes:", das5Nodes)
+    return das5Nodes
+# End of readDas5Nodes
+
+
+def runOnDas5Node(host, cmd, capture=False):
+    srun = ["srun", "--overlap", "-N", "1", "-n", "1", "-w", host, "--chdir", os.getcwd(),
+            "bash", "-lc", cmd]
+    print("the commandline is {}".format(shellJoin(srun)))
+    if capture:
+        return subprocess.run(srun, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              universal_newlines=True)
+    return Popen(srun)
+# End of runOnDas5Node
+
+
+def getDas5Address(host):
+    try:
+        result = runOnDas5Node(host, das5AddressCmd, capture=True)
+        address = result.stdout.strip().splitlines()[-1].strip()
+    except (subprocess.CalledProcessError, IndexError):
+        address = ""
+
+    if not address:
+        address = host
+
+    return address
+# End of getDas5Address
+
+
+def startDas5Processes(numReps,numClients):
+    print("running in DAS-5 mode, using SLURM nodes for", numReps, "replicas and", numClients, "clients")
+
+    nodes = readDas5Nodes()
+    needed = numReps + numClients
+    if len(nodes) < needed:
+        print("WARNING: DAS-5 allocation has", len(nodes), "node(s), but this run wants", needed,
+              "processes; some nodes will host more than one process")
+
+    global ipsOfNodes
+    ipsOfNodes = {}
+    for i in range(numReps):
+        host = nodes[i % len(nodes)]
+        ipsOfNodes.update({i:getDas5Address(host)})
+
+    genLocalConf(numReps,addresses)
+
+    instanceRepIds = []
+    instanceClIds  = []
+    for i in range(numReps):
+        instanceRepIds.append((i, nodes[i % len(nodes)]))
+    for i in range(numClients):
+        instanceClIds.append((i, nodes[(numReps + i) % len(nodes)]))
+
+    return (instanceRepIds, instanceClIds)
+# End of startDas5Processes
 
 
 def findPublicDnsName(j):
@@ -701,7 +796,7 @@ def executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTran
         for (tag,n,i,priv,pub,dns,region,p) in rem:
             cmdF = "find app/" + statsdir + " -name start-" + str(n) + "* | wc -l"
             addr = "ubuntu@" + dns
-            outF = int(subprocess.run("ssh -i " + pem + " -o " + sshOpt1 + " -o " + sshOpt3 + " -o " + sshOpt4 + " -o " + sshOpt5 + " -ntt " + addr + " " + cmdF, shell=True, capture_output=True, text=True).stdout)
+            outF = int(subprocess.run("ssh -i " + pem + " -o " + sshOpt1 + " -o " + sshOpt3 + " -o " + sshOpt4 + " -o " + sshOpt5 + " -ntt " + addr + " " + cmdF, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout)
             #print("attempting to retrieve 'start' file for" , str(n), ":", outF)
             if 0 < int(outF):
                 print("********** process started:" , str(n), "**********")
@@ -748,7 +843,7 @@ def executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTran
             for (tag,n,i,priv,pub,dns,region,p) in rem:
                 cmdF = "find app/" + statsdir + " -name done-" + str(n) + "* | wc -l"
                 addr = "ubuntu@" + dns
-                outF = int(subprocess.run("ssh -i " + pem + " -o " + sshOpt1 + " -o " + sshOpt3 + " -o " + sshOpt4 + " -o " + sshOpt5 + " -ntt " + addr + " " + cmdF, shell=True, capture_output=True, text=True).stdout)
+                outF = int(subprocess.run("ssh -i " + pem + " -o " + sshOpt1 + " -o " + sshOpt3 + " -o " + sshOpt4 + " -o " + sshOpt5 + " -ntt " + addr + " " + cmdF, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout)
                 #print("attempting to retrieve 'done' file for" , str(n), ":", outF)
                 if 0 < int(outF):
                     print("process done:" , str(n))
@@ -1496,7 +1591,7 @@ def runCluster():
         s1.communicate()
     subprocess.run([leave_cmd], shell=True) #, check=True)
 
-    srch = re.search('.*(docker swarm join .+)', subprocess.run(init_cmd, shell=True, capture_output=True, text=True).stdout)
+    srch = re.search('.*(docker swarm join .+)', subprocess.run(init_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout)
     if srch:
         join_cmd = srch.group(1)
         print("----join command:" + join_cmd)
@@ -1704,12 +1799,18 @@ def mkApp(protocol,constFactor,numFaults,numTrans,payloadSize):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
     else:
-        subprocess.call(["make","clean"])
+        subprocess.check_call(["make","clean"])
         if needsSGX(protocol):
-            subprocess.run(["bash -c \"" + srcsgx + "\""], shell=True, check=True)
-            subprocess.call(["make","-j",str(ncores),"SGX_MODE="+sgxmode])
+            buildCmd = (srcsgx
+                        + '; make SGX_MODE=' + sgxmode
+                        + ' SGX_SDK="$SGX_SDK"'
+                        + ' SGXSSL_INCLUDE_PATH="$SGXSSL_INCLUDE_PATH"'
+                        + ' SGXSSL_UNTRUSTED_LIB_PATH="$SGXSSL_UNTRUSTED_LIB_PATH"'
+                        + ' SGXSSL_TRUSTED_LIB_PATH="$SGXSSL_TRUSTED_LIB_PATH"'
+                        + ' -j2')
+            subprocess.run(["bash", "-lc", buildCmd], check=True)
         else:
-            subprocess.call(["make","-j",str(ncores),"server","client"])
+            subprocess.check_call(["make","-j",str(ncores),"server","client"])
 # End of mkApp
 
 
@@ -1718,11 +1819,18 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
     subsClients = [] # list of client subprocesses
     numReps = (constFactor * numFaults) + 1
 
-    genLocalConf(numReps,addresses)
+    instanceRepIds = []
+    instanceClIds  = []
+    if runDas5:
+        (instanceRepIds, instanceClIds) = startDas5Processes(numReps,numClients)
+    else:
+        genLocalConf(numReps,addresses)
 
     print("initial number of nodes:", numReps)
     if numDeadNodes > 0:
         numReps = numReps - numDeadNodes
+        if runDas5:
+            instanceRepIds = instanceRepIds[:numReps]
     print("number of nodes to actually run:", numReps)
 
 
@@ -1753,7 +1861,13 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
             if needsSGX(protocol):
                 cmd = srcsgx + "; " + cmd
             cmd = docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\""
-        p = Popen(cmd, shell=True)
+        if runDas5:
+            host = instanceRepIds[i][1]
+            if needsSGX(protocol):
+                cmd = srcsgx + "; " + cmd
+            p = runOnDas5Node(host, cmd)
+        else:
+            p = Popen(cmd, shell=True)
         subsReps.append(("R",i,p))
 
     print("started", len(subsReps), "replicas")
@@ -1772,7 +1886,13 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
             if needsSGX(protocol):
                 cmd = srcsgx + "; " + cmd
             cmd = docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\""
-        c = Popen(cmd, shell=True)
+        if runDas5:
+            host = instanceClIds[cid][1]
+            if needsSGX(protocol):
+                cmd = srcsgx + "; " + cmd
+            c = runOnDas5Node(host, cmd)
+        else:
+            c = Popen(cmd, shell=True)
         subsClients.append(("C",cid,c))
 
     print("started", len(subsClients), "clients")
@@ -1791,7 +1911,7 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
                     cFile = cFileBase + "-" + str(i) + "*"
                     dockerInstance = dockerBase + "c" + str(i)
                     cmd = "find /app/" + statsdir + " -name " + cFile + " | wc -l"
-                    out = int(subprocess.run(docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\"", shell=True, capture_output=True, text=True).stdout)
+                    out = int(subprocess.run(docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\"", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout)
                     if 0 < int(out):
                         print("found clients stats for client ", str(i))
                         remaining.remove((t,i,p))
@@ -1817,7 +1937,7 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
                 for (t,i,p) in rem:
                     dockerInstance = dockerBase + str(i)
                     cmd = "find /app/" + statsdir + " -name done-" + str(i) + "* | wc -l"
-                    out = int(subprocess.run(docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\"", shell=True, capture_output=True, text=True).stdout)
+                    out = int(subprocess.run(docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\"", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout)
                     if 0 < int(out):
                         remaining.remove((t,i,p))
             else:
@@ -1865,6 +1985,12 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
             subprocess.run([docker + " cp " + src + " " + dst], shell=True, check=True)
             rcmd = "rm /app/" + statsdir + "/*"
             subprocess.run([docker + " exec -t " + dockerInstance + " bash -c \"" + rcmd + "\""], shell=True) #, check=True)
+    elif runDas5:
+        nodes = set(map(lambda x: x[1], instanceRepIds + instanceClIds))
+        kill_all = "killall -q sgxserver sgxclient server client; true"
+        for node in nodes:
+            k = runOnDas5Node(node, kill_all)
+            k.communicate()
     else:
         subprocess.run(["killall -q sgxserver sgxclient server client; fuser -k " + ports], shell=True) #, check=True)
 ## End of execute
@@ -1995,7 +2121,7 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
                 valVS = float(viewSyncMsgs)
                 viewSyncMsgsNum += 1
                 viewSyncMsgsVal += valVS
-                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"view-sync-msgs",valVS)
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"view-sync-msgs-per-view",valVS)
 
                 valST = float(signTime)
                 cryptoSignNum += 1
@@ -2031,7 +2157,7 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
     print("latency-view:",     latencyView,    "out of", latencyViewNum)
     print("handle:",           handle,         "out of", handleNum)
     print("timeouts:",         timeouts,       "out of", tosNum)
-    print("view-sync-msgs:",   viewSyncMsgs,   "out of", viewSyncMsgsNum)
+    print("view-sync-msgs-per-view:", viewSyncMsgs, "out of", viewSyncMsgsNum)
     print("crypto-sign:",      cryptoSign,     "out of", cryptoSignNum)
     print("crypto-verif:",     cryptoVerif,    "out of", cryptoVerifNum)
     print("crypto-num-sign:",  cryptoNumSign,  "out of", cryptoNumSignNum)
@@ -2098,7 +2224,7 @@ def startContainers(numReps,numClients):
         # Only replicas need their IP in ipsOfNodes.
         if isRep:
             ipcmd = docker + " inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' " + instance
-            out = subprocess.run(ipcmd, shell=True, capture_output=True, text=True).stdout.strip()
+            out = subprocess.run(ipcmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout.strip()
             if out:
                 print("----container's address:" + out)
                 ipsOfNodes.update({int(i):out})
@@ -2212,7 +2338,7 @@ def computeAvgStats(recompile,
     print("avg throughput (view):",  throughputView)
     print("avg latency (view):",     latencyView)
     print("avg handle:",             handle)
-    print("avg view-sync-msgs:",     viewSyncMsgs)
+    print("avg view-sync-msgs-per-view:", viewSyncMsgs)
     print("avg crypto (sign):",      cryptoSign)
     print("avg crypto (verif):",     cryptoVerif)
     print("avg crypto (sign-num):",  cryptoNumSign)
@@ -7531,6 +7657,8 @@ parser.add_argument("--latest",     type=int, default=0,   help="copies plots") 
 parser.add_argument("--copy",       type=str, default="",  help="copies all files to the AWS address provided as argument")
 parser.add_argument("--nocopy",     action="store_true",   help="does not copy the files when running the AWS experiments")
 parser.add_argument("--docker",     action="store_true",   help="runs nodes locally in Docker containers")
+parser.add_argument("--das5",       action="store_true",   help="runs nodes natively on DAS-5 nodes allocated by SLURM")
+parser.add_argument("--das5-address-cmd", type=str, default="hostname -f", help="command run on each DAS-5 node to obtain the address written to config")
 parser.add_argument("--randomize",  action="store_true",   help="randomizes AWS regions before allocating nodes to regions")
 parser.add_argument("--repeats",    type=int, default=0,   help="number of repeats per experiment")
 parser.add_argument("--repeats2",   type=int, default=0,   help="number of repeats per experiment (2nd level, i.e., regenerates AWS instances)")
@@ -7575,6 +7703,7 @@ parser.add_argument("--cryptoonly", action="store_true",   help="to plot crypto 
 parser.add_argument("--debug",      type=int, default=1,   help="to print debugging information while plotting (0 means no)")
 parser.add_argument("--latency",    type=int, default=1,   help="to not print debugging information while plotting (0 means no)")
 parser.add_argument("--throughput", type=int, default=1,   help="to not print debugging information while plotting (0 means no)")
+parser.add_argument("--nodisplay",  action="store_true",   help="do not open generated plots in an image viewer")
 parser.add_argument("--rate",       type=int, default=0,   help="bandwidth when using netem")
 parser.add_argument("--trans",      type=int, default=0,   help="number of transactions per block")
 parser.add_argument("--timeout",    type=int, default=0,   help="timeout before starting a new view (in seconds)")
@@ -7637,6 +7766,11 @@ if args.joinperiod > 0:
 if args.stress:
     stressNg = True
     print("SUCCESSFULLY PARSED ARGUMENT - stressNg now:", stressNg)
+
+
+if args.nodisplay:
+    displayPlot = False
+    print("SUCCESSFULLY PARSED ARGUMENT - generated plots will not be opened")
 
 
 if args.numjoiners:
@@ -7729,6 +7863,17 @@ if args.payload >= 0:
 if args.docker:
     runDocker = True
     print("SUCCESSFULLY PARSED ARGUMENT - running nodes in Docker containers")
+
+
+if args.das5:
+    runDas5 = True
+    das5AddressCmd = args.das5_address_cmd
+    if runDocker:
+        raise RuntimeError("--das5 cannot be combined with --docker")
+    if not slurmAvailable():
+        print("WARNING: --das5 was selected, but SLURM_JOB_ID is not set; run through sbatch or salloc on DAS-5")
+    print("SUCCESSFULLY PARSED ARGUMENT - running nodes natively on DAS-5 via SLURM")
+    print("SUCCESSFULLY PARSED ARGUMENT - DAS-5 address command is:", das5AddressCmd)
 
 
 if args.randomize:
