@@ -2260,6 +2260,39 @@ def computeAvgStats(recompile,
                     numJoiners,
                     numDeadNodes,
                     numRepeats):
+    def _percentile(sorted_vals, p):
+        if not sorted_vals:
+            return 0.0
+        if len(sorted_vals) == 1:
+            return sorted_vals[0]
+        idx = (len(sorted_vals) - 1) * p
+        lo = int(math.floor(idx))
+        hi = int(math.ceil(idx))
+        if lo == hi:
+            return sorted_vals[lo]
+        frac = idx - lo
+        return sorted_vals[lo] * (1.0 - frac) + sorted_vals[hi] * frac
+
+    def _outlier_run_ids(values, run_ids, ratio=10.0):
+        # Flag only extreme deviations (>=10x from the median) to avoid over-pruning.
+        if len(values) < 4:
+            return set()
+        sorted_vals = sorted(values)
+        median = _percentile(sorted_vals, 0.5)
+        if median <= 0:
+            return set()
+        low = median / ratio
+        high = median * ratio
+        out = set()
+        for idx, val in enumerate(values):
+            if val < low or val > high:
+                out.add(run_ids[idx])
+        return out
+
+    def _avg_without_outliers(values, run_ids, outlier_runs):
+        kept = [v for idx, v in enumerate(values) if run_ids[idx] not in outlier_runs]
+        return (sum(kept) / len(kept)) if len(kept) > 0 else 0.0
+
     print("<<<<<<<<<<<<<<<<<<<<",
           "protocol="+protocol.value,
           ";regions="+regions[0],
@@ -2283,6 +2316,7 @@ def computeAvgStats(recompile,
     cryptoVerifs    = []
     cryptoNumSigns  = []
     cryptoNumVerifs = []
+    runIds          = []
 
     numReps = (constFactor * numFaults) + 1
 
@@ -2321,6 +2355,7 @@ def computeAvgStats(recompile,
             cryptoVerifs.append(cryptoVerif)
             cryptoNumSigns.append(cryptoNumSign)
             cryptoNumVerifs.append(cryptoNumVerif)
+            runIds.append(i)
             goodValues += 1
 
     if runDocker:
@@ -2335,6 +2370,45 @@ def computeAvgStats(recompile,
     cryptoNumSign  = sum(cryptoNumSigns)/goodValues  if goodValues > 0 else 0.0
     cryptoNumVerif = sum(cryptoNumVerifs)/goodValues if goodValues > 0 else 0.0
 
+    metric2vals = {
+        "throughput(view)": throughputViews,
+        "latency(view)": latencyViews,
+        "handle": handles,
+        "view-sync-msgs-per-view": viewSyncs,
+        "crypto(sign)": cryptoSigns,
+        "crypto(verif)": cryptoVerifs,
+        "crypto(sign-num)": cryptoNumSigns,
+        "crypto(verif-num)": cryptoNumVerifs,
+    }
+
+    metric_outliers = {name: _outlier_run_ids(vals, runIds) for name, vals in metric2vals.items()}
+    all_outlier_runs = set()
+    for outliers in metric_outliers.values():
+        all_outlier_runs.update(outliers)
+
+    # Check that exclusion is applied consistently across all 8 metrics.
+    exclusion_ok = all(
+        len([v for idx, v in enumerate(vals) if runIds[idx] not in all_outlier_runs])
+        == (goodValues - len(all_outlier_runs))
+        for vals in metric2vals.values()
+    )
+    print("outlier exclusion consistency check:", "OK" if exclusion_ok else "FAILED")
+
+    sorted_outlier_runs = sorted(all_outlier_runs)
+    print("outlier runs for protocol", protocol.value + ":", sorted_outlier_runs)
+    for metric_name, outliers in metric_outliers.items():
+        if len(outliers) > 0:
+            print("  outliers in", metric_name + ":", sorted(outliers))
+
+    throughputViewNoOut = _avg_without_outliers(throughputViews, runIds, all_outlier_runs)
+    latencyViewNoOut    = _avg_without_outliers(latencyViews, runIds, all_outlier_runs)
+    handleNoOut         = _avg_without_outliers(handles, runIds, all_outlier_runs)
+    viewSyncMsgsNoOut   = _avg_without_outliers(viewSyncs, runIds, all_outlier_runs)
+    cryptoSignNoOut     = _avg_without_outliers(cryptoSigns, runIds, all_outlier_runs)
+    cryptoVerifNoOut    = _avg_without_outliers(cryptoVerifs, runIds, all_outlier_runs)
+    cryptoNumSignNoOut  = _avg_without_outliers(cryptoNumSigns, runIds, all_outlier_runs)
+    cryptoNumVerifNoOut = _avg_without_outliers(cryptoNumVerifs, runIds, all_outlier_runs)
+
     print("avg throughput (view):",  throughputView)
     print("avg latency (view):",     latencyView)
     print("avg handle:",             handle)
@@ -2343,6 +2417,15 @@ def computeAvgStats(recompile,
     print("avg crypto (verif):",     cryptoVerif)
     print("avg crypto (sign-num):",  cryptoNumSign)
     print("avg crypto (verif-num):", cryptoNumVerif)
+
+    print("avg throughput (view) [without outliers]:",  throughputViewNoOut)
+    print("avg latency (view) [without outliers]:",     latencyViewNoOut)
+    print("avg handle [without outliers]:",             handleNoOut)
+    print("avg view-sync-msgs-per-view [without outliers]:", viewSyncMsgsNoOut)
+    print("avg crypto (sign) [without outliers]:",      cryptoSignNoOut)
+    print("avg crypto (verif) [without outliers]:",     cryptoVerifNoOut)
+    print("avg crypto (sign-num) [without outliers]:",  cryptoNumSignNoOut)
+    print("avg crypto (verif-num) [without outliers]:", cryptoNumVerifNoOut)
 
     return (throughputView, latencyView, handle, cryptoSign, cryptoVerif, cryptoNumSign, cryptoNumVerif)
 # End of computeAvgStats
