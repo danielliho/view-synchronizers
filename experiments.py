@@ -18,6 +18,7 @@ import shutil
 from shutil import copyfile
 import re
 import mmap
+import shlex
 
 
 #############
@@ -42,7 +43,7 @@ import mmap
 ## Parameters
 sgxmode        = "SIM"
 #sgxmode       = "HW"
-srcsgx         = "source /opt/intel/sgxsdk/environment" # this is where the sdk is supposed to be installed
+srcsgx         = "source \"${SGX_SDK:-$HOME/opt/intel/sgxsdk}/environment\"" # use SGX_SDK when set, otherwise fall back to the home installation
 faults         = [1] #[1,2,4,10] #[1,2,4,10,20,30,40] #[1,2,4,6,8,10,12,14,20,30] # list of numbers of faults
 #faults        = [1,10,20,30,40,50]
 #faults        = [40]
@@ -402,6 +403,12 @@ clusterFile = "nodes"
 clusterNet  = "damysusNet" # "bridge"
 mybridge    = "damysusNet" # "bridge"
 
+## DAS-5/SLURM parameters
+
+runDas5        = False
+das5Nodes      = []          # hostnames allocated by SLURM
+das5AddressCmd = "hostname -f"
+
 
 ## Code
 
@@ -446,6 +453,94 @@ def genLocalConf(n,filename):
         f.write("id:"+str(i)+" host:"+host+" port:"+str(rport)+" port:"+str(cport)+"\n")
     f.close()
 # End of genLocalConf
+
+
+def slurmAvailable():
+    return "SLURM_JOB_ID" in os.environ
+# End of slurmAvailable
+
+
+def shellJoin(args):
+    return " ".join(map(shlex.quote,args))
+# End of shellJoin
+
+
+def readDas5Nodes():
+    if len(das5Nodes) > 0:
+        return das5Nodes
+
+    nodelist = os.environ.get("SLURM_NODELIST") or os.environ.get("SLURM_JOB_NODELIST")
+    if not nodelist:
+        raise RuntimeError("--das5 must run inside a SLURM allocation; SLURM_NODELIST is not set")
+
+    try:
+        result = subprocess.run(["scontrol", "show", "hostnames", nodelist],
+                                check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                universal_newlines=True)
+        nodes = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        nodes = [line.strip() for line in nodelist.splitlines() if line.strip()]
+
+    if len(nodes) == 0:
+        raise RuntimeError("could not determine DAS-5 nodes from SLURM_NODELIST=" + nodelist)
+
+    das5Nodes.extend(nodes)
+    print("DAS-5 nodes:", das5Nodes)
+    return das5Nodes
+# End of readDas5Nodes
+
+
+def runOnDas5Node(host, cmd, capture=False):
+    srun = ["srun", "--overlap", "-N", "1", "-n", "1", "-w", host, "--chdir", os.getcwd(),
+            "bash", "-lc", cmd]
+    print("the commandline is {}".format(shellJoin(srun)))
+    if capture:
+        return subprocess.run(srun, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              universal_newlines=True)
+    return Popen(srun)
+# End of runOnDas5Node
+
+
+def getDas5Address(host):
+    try:
+        result = runOnDas5Node(host, das5AddressCmd, capture=True)
+        address = result.stdout.strip().splitlines()[-1].strip()
+    except (subprocess.CalledProcessError, IndexError):
+        address = ""
+
+    if not address:
+        address = host
+
+    return address
+# End of getDas5Address
+
+
+def startDas5Processes(numReps,numClients):
+    print("running in DAS-5 mode, using SLURM nodes for", numReps, "replicas and", numClients, "clients")
+
+    nodes = readDas5Nodes()
+    needed = numReps + numClients
+    if len(nodes) < needed:
+        print("WARNING: DAS-5 allocation has", len(nodes), "node(s), but this run wants", needed,
+              "processes; some nodes will host more than one process")
+
+    global ipsOfNodes
+    ipsOfNodes = {}
+    for i in range(numReps):
+        host = nodes[i % len(nodes)]
+        ipsOfNodes.update({i:getDas5Address(host)})
+
+    genLocalConf(numReps,addresses)
+
+    instanceRepIds = []
+    instanceClIds  = []
+    for i in range(numReps):
+        instanceRepIds.append((i, nodes[i % len(nodes)]))
+    for i in range(numClients):
+        instanceClIds.append((i, nodes[(numReps + i) % len(nodes)]))
+
+    return (instanceRepIds, instanceClIds)
+# End of startDas5Processes
 
 
 def findPublicDnsName(j):
@@ -701,7 +796,7 @@ def executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTran
         for (tag,n,i,priv,pub,dns,region,p) in rem:
             cmdF = "find app/" + statsdir + " -name start-" + str(n) + "* | wc -l"
             addr = "ubuntu@" + dns
-            outF = int(subprocess.run("ssh -i " + pem + " -o " + sshOpt1 + " -o " + sshOpt3 + " -o " + sshOpt4 + " -o " + sshOpt5 + " -ntt " + addr + " " + cmdF, shell=True, capture_output=True, text=True).stdout)
+            outF = int(subprocess.run("ssh -i " + pem + " -o " + sshOpt1 + " -o " + sshOpt3 + " -o " + sshOpt4 + " -o " + sshOpt5 + " -ntt " + addr + " " + cmdF, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout)
             #print("attempting to retrieve 'start' file for" , str(n), ":", outF)
             if 0 < int(outF):
                 print("********** process started:" , str(n), "**********")
@@ -748,7 +843,7 @@ def executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTran
             for (tag,n,i,priv,pub,dns,region,p) in rem:
                 cmdF = "find app/" + statsdir + " -name done-" + str(n) + "* | wc -l"
                 addr = "ubuntu@" + dns
-                outF = int(subprocess.run("ssh -i " + pem + " -o " + sshOpt1 + " -o " + sshOpt3 + " -o " + sshOpt4 + " -o " + sshOpt5 + " -ntt " + addr + " " + cmdF, shell=True, capture_output=True, text=True).stdout)
+                outF = int(subprocess.run("ssh -i " + pem + " -o " + sshOpt1 + " -o " + sshOpt3 + " -o " + sshOpt4 + " -o " + sshOpt5 + " -ntt " + addr + " " + cmdF, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout)
                 #print("attempting to retrieve 'done' file for" , str(n), ":", outF)
                 if 0 < int(outF):
                     print("process done:" , str(n))
@@ -906,7 +1001,7 @@ def executeAWS(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,slee
                 time.sleep(1)
             print("stats done:",i)
 
-        (throughputView,latencyView,handle,timeouts,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats)
+        (throughputView,latencyView,handle,timeouts,viewSyncMsgs,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats)
 # End of executeAWS
 
 
@@ -1457,7 +1552,7 @@ def executeCluster(info,protocol,constFactor,numClTrans,sleepTime,numViews,cutOf
         clearStatsDir()
         # execute the experiment
         executeClusterInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,instance)
-        (throughputView,latencyView,handle,timeouts,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats)
+        (throughputView,latencyView,handle,timeouts,viewSyncMsgs,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats)
 
     for (n,i,node) in instanceRepIds + instanceClIds:
         instance = dockerBase + i
@@ -1496,7 +1591,7 @@ def runCluster():
         s1.communicate()
     subprocess.run([leave_cmd], shell=True) #, check=True)
 
-    srch = re.search('.*(docker swarm join .+)', subprocess.run(init_cmd, shell=True, capture_output=True, text=True).stdout)
+    srch = re.search('.*(docker swarm join .+)', subprocess.run(init_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout)
     if srch:
         join_cmd = srch.group(1)
         print("----join command:" + join_cmd)
@@ -1704,12 +1799,18 @@ def mkApp(protocol,constFactor,numFaults,numTrans,payloadSize):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
     else:
-        subprocess.call(["make","clean"])
+        subprocess.check_call(["make","clean"])
         if needsSGX(protocol):
-            subprocess.run(["bash -c \"" + srcsgx + "\""], shell=True, check=True)
-            subprocess.call(["make","-j",str(ncores),"SGX_MODE="+sgxmode])
+            buildCmd = (srcsgx
+                        + '; make SGX_MODE=' + sgxmode
+                        + ' SGX_SDK="$SGX_SDK"'
+                        + ' SGXSSL_INCLUDE_PATH="$SGXSSL_INCLUDE_PATH"'
+                        + ' SGXSSL_UNTRUSTED_LIB_PATH="$SGXSSL_UNTRUSTED_LIB_PATH"'
+                        + ' SGXSSL_TRUSTED_LIB_PATH="$SGXSSL_TRUSTED_LIB_PATH"'
+                        + ' -j2')
+            subprocess.run(["bash", "-lc", buildCmd], check=True)
         else:
-            subprocess.call(["make","-j",str(ncores),"server","client"])
+            subprocess.check_call(["make","-j",str(ncores),"server","client"])
 # End of mkApp
 
 
@@ -1718,11 +1819,18 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
     subsClients = [] # list of client subprocesses
     numReps = (constFactor * numFaults) + 1
 
-    genLocalConf(numReps,addresses)
+    instanceRepIds = []
+    instanceClIds  = []
+    if runDas5:
+        (instanceRepIds, instanceClIds) = startDas5Processes(numReps,numClients)
+    else:
+        genLocalConf(numReps,addresses)
 
     print("initial number of nodes:", numReps)
     if numDeadNodes > 0:
         numReps = numReps - numDeadNodes
+        if runDas5:
+            instanceRepIds = instanceRepIds[:numReps]
     print("number of nodes to actually run:", numReps)
 
 
@@ -1753,7 +1861,13 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
             if needsSGX(protocol):
                 cmd = srcsgx + "; " + cmd
             cmd = docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\""
-        p = Popen(cmd, shell=True)
+        if runDas5:
+            host = instanceRepIds[i][1]
+            if needsSGX(protocol):
+                cmd = srcsgx + "; " + cmd
+            p = runOnDas5Node(host, cmd)
+        else:
+            p = Popen(cmd, shell=True)
         subsReps.append(("R",i,p))
 
     print("started", len(subsReps), "replicas")
@@ -1772,7 +1886,13 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
             if needsSGX(protocol):
                 cmd = srcsgx + "; " + cmd
             cmd = docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\""
-        c = Popen(cmd, shell=True)
+        if runDas5:
+            host = instanceClIds[cid][1]
+            if needsSGX(protocol):
+                cmd = srcsgx + "; " + cmd
+            c = runOnDas5Node(host, cmd)
+        else:
+            c = Popen(cmd, shell=True)
         subsClients.append(("C",cid,c))
 
     print("started", len(subsClients), "clients")
@@ -1791,7 +1911,7 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
                     cFile = cFileBase + "-" + str(i) + "*"
                     dockerInstance = dockerBase + "c" + str(i)
                     cmd = "find /app/" + statsdir + " -name " + cFile + " | wc -l"
-                    out = int(subprocess.run(docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\"", shell=True, capture_output=True, text=True).stdout)
+                    out = int(subprocess.run(docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\"", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout)
                     if 0 < int(out):
                         print("found clients stats for client ", str(i))
                         remaining.remove((t,i,p))
@@ -1817,7 +1937,7 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
                 for (t,i,p) in rem:
                     dockerInstance = dockerBase + str(i)
                     cmd = "find /app/" + statsdir + " -name done-" + str(i) + "* | wc -l"
-                    out = int(subprocess.run(docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\"", shell=True, capture_output=True, text=True).stdout)
+                    out = int(subprocess.run(docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\"", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout)
                     if 0 < int(out):
                         remaining.remove((t,i,p))
             else:
@@ -1865,6 +1985,12 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
             subprocess.run([docker + " cp " + src + " " + dst], shell=True, check=True)
             rcmd = "rm /app/" + statsdir + "/*"
             subprocess.run([docker + " exec -t " + dockerInstance + " bash -c \"" + rcmd + "\""], shell=True) #, check=True)
+    elif runDas5:
+        nodes = set(map(lambda x: x[1], instanceRepIds + instanceClIds))
+        kill_all = "killall -q sgxserver sgxclient server client; true"
+        for node in nodes:
+            k = runOnDas5Node(node, kill_all)
+            k.communicate()
     else:
         subprocess.run(["killall -q sgxserver sgxclient server client; fuser -k " + ports], shell=True) #, check=True)
 ## End of execute
@@ -1921,6 +2047,9 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
     pcsVal=0
     pcsNum=0
 
+    viewSyncMsgsVal=0
+    viewSyncMsgsNum=0
+
     cryptoSignVal=0.0
     cryptoSignNum=0
 
@@ -1949,11 +2078,15 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
             f = open(filename, "r")
             s = f.read()
             f.close()
-            l = s.split(" ")
-            if not(len(l) == 10):
+            l = s.split()
+            if not(len(l) == 10 or len(l) == 11):
                 print("wrong vals file:", filename)
             else:
-                [thru,lat,hdl,tos,pbs,pcs,signNum,signTime,verifNum,verifTime] = l
+                if len(l) == 11:
+                    [thru,lat,hdl,tos,pbs,pcs,viewSyncMsgs,signNum,signTime,verifNum,verifTime] = l
+                else:
+                    [thru,lat,hdl,tos,pbs,pcs,signNum,signTime,verifNum,verifTime] = l
+                    viewSyncMsgs = "0"
 
                 valTH = float(thru)
                 throughputViewNum += 1
@@ -1985,6 +2118,11 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
                 pcsVal += valPC
                 printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"onepcs",valPC)
 
+                valVS = float(viewSyncMsgs)
+                viewSyncMsgsNum += 1
+                viewSyncMsgsVal += valVS
+                printNodePoint(protocol,numFaults,numJoiners,numDeadNodes,"view-sync-msgs-per-view",valVS)
+
                 valST = float(signTime)
                 cryptoSignNum += 1
                 cryptoSignVal += valST
@@ -2009,6 +2147,7 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
     latencyView    = latencyViewVal/latencyViewNum       if latencyViewNum > 0    else 0.0
     handle         = handleVal/handleNum                 if handleNum > 0         else 0.0
     timeouts       = tosVal/tosNum                       if tosNum > 0            else 0.0
+    viewSyncMsgs   = viewSyncMsgsVal/viewSyncMsgsNum     if viewSyncMsgsNum > 0   else 0.0
     cryptoSign     = cryptoSignVal/cryptoSignNum         if cryptoSignNum > 0     else 0.0
     cryptoVerif    = cryptoVerifVal/cryptoVerifNum       if cryptoVerifNum > 0    else 0.0
     cryptoNumSign  = cryptoNumSignVal/cryptoNumSignNum   if cryptoNumSignNum > 0  else 0.0
@@ -2018,12 +2157,13 @@ def computeStats(protocol,numFaults,numJoiners,numDeadNodes,instance,repeats):
     print("latency-view:",     latencyView,    "out of", latencyViewNum)
     print("handle:",           handle,         "out of", handleNum)
     print("timeouts:",         timeouts,       "out of", tosNum)
+    print("view-sync-msgs-per-view:", viewSyncMsgs, "out of", viewSyncMsgsNum)
     print("crypto-sign:",      cryptoSign,     "out of", cryptoSignNum)
     print("crypto-verif:",     cryptoVerif,    "out of", cryptoVerifNum)
     print("crypto-num-sign:",  cryptoNumSign,  "out of", cryptoNumSignNum)
     print("crypto-num-verif:", cryptoNumVerif, "out of", cryptoNumVerifNum)
 
-    return (throughputView, latencyView, handle, timeouts, cryptoSign, cryptoVerif, cryptoNumSign, cryptoNumVerif)
+    return (throughputView, latencyView, handle, timeouts, viewSyncMsgs, cryptoSign, cryptoVerif, cryptoNumSign, cryptoNumVerif)
 ## End of computeStats
 
 
@@ -2036,6 +2176,12 @@ def startContainers(numReps,numClients):
     lc = list(map(lambda x: (False, x, "c" + str(x)), list(range(numClients))))  # clients
     lall = lr + lc + [(False , 0, "x")]
 
+    # Batch cleanup is much faster than sequential stop/rm per container.
+    instances = list(map(lambda x: dockerBase + x[2], lall))
+    if len(instances) > 0:
+        subprocess.run([docker + " rm -f " + " ".join(instances)], shell=True)
+    subprocess.run([docker + " network rm " + mybridge], shell=True)
+
     subprocess.run([docker + " network create --driver=bridge " + mybridge], shell=True)
 
     # The 'x' containers are used in particular when we require less cpu so that we can compile in full-cpu
@@ -2043,9 +2189,6 @@ def startContainers(numReps,numClients):
     # used to compile, to the non-x instance that has the restrictions
     for (isRep, j, i) in lall:
         instance  = dockerBase + i
-        # We stop and remove the Doker instance if it is still exists
-        subprocess.run([docker + " stop " + instance], shell=True) #, check=True)
-        subprocess.run([docker + " rm " + instance], shell=True) #, check=True)
         # TODO: make sure to cover all the ports
         opt1  = "--expose=" + str(startRport+numReps) if isRep else ""
         opt2  = "--expose=" + str(startCport+numReps) if isRep else ""
@@ -2061,9 +2204,9 @@ def startContainers(numReps,numClients):
             opts = " ".join([opt1, opt2, opt3, opt4, opt5, opt6, opt7])          # without cpu/mem limitations
         # We start the Docker instance
         subprocess.run([docker + " run -td " + opts + " " + dockerBase], shell=True, check=True)
-        subprocess.run([docker + " exec -t " + instance + " bash -c \"" + srcsgx + "; mkdir " + statsdir + "\""], shell=True, check=True)
+        subprocess.run([docker + " exec -t " + instance + " bash -c \"" + srcsgx + "; mkdir -p " + statsdir + "\""], shell=True, check=True)
         # Set the network latency
-        if 0 < networkLat:
+        if 0 < networkLat and i != "x":
             print("----changing network latency to " + str(networkLat) + "ms")
             rate = ""
             if rateMbit > 0:
@@ -2078,16 +2221,15 @@ def startContainers(numReps,numClients):
             print(latcmd)
             #latcmd = "tc qdisc add dev eth0 root netem delay " + str(networkLat) + "ms"
             subprocess.run([docker + " exec -t " + instance + " bash -c \"" + latcmd + "\""], shell=True, check=True)
-        # Extract the IP address of the container
-        ipcmd = docker + " inspect " + instance + " | jq '.[].NetworkSettings.Networks." + mybridge + ".IPAddress'"
-        srch = re.search('\"(.+?)\"', subprocess.run(ipcmd, shell=True, capture_output=True, text=True).stdout)
-        if srch:
-            out = srch.group(1)
-            print("----container's address:" + out)
-            if isRep:
+        # Only replicas need their IP in ipsOfNodes.
+        if isRep:
+            ipcmd = docker + " inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' " + instance
+            out = subprocess.run(ipcmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout.strip()
+            if out:
+                print("----container's address:" + out)
                 ipsOfNodes.update({int(i):out})
-        else:
-            print("----container's address: UNKNOWN")
+            else:
+                print("----container's address: UNKNOWN")
 ## End of startContainers
 
 
@@ -2098,10 +2240,9 @@ def stopContainers(numReps,numClients):
     lc = list(map(lambda x: (False, "c" + str(x)), list(range(numClients))))  # clients
     lall = lr + lc + [(False , "x")]
 
-    for (isRep, i) in lall:
-        instance = dockerBase + i
-        subprocess.run([docker + " stop " + instance], shell=True) #, check=True)
-        subprocess.run([docker + " rm " + instance], shell=True) #, check=True)
+    instances = list(map(lambda x: dockerBase + x[1], lall))
+    if len(instances) > 0:
+        subprocess.run([docker + " rm -f " + " ".join(instances)], shell=True)
 
     subprocess.run([docker + " network rm " + mybridge], shell=True)
 ## End of stopContainers
@@ -2119,6 +2260,39 @@ def computeAvgStats(recompile,
                     numJoiners,
                     numDeadNodes,
                     numRepeats):
+    def _percentile(sorted_vals, p):
+        if not sorted_vals:
+            return 0.0
+        if len(sorted_vals) == 1:
+            return sorted_vals[0]
+        idx = (len(sorted_vals) - 1) * p
+        lo = int(math.floor(idx))
+        hi = int(math.ceil(idx))
+        if lo == hi:
+            return sorted_vals[lo]
+        frac = idx - lo
+        return sorted_vals[lo] * (1.0 - frac) + sorted_vals[hi] * frac
+
+    def _outlier_run_ids(values, run_ids, ratio=10.0):
+        # Flag only extreme deviations (>=10x from the median) to avoid over-pruning.
+        if len(values) < 4:
+            return set()
+        sorted_vals = sorted(values)
+        median = _percentile(sorted_vals, 0.5)
+        if median <= 0:
+            return set()
+        low = median / ratio
+        high = median * ratio
+        out = set()
+        for idx, val in enumerate(values):
+            if val < low or val > high:
+                out.add(run_ids[idx])
+        return out
+
+    def _avg_without_outliers(values, run_ids, outlier_runs):
+        kept = [v for idx, v in enumerate(values) if run_ids[idx] not in outlier_runs]
+        return (sum(kept) / len(kept)) if len(kept) > 0 else 0.0
+
     print("<<<<<<<<<<<<<<<<<<<<",
           "protocol="+protocol.value,
           ";regions="+regions[0],
@@ -2137,10 +2311,12 @@ def computeAvgStats(recompile,
     throughputViews = []
     latencyViews    = []
     handles         = []
+    viewSyncs       = []
     cryptoSigns     = []
     cryptoVerifs    = []
     cryptoNumSigns  = []
     cryptoNumVerifs = []
+    runIds          = []
 
     numReps = (constFactor * numFaults) + 1
 
@@ -2167,15 +2343,19 @@ def computeAvgStats(recompile,
         print("aborted runs so far:", aborted)
         clearStatsDir()
         execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numDeadNodes,numJoiners,i)
-        (throughputView,latencyView,handle,timeouts,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,i,numRepeats)
-        if throughputView > 0 and latencyView > 0 and handle > 0 and cryptoSign > 0 and cryptoVerif > 0 and cryptoNumSign > 0 and cryptoNumVerif > 0:
+        (throughputView,latencyView,handle,timeouts,viewSyncMsgs,cryptoSign,cryptoVerif,cryptoNumSign,cryptoNumVerif) = computeStats(protocol,numFaults,numJoiners,numDeadNodes,i,numRepeats)
+        # Some protocols (e.g., OneShot variants) can legitimately report zero crypto metrics.
+        # Keep repeats as long as core performance metrics are valid.
+        if throughputView > 0 and latencyView > 0 and handle > 0:
             throughputViews.append(throughputView)
             latencyViews.append(latencyView)
             handles.append(handle)
+            viewSyncs.append(viewSyncMsgs)
             cryptoSigns.append(cryptoSign)
             cryptoVerifs.append(cryptoVerif)
             cryptoNumSigns.append(cryptoNumSign)
             cryptoNumVerifs.append(cryptoNumVerif)
+            runIds.append(i)
             goodValues += 1
 
     if runDocker:
@@ -2184,18 +2364,68 @@ def computeAvgStats(recompile,
     throughputView = sum(throughputViews)/goodValues if goodValues > 0 else 0.0
     latencyView    = sum(latencyViews)/goodValues    if goodValues > 0 else 0.0
     handle         = sum(handles)/goodValues         if goodValues > 0 else 0.0
+    viewSyncMsgs   = sum(viewSyncs)/goodValues       if goodValues > 0 else 0.0
     cryptoSign     = sum(cryptoSigns)/goodValues     if goodValues > 0 else 0.0
     cryptoVerif    = sum(cryptoVerifs)/goodValues    if goodValues > 0 else 0.0
     cryptoNumSign  = sum(cryptoNumSigns)/goodValues  if goodValues > 0 else 0.0
     cryptoNumVerif = sum(cryptoNumVerifs)/goodValues if goodValues > 0 else 0.0
 
+    metric2vals = {
+        "throughput(view)": throughputViews,
+        "latency(view)": latencyViews,
+        "handle": handles,
+        "view-sync-msgs-per-view": viewSyncs,
+        "crypto(sign)": cryptoSigns,
+        "crypto(verif)": cryptoVerifs,
+        "crypto(sign-num)": cryptoNumSigns,
+        "crypto(verif-num)": cryptoNumVerifs,
+    }
+
+    metric_outliers = {name: _outlier_run_ids(vals, runIds) for name, vals in metric2vals.items()}
+    all_outlier_runs = set()
+    for outliers in metric_outliers.values():
+        all_outlier_runs.update(outliers)
+
+    # Check that exclusion is applied consistently across all 8 metrics.
+    exclusion_ok = all(
+        len([v for idx, v in enumerate(vals) if runIds[idx] not in all_outlier_runs])
+        == (goodValues - len(all_outlier_runs))
+        for vals in metric2vals.values()
+    )
+    print("outlier exclusion consistency check:", "OK" if exclusion_ok else "FAILED")
+
+    sorted_outlier_runs = sorted(all_outlier_runs)
+    print("outlier runs for protocol", protocol.value + ":", sorted_outlier_runs)
+    for metric_name, outliers in metric_outliers.items():
+        if len(outliers) > 0:
+            print("  outliers in", metric_name + ":", sorted(outliers))
+
+    throughputViewNoOut = _avg_without_outliers(throughputViews, runIds, all_outlier_runs)
+    latencyViewNoOut    = _avg_without_outliers(latencyViews, runIds, all_outlier_runs)
+    handleNoOut         = _avg_without_outliers(handles, runIds, all_outlier_runs)
+    viewSyncMsgsNoOut   = _avg_without_outliers(viewSyncs, runIds, all_outlier_runs)
+    cryptoSignNoOut     = _avg_without_outliers(cryptoSigns, runIds, all_outlier_runs)
+    cryptoVerifNoOut    = _avg_without_outliers(cryptoVerifs, runIds, all_outlier_runs)
+    cryptoNumSignNoOut  = _avg_without_outliers(cryptoNumSigns, runIds, all_outlier_runs)
+    cryptoNumVerifNoOut = _avg_without_outliers(cryptoNumVerifs, runIds, all_outlier_runs)
+
     print("avg throughput (view):",  throughputView)
     print("avg latency (view):",     latencyView)
     print("avg handle:",             handle)
+    print("avg view-sync-msgs-per-view:", viewSyncMsgs)
     print("avg crypto (sign):",      cryptoSign)
     print("avg crypto (verif):",     cryptoVerif)
     print("avg crypto (sign-num):",  cryptoNumSign)
     print("avg crypto (verif-num):", cryptoNumVerif)
+
+    print("avg throughput (view) [without outliers]:",  throughputViewNoOut)
+    print("avg latency (view) [without outliers]:",     latencyViewNoOut)
+    print("avg handle [without outliers]:",             handleNoOut)
+    print("avg view-sync-msgs-per-view [without outliers]:", viewSyncMsgsNoOut)
+    print("avg crypto (sign) [without outliers]:",      cryptoSignNoOut)
+    print("avg crypto (verif) [without outliers]:",     cryptoVerifNoOut)
+    print("avg crypto (sign-num) [without outliers]:",  cryptoNumSignNoOut)
+    print("avg crypto (verif-num) [without outliers]:", cryptoNumVerifNoOut)
 
     return (throughputView, latencyView, handle, cryptoSign, cryptoVerif, cryptoNumSign, cryptoNumVerif)
 # End of computeAvgStats
@@ -6546,7 +6776,7 @@ def TVL():
     numTransPerBlock = 400 #10
     payloadSize      = 0 #256
     numViews         = 0 # nodes don't stop
-    cutOffBound      = 90
+    cutOffBound      = 240
 
 
     ## For testing purposes, we use less repeats then
@@ -7510,6 +7740,8 @@ parser.add_argument("--latest",     type=int, default=0,   help="copies plots") 
 parser.add_argument("--copy",       type=str, default="",  help="copies all files to the AWS address provided as argument")
 parser.add_argument("--nocopy",     action="store_true",   help="does not copy the files when running the AWS experiments")
 parser.add_argument("--docker",     action="store_true",   help="runs nodes locally in Docker containers")
+parser.add_argument("--das5",       action="store_true",   help="runs nodes natively on DAS-5 nodes allocated by SLURM")
+parser.add_argument("--das5-address-cmd", type=str, default="hostname -f", help="command run on each DAS-5 node to obtain the address written to config")
 parser.add_argument("--randomize",  action="store_true",   help="randomizes AWS regions before allocating nodes to regions")
 parser.add_argument("--repeats",    type=int, default=0,   help="number of repeats per experiment")
 parser.add_argument("--repeats2",   type=int, default=0,   help="number of repeats per experiment (2nd level, i.e., regenerates AWS instances)")
@@ -7554,6 +7786,7 @@ parser.add_argument("--cryptoonly", action="store_true",   help="to plot crypto 
 parser.add_argument("--debug",      type=int, default=1,   help="to print debugging information while plotting (0 means no)")
 parser.add_argument("--latency",    type=int, default=1,   help="to not print debugging information while plotting (0 means no)")
 parser.add_argument("--throughput", type=int, default=1,   help="to not print debugging information while plotting (0 means no)")
+parser.add_argument("--nodisplay",  action="store_true",   help="do not open generated plots in an image viewer")
 parser.add_argument("--rate",       type=int, default=0,   help="bandwidth when using netem")
 parser.add_argument("--trans",      type=int, default=0,   help="number of transactions per block")
 parser.add_argument("--timeout",    type=int, default=0,   help="timeout before starting a new view (in seconds)")
@@ -7616,6 +7849,11 @@ if args.joinperiod > 0:
 if args.stress:
     stressNg = True
     print("SUCCESSFULLY PARSED ARGUMENT - stressNg now:", stressNg)
+
+
+if args.nodisplay:
+    displayPlot = False
+    print("SUCCESSFULLY PARSED ARGUMENT - generated plots will not be opened")
 
 
 if args.numjoiners:
@@ -7708,6 +7946,17 @@ if args.payload >= 0:
 if args.docker:
     runDocker = True
     print("SUCCESSFULLY PARSED ARGUMENT - running nodes in Docker containers")
+
+
+if args.das5:
+    runDas5 = True
+    das5AddressCmd = args.das5_address_cmd
+    if runDocker:
+        raise RuntimeError("--das5 cannot be combined with --docker")
+    if not slurmAvailable():
+        print("WARNING: --das5 was selected, but SLURM_JOB_ID is not set; run through sbatch or salloc on DAS-5")
+    print("SUCCESSFULLY PARSED ARGUMENT - running nodes natively on DAS-5 via SLURM")
+    print("SUCCESSFULLY PARSED ARGUMENT - DAS-5 address command is:", das5AddressCmd)
 
 
 if args.randomize:
