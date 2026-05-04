@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=oneshot-das5
-#SBATCH --output=slurm-%j.out
-#SBATCH --error=slurm-%j.err
+#SBATCH --output=slurm-%j.out.ansi
+#SBATCH --error=slurm-%j.err.ansi
 #SBATCH --time=00:15:00
-#SBATCH -N 4
+#SBATCH -N 6
 #SBATCH --ntasks-per-node=1
 
 set -eo pipefail
@@ -250,11 +250,6 @@ echo "Python: ${PYTHON}"
 echo "Allocated nodes:"
 scontrol show hostnames "${SLURM_JOB_NODELIST}"
 
-# With no extra sbatch arguments, this mirrors:
-#   python experiments.py --docker --p8 --faults 1 --repeats 1
-#
-# Request enough nodes for replicas + clients. For --p8 --faults 1 this is
-# 2f+1 replicas + 1 client = 4 nodes, matching #SBATCH -N 4 above.
 if [ "$#" -gt 0 ]; then
     if [ "${FORCE_NOCOMPIL:-0}" = "1" ]; then
         "${PYTHON}" experiments.py --das5 --nodisplay --nocompil "$@"
@@ -263,9 +258,9 @@ if [ "$#" -gt 0 ]; then
     fi
 else
     if [ "${FORCE_NOCOMPIL:-0}" = "1" ]; then
-        "${PYTHON}" experiments.py --das5 --nodisplay --nocompil --p8 --faults 1 --repeats 1
+        "${PYTHON}" experiments.py --das5 --nodisplay --nocompil --p8 --faults 2 --repeats 1
     else
-        "${PYTHON}" experiments.py --das5 --nodisplay --p8 --faults 1 --repeats 1
+        "${PYTHON}" experiments.py --das5 --nodisplay --p8 --faults 2 --repeats 1
     fi
 fi
 
