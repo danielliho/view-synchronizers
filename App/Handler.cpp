@@ -1088,14 +1088,22 @@ void Handler::wishToAdvanceView(View v) {
 }
 
 void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
-  if (msg.view <= this->view) return;
+  auto startHandle = std::chrono::steady_clock::now();
+  auto recordHandle = [&]() {
+    auto endHandle = std::chrono::steady_clock::now();
+    double handleTime = std::chrono::duration_cast<std::chrono::microseconds>(endHandle - startHandle).count();
+    stats.addTotalHandleTime(handleTime);
+  };
+
+  if (msg.view <= this->view) { recordHandle(); return; }
 
   if (this->wishesToAdvanceView[msg.view].hasSigned(sender)) {
+    recordHandle();
     return;
   }
 
   NodeInfo *senderInfo = this->nodes.find(sender);
-  if (!senderInfo) return;
+  if (!senderInfo) { recordHandle(); return; }
 
   auto start = std::chrono::steady_clock::now();
   bool b = msg.sign.verify(senderInfo->getPub(), "WISH" + std::to_string(msg.view));
@@ -1105,6 +1113,7 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
 
   if (!b) {
     if (DEBUGD) std::cout << KRED << nfo() << "INVALID WISH SIGNATURE FROM " << sender << KNRM << std::endl;
+    recordHandle();
     return;
   }
 
@@ -1125,18 +1134,29 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
     sendMsgTimeCertificate(tc, this->peers);
     startNewViewOP(tc.view);
   }
+
+  recordHandle();
 }
 
 void Handler::handleTimeCertificate(MsgTimeCertificate msg, PID sender) {
+  auto startHandle = std::chrono::steady_clock::now();
+  auto recordHandle = [&]() {
+    auto endHandle = std::chrono::steady_clock::now();
+    double handleTime = std::chrono::duration_cast<std::chrono::microseconds>(endHandle - startHandle).count();
+    stats.addTotalHandleTime(handleTime);
+  };
+
   if (msg.view <= this->view) {
     if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING TIME CERTIFICATE FOR VIEW " << msg.view
                           << ", NOT HIGHER (current view=" << this->view << ")"
                           << KNRM << std::endl;
+    recordHandle();
     return;
   }
 
   if (msg.signs.getSize() < this->qsize || !Sverify(msg.signs, this->myid, this->nodes, "WISH" + std::to_string(msg.view))) {
      if (DEBUGD) std::cout << KRED << nfo() << "INVALID TIME CERTIFICATE FOR VIEW " << msg.view << KNRM << std::endl;
+     recordHandle();
      return;
   }
   
@@ -1147,6 +1167,8 @@ void Handler::handleTimeCertificate(MsgTimeCertificate msg, PID sender) {
   MsgTimeCertificate tc(msg.view, msg.signs);
   sendMsgTimeCertificate(tc, remove_from_peers(sender));
   startNewViewOP(msg.view);
+
+  recordHandle();
 }
 
 
