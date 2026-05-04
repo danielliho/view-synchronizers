@@ -987,17 +987,25 @@ void Handler::wishToAdvanceEpoch(View v) {
 }
 
 void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
-  if (msg.view <= this->view) return;
-  if (this->wishesToAdvanceView[msg.view].getSize() >= this->qsize) return;
-  if (this->wishesToAdvanceView[msg.view].hasSigned(sender)) return;
+  auto startHandle = std::chrono::steady_clock::now();
+  auto recordHandle = [&]() {
+    auto endHandle = std::chrono::steady_clock::now();
+    double handleTime = std::chrono::duration_cast<std::chrono::microseconds>(endHandle - startHandle).count();
+    stats.addTotalHandleTime(handleTime);
+  };
+
+  if (msg.view <= this->view) { recordHandle(); return; }
+  if (this->wishesToAdvanceView[msg.view].getSize() >= this->qsize) { recordHandle(); return; }
+  if (this->wishesToAdvanceView[msg.view].hasSigned(sender)) { recordHandle(); return; }
   NodeInfo *senderInfo = this->nodes.find(sender);
-  if (!senderInfo) return;
+  if (!senderInfo) { recordHandle(); return; }
   auto start = std::chrono::steady_clock::now();
   bool b = msg.sign.verify(senderInfo->getPub(), "WISHVIEW" + std::to_string(msg.view));
   auto end = std::chrono::steady_clock::now();
   stats.addCryptoVerifTime(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
   if (!b) {
     if (DEBUGD) std::cout << KRED << nfo() << "INVALID WISHVIEW SIGNATURE FROM " << sender << KNRM << std::endl;
+    recordHandle();
     return;
   }
   this->wishesToAdvanceView[msg.view].add(msg.sign);
@@ -1017,18 +1025,29 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
     MsgViewCertificate vc(msg.view, this->wishesToAdvanceView[msg.view]);
     sendMsgViewCertificate(vc, this->peers);
   }
+
+  recordHandle();
 }
 
 void Handler::handleViewCertificate(MsgViewCertificate msg, PID sender) {
+  auto startHandle = std::chrono::steady_clock::now();
+  auto recordHandle = [&]() {
+    auto endHandle = std::chrono::steady_clock::now();
+    double handleTime = std::chrono::duration_cast<std::chrono::microseconds>(endHandle - startHandle).count();
+    stats.addTotalHandleTime(handleTime);
+  };
+
   if (msg.view <= this->view) {
     if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING VIEW CERTIFICATE FOR VIEW " << msg.view
                           << ", NOT HIGHER (current view=" << this->view << ")"
                           << KNRM << std::endl;
+    recordHandle();
     return;
   }
   
   if (msg.signs.getSize() < this->qsize || !Sverify(msg.signs, this->myid, this->nodes, "WISHVIEW" + std::to_string(msg.view))) {
      if (DEBUGD) std::cout << KRED << nfo() << "INVALID VIEW CERTIFICATE FOR VIEW " << msg.view << KNRM << std::endl;
+     recordHandle();
      return;
   }
   
@@ -1037,20 +1056,30 @@ void Handler::handleViewCertificate(MsgViewCertificate msg, PID sender) {
   << KNRM << std::endl;
   
   bumpClock(msg.view);
+
+  recordHandle();
 }
 
 void Handler::handleWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, PID sender) {
-  if (msg.epoch <= this->view) return;
-  if (this->wishesToAdvanceEpoch[msg.epoch].getSize() >= this->qsize) return;
-  if (this->wishesToAdvanceEpoch[msg.epoch].hasSigned(sender)) return;
+  auto startHandle = std::chrono::steady_clock::now();
+  auto recordHandle = [&]() {
+    auto endHandle = std::chrono::steady_clock::now();
+    double handleTime = std::chrono::duration_cast<std::chrono::microseconds>(endHandle - startHandle).count();
+    stats.addTotalHandleTime(handleTime);
+  };
+
+  if (msg.epoch <= this->view) { recordHandle(); return; }
+  if (this->wishesToAdvanceEpoch[msg.epoch].getSize() >= this->qsize) { recordHandle(); return; }
+  if (this->wishesToAdvanceEpoch[msg.epoch].hasSigned(sender)) { recordHandle(); return; }
   NodeInfo *senderInfo = this->nodes.find(sender);
-  if (!senderInfo) return;
+  if (!senderInfo) { recordHandle(); return; }
   auto start = std::chrono::steady_clock::now();
   bool b = msg.sign.verify(senderInfo->getPub(), "WISHEPOCH" + std::to_string(msg.epoch));
   auto end = std::chrono::steady_clock::now();
   stats.addCryptoVerifTime(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
   if (!b) {
     if (DEBUGD) std::cout << KRED << nfo() << "INVALID WISHEPOCH SIGNATURE FROM " << sender << KNRM << std::endl;
+    recordHandle();
     return;
   }
   this->wishesToAdvanceEpoch[msg.epoch].add(msg.sign);
@@ -1072,18 +1101,29 @@ void Handler::handleWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, PID sender) {
     MsgEpochCertificate ec(msg.epoch, this->wishesToAdvanceEpoch[msg.epoch]);
     sendMsgEpochCertificate(ec, this->peers);
   }
+
+  recordHandle();
 }
 
 void Handler::handleEpochCertificate(MsgEpochCertificate msg, PID sender) {
+  auto startHandle = std::chrono::steady_clock::now();
+  auto recordHandle = [&]() {
+    auto endHandle = std::chrono::steady_clock::now();
+    double handleTime = std::chrono::duration_cast<std::chrono::microseconds>(endHandle - startHandle).count();
+    stats.addTotalHandleTime(handleTime);
+  };
+
   if (msg.epoch <= this->view) {
     if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING EPOCH CERTIFICATE FOR EPOCH " << msg.epoch
                           << ", NOT HIGHER (current view=" << this->view << ")"
                           << KNRM << std::endl;
+    recordHandle();
     return;
   }
 
   if (msg.signs.getSize() < this->qsize || !Sverify(msg.signs, this->myid, this->nodes, "WISHEPOCH" + std::to_string(msg.epoch))) {
      if (DEBUGD) std::cout << KRED << nfo() << "INVALID EPOCH CERTIFICATE FOR EPOCH " << msg.epoch << KNRM << std::endl;
+     recordHandle();
      return;
   }
 
@@ -1093,6 +1133,8 @@ void Handler::handleEpochCertificate(MsgEpochCertificate msg, PID sender) {
   startNewViewOP(msg.epoch);
   resumeTimer();
   bumpClock(msg.epoch);
+
+  recordHandle();
 }
 
 

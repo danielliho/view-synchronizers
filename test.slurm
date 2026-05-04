@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=oneshot-das5
-#SBATCH --output=slurm-%j.out
-#SBATCH --error=slurm-%j.err
+#SBATCH --output=slurm-%j.out.ansi
+#SBATCH --error=slurm-%j.err.ansi
 #SBATCH --time=00:15:00
-#SBATCH -N 4
+#SBATCH -N 6
 #SBATCH --ntasks-per-node=1
 
 set -eo pipefail
@@ -263,9 +263,9 @@ if [ "$#" -gt 0 ]; then
     fi
 else
     if [ "${FORCE_NOCOMPIL:-0}" = "1" ]; then
-        "${PYTHON}" experiments.py --das5 --nodisplay --nocompil --p8 --faults 1 --repeats 1
+        "${PYTHON}" experiments.py --das5 --nodisplay --nocompil --p8 --faults 2 --repeats 1
     else
-        "${PYTHON}" experiments.py --das5 --nodisplay --p8 --faults 1 --repeats 1
+        "${PYTHON}" experiments.py --das5 --nodisplay --p8 --faults 2 --repeats 1
     fi
 fi
 
