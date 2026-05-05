@@ -3,7 +3,7 @@
 #SBATCH --output=slurm-%j.out.ansi
 #SBATCH --error=slurm-%j.err.ansi
 #SBATCH --time=00:15:00
-#SBATCH -N 6
+#SBATCH -N 12
 #SBATCH --ntasks-per-node=1
 
 set -eo pipefail
@@ -250,6 +250,10 @@ echo "Python: ${PYTHON}"
 echo "Allocated nodes:"
 scontrol show hostnames "${SLURM_JOB_NODELIST}"
 
+echo "Starting Basic Lumiere"
+start_time=$(date +%s)
+echo "Start time: $(date)"
+
 # With no extra sbatch arguments, this mirrors:
 #   python experiments.py --docker --p8 --faults 1 --repeats 1
 #
@@ -268,4 +272,9 @@ else
         "${PYTHON}" experiments.py --das5 --nodisplay --p8 --faults 2 --repeats 1
     fi
 fi
+
+end_time=$(date +%s)
+echo "End time: $(date)"
+duration=$((end_time - start_time))
+echo "Total duration: ${duration} seconds ($((duration / 60)) minutes $((duration % 60)) seconds)"
 
