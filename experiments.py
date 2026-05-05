@@ -136,7 +136,7 @@ quantileSize2 = 0 # Used by the C++ code
 skipViews     = 0 # Used by the C++ code -- number of views to skip at the beginning of a run
 
 # don't change, those are hard coded in the C++ code:
-statsdir     = "stats"        # stats directory (don't change, hard coded in C++)
+statsBase    = "stats"        # base stats directory (overridden per run)
 params       = "App/params.h" # (don't change, hard coded in C++)
 config       = "App/config.h" # (don't change, hard coded in C++)
 addresses    = "config"       # (don't change, hard coded in C++)
@@ -155,6 +155,11 @@ allLocalPorts = []    # list of all port numbers used in local experiments
 
 dateTimeObj  = datetime.now()
 timestampStr = dateTimeObj.strftime("%d-%b-%Y-%H:%M:%S.%f")
+statsRunId   = timestampStr.replace(":", "-") + "-" + str(os.getpid())
+statsdir     = os.path.join(statsBase, statsRunId)
+statsEnv     = "STATS_DIR=" + statsdir
+os.environ["STATS_DIR"] = statsdir
+Path(statsdir).mkdir(parents=True, exist_ok=True)
 pointsFile   = statsdir + "/points-" + timestampStr
 timesFile    = statsdir + "/view-times-" + timestampStr
 abortedFile  = statsdir + "/aborted-" + timestampStr
@@ -751,7 +756,7 @@ def makeInstances(instanceIds,protocol):
 def copyClientStats(instanceClIds):
     for (n,i,priv,pub,dns,region) in instanceClIds:
         sshAdr = "ubuntu@" + dns
-        subprocess.run(["scp","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,sshAdr+":/home/ubuntu/app/stats/*","stats/"])
+        subprocess.run(["scp","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,sshAdr+":/home/ubuntu/app/" + statsdir + "/*",statsdir + "/"])
 # End of copyClientStats
 
 
@@ -779,7 +784,7 @@ def executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTran
         sshAdr = "ubuntu@" + dns
         srun2  = server + " " + str(n) + " " + str(numFaults) + " " + str(constFactor) + " " + str(numViews) + " " + str(newtimeout) + " " + str(timeoutMul) + " " + str(timeoutDiv) + " " + str(opdist) + " " + str(syncPeriod) + " " + str(joinPeriod) + " " + str(numJoiners) + " " + str(quantileSize1) + " " + str(quantileSize2) + " " + str(skipViews)
         srun   = "screen -d -m " + srun2
-        cmd    = "\"\"" + srcsgx + " && cd app && rm -f stats/* && " + stressCmd + " && " + srun2 + "\"\""
+        cmd    = "\"\"" + srcsgx + " && cd app && mkdir -p " + statsdir + " && rm -f " + statsdir + "/* && " + stressCmd + " && " + statsEnv + " " + srun2 + "\"\""
         p      = Popen(["ssh","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,cmd])
         print("the commandline is {}".format(p.args))
         procsRep.append(("R",n,i,priv,pub,dns,region,p))
@@ -813,7 +818,7 @@ def executeInstances(instanceRepIds,instanceClIds,protocol,constFactor,numClTran
         sshAdr = "ubuntu@" + dns
         crun2  = client + " " + str(n) + " " + str(numFaults) + " " + str(constFactor) + " " + str(numClTrans) + " " + str(sleepTime) + " " + str(instance)
         crun   = "screen -d -m " + crun2
-        cmd    = "\"\"" + srcsgx + " && cd app && rm -f stats/* && " + crun2 + "\"\""
+        cmd    = "\"\"" + srcsgx + " && cd app && mkdir -p " + statsdir + " && rm -f " + statsdir + "/* && " + statsEnv + " " + crun2 + "\"\""
         p      = Popen(["ssh","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,cmd])
         print("the commandline is {}".format(p.args))
         procsCl.append(("C",n,i,priv,pub,dns,region,p))
@@ -993,7 +998,7 @@ def executeAWS(instanceRepIds,instanceClIds,protocol,constFactor,numClTrans,slee
         # copy the stats over
         for (n,i,priv,pub,dns,region) in instanceRepIds:
             sshAdr = "ubuntu@" + dns
-            p = Popen(["scp","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,sshAdr+":/home/ubuntu/app/stats/*","stats/"])
+            p = Popen(["scp","-i",pem,"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,sshAdr+":/home/ubuntu/app/" + statsdir + "/*",statsdir + "/"])
             procs.append((n,i,priv,pub,dns,region,p))
 
         for (n,i,priv,pub,dns,region,p) in procs:
@@ -1273,7 +1278,7 @@ def startRemoteContainers(nodes,numReps,numClients):
         print("the commandline is {}".format(s2.args))
         s2.communicate()
         #
-        exec_cmd = docker + " exec -t " + instance + " bash -c \"" + srcsgx + "; mkdir " + statsdir + "\""
+        exec_cmd = docker + " exec -t " + instance + " bash -c \"" + srcsgx + "; mkdir -p " + statsdir + "\""
         s3 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,exec_cmd])
         print("the commandline is {}".format(s3.args))
         s3.communicate()
@@ -1396,7 +1401,7 @@ def executeClusterInstances(instanceRepIds,instanceClIds,protocol,constFactor,nu
         dockerI = dockerBase + i
         sshAdr  = node["user"] + "@" + node["host"]
         srun    = " ".join([server,str(n),str(numFaults),str(constFactor),str(numViews),str(newtimeout),str(timeoutMul),str(timeoutDiv),str(opdist),str(syncPeriod),str(joinPeriod),str(numJoiners),str(quantileSize1),str(quantileSize2),str(skipViews)])
-        run_cmd = docker + " exec -t " + dockerI + " bash -c \"" + srcsgx + "; rm -f stats/*; " + srun + "\""
+        run_cmd = docker + " exec -t " + dockerI + " bash -c \"" + srcsgx + "; mkdir -p " + statsdir + "; rm -f " + statsdir + "/*; " + statsEnv + " " + srun + "\""
         s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,run_cmd])
         print("the commandline is {}".format(s1.args))
         #s1.communicate()
@@ -1412,7 +1417,7 @@ def executeClusterInstances(instanceRepIds,instanceClIds,protocol,constFactor,nu
         dockerI = dockerBase + i
         sshAdr  = node["user"] + "@" + node["host"]
         crun    = " ".join([client,str(n),str(numFaults),str(constFactor),str(numClTrans),str(sleepTime),str(instance)])
-        run_cmd = docker + " exec -t " + dockerI + " bash -c \"" + srcsgx + "; rm -f stats/*; " + crun + "\""
+        run_cmd = docker + " exec -t " + dockerI + " bash -c \"" + srcsgx + "; mkdir -p " + statsdir + "; rm -f " + statsdir + "/*; " + statsEnv + " " + crun + "\""
         s1 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,run_cmd])
         print("the commandline is {}".format(s1.args))
         #s1.communicate()
@@ -1510,12 +1515,12 @@ def executeClusterInstances(instanceRepIds,instanceClIds,protocol,constFactor,nu
         #
         src = dockerI + ":/app/" + statsdir + "/."
         dst = statsdir + "/"
-        cp_cmd = "cd " + node["dir"] + "; mkdir " + statsdir + "; " + docker + " cp " + src + " " + dst
+        cp_cmd = "cd " + node["dir"] + "; mkdir -p " + statsdir + "; " + docker + " cp " + src + " " + dst
         s2 = Popen(["ssh","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,"-ntt",sshAdr,cp_cmd])
         print("the commandline is {}".format(s2.args))
         s2.communicate()
         #
-        subprocess.run(["scp","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,sshAdr+":"+node["dir"]+"/stats/*","stats/"])
+        subprocess.run(["scp","-i",node["key"],"-o",sshOpt1,"-o",sshOpt3,"-o",sshOpt4,"-o",sshOpt5,sshAdr+":"+node["dir"]+"/" + statsdir + "/*",statsdir + "/"])
         #
         rcmd = "rm /app/" + statsdir + "/*"
         docker_rm_cmd = docker + " exec -t " + dockerI + " bash -c \"" + rcmd + "\""
@@ -1729,6 +1734,7 @@ def needsSGX(protocol):
 
 def clearStatsDir():
     # Removing all (temporary) files in stats dir
+    Path(statsdir).mkdir(parents=True, exist_ok=True)
     files0 = glob.glob(statsdir+"/vals*")
     files1 = glob.glob(statsdir+"/throughput-view*")
     files2 = glob.glob(statsdir+"/latency-view*")
@@ -1858,11 +1864,13 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
         cmd = " ".join([server, str(i), str(numFaults), str(constFactor), str(numViews), str(newtimeout), str(timeoutMul), str(timeoutDiv), str(opdist), str(syncPeriod), str(joinPeriod), str(numJoiners), str(quantileSize1), str(quantileSize2), str(skipViews)])
         if runDocker:
             dockerInstance = dockerBase + str(i)
+            cmd = "mkdir -p " + statsdir + "; " + statsEnv + " " + cmd
             if needsSGX(protocol):
                 cmd = srcsgx + "; " + cmd
             cmd = docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\""
         if runDas5:
             host = instanceRepIds[i][1]
+            cmd = "mkdir -p " + statsdir + "; " + statsEnv + " " + cmd
             if needsSGX(protocol):
                 cmd = srcsgx + "; " + cmd
             p = runOnDas5Node(host, cmd)
@@ -1883,11 +1891,13 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
         cmd = " ".join([client, str(cid), str(numFaults), str(constFactor), str(numClTrans), str(sleepTime), str(instance)])
         if runDocker:
             dockerInstance = dockerBase + "c" + str(cid)
+            cmd = "mkdir -p " + statsdir + "; " + statsEnv + " " + cmd
             if needsSGX(protocol):
                 cmd = srcsgx + "; " + cmd
             cmd = docker + " exec -t " + dockerInstance + " bash -c \"" + cmd + "\""
         if runDas5:
             host = instanceClIds[cid][1]
+            cmd = "mkdir -p " + statsdir + "; " + statsEnv + " " + cmd
             if needsSGX(protocol):
                 cmd = srcsgx + "; " + cmd
             c = runOnDas5Node(host, cmd)
@@ -8137,20 +8147,24 @@ if args.nocopy:
 
 if args.test:
     print("done")
-elif args.file.startswith(statsdir+"/points-") or args.file.startswith(statsdir+"/final-points-"):
+elif (args.file.startswith(statsdir+"/points-") or args.file.startswith(statsdir+"/final-points-") or
+      args.file.startswith(statsBase+"/points-") or args.file.startswith(statsBase+"/final-points-")):
     createPlot(args.file)
-elif args.file.startswith(statsdir+"/clients-"):
+elif args.file.startswith(statsdir+"/clients-") or args.file.startswith(statsBase+"/clients-"):
     createTVLplot(args.file,-1)
-elif args.pfile.startswith(statsdir+"/points-") or args.pfile.startswith(statsdir+"/final-points-"):
+elif (args.pfile.startswith(statsdir+"/points-") or args.pfile.startswith(statsdir+"/final-points-") or
+      args.pfile.startswith(statsBase+"/points-") or args.pfile.startswith(statsBase+"/final-points-")):
     l = args.pfile.split(",")
     createPlotPayload(l)
-elif args.jfile.startswith(statsdir+"/points-") or args.jfile.startswith(statsdir+"/final-points-"):
+elif (args.jfile.startswith(statsdir+"/points-") or args.jfile.startswith(statsdir+"/final-points-") or
+      args.jfile.startswith(statsBase+"/points-") or args.jfile.startswith(statsBase+"/final-points-")):
     joining = True
     createPlotJoin(args.jfile)
-elif args.jfile2.startswith(statsdir+"/points-") or args.jfile2.startswith(statsdir+"/final-points-"):
+elif (args.jfile2.startswith(statsdir+"/points-") or args.jfile2.startswith(statsdir+"/final-points-") or
+      args.jfile2.startswith(statsBase+"/points-") or args.jfile2.startswith(statsBase+"/final-points-")):
     joining = True
     createPlotJoin2(args.jfile2)
-elif args.file.startswith(statsdir+"/view-times-"):
+elif args.file.startswith(statsdir+"/view-times-") or args.file.startswith(statsBase+"/view-times-"):
     createPlotViewTimes(args.file)
 elif args.conf > 0:
     genLocalConf(args.conf,addresses)
