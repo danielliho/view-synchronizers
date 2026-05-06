@@ -1364,17 +1364,18 @@ Handler::Handler(KeysFun k,
     View expectedOffset = (View)(elapsed / this->timeout);
     View nextView = epochStartView + expectedOffset + 1;
     if (this->view + 1 < nextView) {
-      stats.incTimeouts();
       if (nextView % this->qsize == 0) {
         Epoch targetEpoch = nextView / this->qsize;
         if (targetEpoch > this->lastTimeoutWishedEpoch) {
           if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), WISHING TO ADVANCE EPOCH (" << targetEpoch << ")" << KNRM << std::endl;
+          stats.incTimeouts();
           wishToAdvanceEpoch(targetEpoch);
           this->lastTimeoutWishedEpoch = targetEpoch;
         }
       } else {
         if (nextView > this->lastTimeoutWishedView) {
           if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), WISHING TO ADVANCE VIEW (" << nextView << ")" << KNRM << std::endl;
+          stats.incTimeouts();
           wishToAdvanceView(nextView);
           this->lastTimeoutWishedView = nextView;
         }
