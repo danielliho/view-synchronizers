@@ -58,7 +58,7 @@ numNonChCls    = 1     # number of clients for the non-chained versions
 numChCls       = 1     # number of clients for the chained versions
 numClTrans     = 1     # number of transactions sent by each clients
 sleepTime      = 0     # time clients sleep between 2 sends (in microseconds)
-timeout        = 5     # timeout before changing changing leader (in seconds)
+timeout        = 1     # timeout before changing changing leader (in seconds)
 timeoutMul     = 1     # factor used to multiply the timeout with when timing out
 timeoutDiv     = 1     # factor used to divide the timeout with when making progress
 #
@@ -2321,6 +2321,7 @@ def computeAvgStats(recompile,
     throughputViews = []
     latencyViews    = []
     handles         = []
+    timeoutsVals    = []
     viewSyncs       = []
     cryptoSigns     = []
     cryptoVerifs    = []
@@ -2360,6 +2361,7 @@ def computeAvgStats(recompile,
             throughputViews.append(throughputView)
             latencyViews.append(latencyView)
             handles.append(handle)
+            timeoutsVals.append(timeouts)
             viewSyncs.append(viewSyncMsgs)
             cryptoSigns.append(cryptoSign)
             cryptoVerifs.append(cryptoVerif)
@@ -2374,6 +2376,7 @@ def computeAvgStats(recompile,
     throughputView = sum(throughputViews)/goodValues if goodValues > 0 else 0.0
     latencyView    = sum(latencyViews)/goodValues    if goodValues > 0 else 0.0
     handle         = sum(handles)/goodValues         if goodValues > 0 else 0.0
+    timeouts       = sum(timeoutsVals)/goodValues    if goodValues > 0 else 0.0
     viewSyncMsgs   = sum(viewSyncs)/goodValues       if goodValues > 0 else 0.0
     cryptoSign     = sum(cryptoSigns)/goodValues     if goodValues > 0 else 0.0
     cryptoVerif    = sum(cryptoVerifs)/goodValues    if goodValues > 0 else 0.0
@@ -2384,6 +2387,7 @@ def computeAvgStats(recompile,
         "throughput(view)": throughputViews,
         "latency(view)": latencyViews,
         "handle": handles,
+        "timeouts": timeoutsVals,
         "view-sync-msgs-per-view": viewSyncs,
         "crypto(sign)": cryptoSigns,
         "crypto(verif)": cryptoVerifs,
@@ -2413,6 +2417,7 @@ def computeAvgStats(recompile,
     throughputViewNoOut = _avg_without_outliers(throughputViews, runIds, all_outlier_runs)
     latencyViewNoOut    = _avg_without_outliers(latencyViews, runIds, all_outlier_runs)
     handleNoOut         = _avg_without_outliers(handles, runIds, all_outlier_runs)
+    timeoutsNoOut       = _avg_without_outliers(timeoutsVals, runIds, all_outlier_runs)
     viewSyncMsgsNoOut   = _avg_without_outliers(viewSyncs, runIds, all_outlier_runs)
     cryptoSignNoOut     = _avg_without_outliers(cryptoSigns, runIds, all_outlier_runs)
     cryptoVerifNoOut    = _avg_without_outliers(cryptoVerifs, runIds, all_outlier_runs)
@@ -2422,6 +2427,7 @@ def computeAvgStats(recompile,
     print("avg throughput (view):",  throughputView)
     print("avg latency (view):",     latencyView)
     print("avg handle:",             handle)
+    print("avg timeouts:",           timeouts)
     print("avg view-sync-msgs-per-view:", viewSyncMsgs)
     print("avg crypto (sign):",      cryptoSign)
     print("avg crypto (verif):",     cryptoVerif)
@@ -2431,6 +2437,7 @@ def computeAvgStats(recompile,
     print("avg throughput (view) [without outliers]:",  throughputViewNoOut)
     print("avg latency (view) [without outliers]:",     latencyViewNoOut)
     print("avg handle [without outliers]:",             handleNoOut)
+    print("avg timeouts [without outliers]:",           timeoutsNoOut)
     print("avg view-sync-msgs-per-view [without outliers]:", viewSyncMsgsNoOut)
     print("avg crypto (sign) [without outliers]:",      cryptoSignNoOut)
     print("avg crypto (verif) [without outliers]:",     cryptoVerifNoOut)

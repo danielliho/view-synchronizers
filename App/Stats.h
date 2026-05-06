@@ -85,7 +85,7 @@ private:
   double totalNvTime     = 0.0; /* time leaders handling new-views */
   std::map<View,std::tuple<bool,Time,Time>> execTime; // true iff ended
 
-  unsigned int timeouts = 0;
+  int timeouts = 0;
   unsigned int numonepbs = 0;
   unsigned int numonepcs = 0;
 
@@ -162,12 +162,13 @@ public:
 
   std::vector<double> getViewTimes();
 
-  unsigned int getTimeouts();
+  int getTimeouts();
   unsigned int getNumOnePBs();
   unsigned int getNumOnePCs();
 
   void incExecViews();
   void incTimeouts();
+  void decTimeouts();
   void incNumOnePBs();
   void incNumOnePCs();
 

@@ -1357,10 +1357,10 @@ Handler::Handler(KeysFun k,
     View expectedOffset = (View)(elapsed / this->timeout);
     View nextView = epochStartView + expectedOffset;
     if (this->view < nextView) {
-      stats.incTimeouts();
       if (nextView % (2 * this->qsize) == 0) {
         if (nextView > this->lastTimeoutWishedView) {
           if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), WISHING TO ADVANCE EPOCH (" << nextView << ") " << std::chrono::duration_cast<std::chrono::milliseconds>(now - epochStartTime).count() << " ms" << KNRM << std::endl;
+          stats.incTimeouts();
           pauseTimer();
           pauseRequested = true;
           wishToAdvanceEpoch(nextView);
@@ -1369,6 +1369,7 @@ Handler::Handler(KeysFun k,
       } else {
         if (nextView > this->lastTimeoutWishedView && isInitial(nextView)) {
           if (DEBUGD || DEBUG1) std::cout << KMAG << nfo() << "TIMEOUT (" << elapsed << "s), SENDING WISH AND ADVANCING VIEW (" << nextView << ") " << std::chrono::duration_cast<std::chrono::milliseconds>(now - epochStartTime).count() << " ms" << KNRM << std::endl;
+          stats.incTimeouts();
           startNewViewOP(nextView);
           wishToAdvanceView(nextView);
           this->lastTimeoutWishedView = nextView;
@@ -3235,6 +3236,9 @@ void Handler::bumpClock(View v) {
   // Force immediate timeout processing after the bump.
   this->timer.del();
   this->timer.add(0.0);
+  if (v > this->view && !isInitial(this->view)) {
+    stats.decTimeouts();
+  }
 }
 
 
@@ -3518,7 +3522,7 @@ void Handler::recordStats() {
   double handle = (toth.tot / 1000); /* milli-seconds spent on handling messages */
 
   // Timeouts
-  unsigned int timeouts = stats.getTimeouts();
+  int timeouts = stats.getTimeouts();
 
   // onepbs
   unsigned int onepbs = stats.getNumOnePBs();
