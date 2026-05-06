@@ -1008,7 +1008,6 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
     stats.addTotalHandleTime(handleTime);
   };
 
-  if (msg.view <= this->view) { recordHandle(); return; }
   if (this->wishesToAdvanceView[msg.view].getSize() >= this->qsize) { recordHandle(); return; }
   if (this->wishesToAdvanceView[msg.view].hasSigned(sender)) { recordHandle(); return; }
   NodeInfo *senderInfo = this->nodes.find(sender);
@@ -1033,9 +1032,11 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
               << KNRM << std::endl;
   }
 
-  if (msg.view > this->view && numWishes >= this->qsize) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "SENDING VC AND BUMPING: " << msg.view << " > " << this->view << KNRM << std::endl;
-    bumpClock(msg.view);
+  if (numWishes >= this->qsize) {
+    if (msg.view > this->view) {
+      if (DEBUGD) std::cout << KBLU << nfo() << "SENDING VC AND BUMPING: " << msg.view << " > " << this->view << KNRM << std::endl;
+      bumpClock(msg.view);
+    }
     MsgViewCertificate vc(msg.view, this->wishesToAdvanceView[msg.view]);
     sendMsgViewCertificate(vc, this->peers);
   }
@@ -1082,7 +1083,6 @@ void Handler::handleWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, PID sender) {
     stats.addTotalHandleTime(handleTime);
   };
 
-  if (msg.epoch <= this->view) { recordHandle(); return; }
   if (this->wishesToAdvanceEpoch[msg.epoch].getSize() >= this->qsize) { recordHandle(); return; }
   if (this->wishesToAdvanceEpoch[msg.epoch].hasSigned(sender)) { recordHandle(); return; }
   NodeInfo *senderInfo = this->nodes.find(sender);
@@ -1107,11 +1107,13 @@ void Handler::handleWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, PID sender) {
               << KNRM << std::endl;
   }
 
-  if (msg.epoch > this->view && numWishes >= this->qsize) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "SENDING EC AND ADVANCING EPOCH: " << msg.epoch << " > " << this->view << KNRM << std::endl;
-    startNewViewOP(msg.epoch);
-    resumeTimer();
-    bumpClock(msg.epoch);
+  if (numWishes >= this->qsize) {
+    if (msg.epoch > this->view) {
+      if (DEBUGD) std::cout << KBLU << nfo() << "SENDING EC AND ADVANCING EPOCH: " << msg.epoch << " > " << this->view << KNRM << std::endl;
+      startNewViewOP(msg.epoch);
+      resumeTimer();
+      bumpClock(msg.epoch);
+    }
     MsgEpochCertificate ec(msg.epoch, this->wishesToAdvanceEpoch[msg.epoch]);
     sendMsgEpochCertificate(ec, this->peers);
   }
