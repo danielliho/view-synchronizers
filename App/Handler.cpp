@@ -8,6 +8,7 @@
 #include <string>
 #include <cstring>
 #include <mutex>
+#include <cstdlib>
 
 #include <unistd.h>
 #include <stdio.h>
@@ -50,6 +51,17 @@ std::random_device                  rand_dev;
 std::mt19937                        generator(rand_dev());
 std::uniform_int_distribution<int>  distr(0, 1);
 
+static std::string getStatsDir() {
+  const char *env = std::getenv("STATS_DIR");
+  if (env && env[0] != '\0') {
+    std::string dir(env);
+    if (!dir.empty() && dir.back() == '/') {
+      dir.pop_back();
+    }
+    return dir;
+  }
+  return "stats";
+}
 
 unsigned int Handler::getLeaderOf(View v) { return (v % this->total); }
 
@@ -1572,10 +1584,11 @@ Handler::Handler(KeysFun k,
   std::time_t time = std::chrono::system_clock::to_time_t(timeNow);
   struct tm y2k = {0};
   double seconds = difftime(time,mktime(&y2k));
-  statsVals  = "stats/vals-"  + std::to_string(this->myid) + "-" + std::to_string(seconds);
-  statsDone  = "stats/done-"  + std::to_string(this->myid) + "-" + std::to_string(seconds);
-  statsStart = "stats/start-" + std::to_string(this->myid) + "-" + std::to_string(seconds);
-  statsTimes = "stats/times-" + std::to_string(this->myid) + "-" + std::to_string(seconds);
+  std::string statsDir = getStatsDir();
+  statsVals  = statsDir + "/vals-"  + std::to_string(this->myid) + "-" + std::to_string(seconds);
+  statsDone  = statsDir + "/done-"  + std::to_string(this->myid) + "-" + std::to_string(seconds);
+  statsStart = statsDir + "/start-" + std::to_string(this->myid) + "-" + std::to_string(seconds);
+  statsTimes = statsDir + "/times-" + std::to_string(this->myid) + "-" + std::to_string(seconds);
   stats.setId(this->myid);
 
 
