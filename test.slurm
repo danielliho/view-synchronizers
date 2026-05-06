@@ -2,8 +2,8 @@
 #SBATCH --job-name=oneshot-das5
 #SBATCH --output=slurm-%j.out.ansi
 #SBATCH --error=slurm-%j.err.ansi
-#SBATCH --time=00:15:00
-#SBATCH -N 12
+#SBATCH --time=01:15:00
+#SBATCH -N 32
 #SBATCH --ntasks-per-node=1
 
 set -eo pipefail
