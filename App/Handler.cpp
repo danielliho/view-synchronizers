@@ -8,6 +8,7 @@
 #include <string>
 #include <cstring>
 #include <mutex>
+#include <cstdlib>
 
 #include <unistd.h>
 #include <stdio.h>
@@ -52,6 +53,17 @@ std::random_device                  rand_dev;
 std::mt19937                        generator(rand_dev());
 std::uniform_int_distribution<int>  distr(0, 1);
 
+static std::string getStatsDir() {
+  const char *env = std::getenv("STATS_DIR");
+  if (env && env[0] != '\0') {
+    std::string dir(env);
+    if (!dir.empty() && dir.back() == '/') {
+      dir.pop_back();
+    }
+    return dir;
+  }
+  return "stats";
+}
 
 unsigned int Handler::getLeaderOf(View v) { return (v % this->total); }
 
@@ -995,7 +1007,7 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
     stats.addTotalHandleTime(handleTime);
   };
 
-  if (msg.view <= this->view) { recordHandle(); return; }
+  if (this->wishesToAdvanceView[msg.view].getSize() >= this->qsize) { recordHandle(); return; }
   if (this->wishesToAdvanceView[msg.view].hasSigned(sender)) { recordHandle(); return; }
   NodeInfo *senderInfo = this->nodes.find(sender);
   if (!senderInfo) { recordHandle(); return; }
@@ -1019,11 +1031,13 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
               << KNRM << std::endl;
   }
 
-  if (msg.view > this->view && msg.epoch == this->epoch && numWishes >= this->qsize) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "SENDING VC AND ADVANCING VIEW: " << msg.view << " > " << this->view << KNRM << std::endl;
+  if (numWishes >= this->qsize) {
     MsgViewCertificate vc(msg.view, msg.epoch, this->wishesToAdvanceView[msg.view]);
     sendMsgViewCertificate(vc, this->peers);
-    startNewViewOP(vc.view);
+    if (msg.view > this->view && msg.epoch == this->epoch) {
+      if (DEBUGD) std::cout << KBLU << nfo() << "SENDING VC AND ADVANCING VIEW: " << msg.view << " > " << this->view << KNRM << std::endl;
+      startNewViewOP(vc.view);
+    }
   }
 
   recordHandle();
@@ -1068,7 +1082,7 @@ void Handler::handleWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, PID sender) {
     stats.addTotalHandleTime(handleTime);
   };
 
-  if (msg.epoch <= this->epoch) { recordHandle(); return; }
+  if (this->wishesToAdvanceEpoch[msg.epoch].getSize() >= this->qsize) { recordHandle(); return; }
   if (this->wishesToAdvanceEpoch[msg.epoch].hasSigned(sender)) { recordHandle(); return; }
   NodeInfo *senderInfo = this->nodes.find(sender);
   if (!senderInfo) { recordHandle(); return; }
@@ -1092,16 +1106,18 @@ void Handler::handleWishToAdvanceEpoch(MsgWishToAdvanceEpoch msg, PID sender) {
               << KNRM << std::endl;
   }
 
-  if (msg.epoch > this->epoch && numWishes >= this->qsize) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "SENDING EC AND ADVANCING EPOCH: " << msg.epoch << " > " << this->epoch << KNRM << std::endl;
-    this->epoch = msg.epoch;
-    epochStartTime = std::chrono::steady_clock::now();
-    epochStartView = this->view;
-    this->timer.del();
-    this->timer.add(this->timeout);
+  if (numWishes >= this->qsize) {
     MsgEpochCertificate ec(msg.epoch, this->wishesToAdvanceEpoch[msg.epoch]);
     sendMsgEpochCertificate(ec, this->peers);
-    wishToAdvanceView(msg.epoch * this->qsize);
+    if (msg.epoch > this->epoch) {
+      if (DEBUGD) std::cout << KBLU << nfo() << "SENDING EC AND ADVANCING EPOCH: " << msg.epoch << " > " << this->epoch << KNRM << std::endl;
+      this->epoch = msg.epoch;
+      epochStartTime = std::chrono::steady_clock::now();
+      epochStartView = this->view;
+      this->timer.del();
+      this->timer.add(this->timeout);
+      wishToAdvanceView(msg.epoch * this->qsize);
+    }
   }
 
   recordHandle();
@@ -1556,10 +1572,11 @@ Handler::Handler(KeysFun k,
   std::time_t time = std::chrono::system_clock::to_time_t(timeNow);
   struct tm y2k = {0};
   double seconds = difftime(time,mktime(&y2k));
-  statsVals  = "stats/vals-"  + std::to_string(this->myid) + "-" + std::to_string(seconds);
-  statsDone  = "stats/done-"  + std::to_string(this->myid) + "-" + std::to_string(seconds);
-  statsStart = "stats/start-" + std::to_string(this->myid) + "-" + std::to_string(seconds);
-  statsTimes = "stats/times-" + std::to_string(this->myid) + "-" + std::to_string(seconds);
+  std::string statsDir = getStatsDir();
+  statsVals  = statsDir + "/vals-"  + std::to_string(this->myid) + "-" + std::to_string(seconds);
+  statsDone  = statsDir + "/done-"  + std::to_string(this->myid) + "-" + std::to_string(seconds);
+  statsStart = statsDir + "/start-" + std::to_string(this->myid) + "-" + std::to_string(seconds);
+  statsTimes = statsDir + "/times-" + std::to_string(this->myid) + "-" + std::to_string(seconds);
   stats.setId(this->myid);
 
 

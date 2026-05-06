@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <iostream>
 #include <fstream>
+#include <cstdlib>
 
 #include "Message.h"
 //#include "Nodes.h"
@@ -303,8 +304,13 @@ int main(int argc, char const *argv[]) {
   struct tm y2k = {0};
   double seconds = difftime(time,mktime(&y2k));
   std::string stamp = std::to_string(inst) + "-" + std::to_string(cid) + "-" + std::to_string(seconds);
-  statsThroughputLatency = "stats/client-throughput-latency-" + stamp;
-  debugThroughputLatency = "stats/debug-client-throughput-latency";
+  const char *statsEnv = std::getenv("STATS_DIR");
+  std::string statsDir = (statsEnv && statsEnv[0] != '\0') ? std::string(statsEnv) : "stats";
+  if (!statsDir.empty() && statsDir.back() == '/') {
+    statsDir.pop_back();
+  }
+  statsThroughputLatency = statsDir + "/client-throughput-latency-" + stamp;
+  debugThroughputLatency = statsDir + "/debug-client-throughput-latency";
 
 
   // std::ofstream d("debug", std::ios_base::app);
