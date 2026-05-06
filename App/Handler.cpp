@@ -3631,7 +3631,7 @@ void Handler::replyHash(Hash hash) {
 
 bool Handler::timeToStop() {
   //bool b = this->maxViews > 0 && this->maxViews <= this->viewsWithoutNewTrans;
-  bool b = this->maxViews > 0 && this->maxViews <= this->view+1;
+  bool b = this->maxViews > 0 && stats.getExecViews() >= this->maxViews;
   if (DEBUG) { std::cout << KBLU << nfo() << "timeToStop=" << b << ";maxViews=" << this->maxViews << ";viewsWithoutNewTrans=" << this->viewsWithoutNewTrans << ";pending-transactions=" << this->transactions.size() << KNRM << std::endl; }
   if (DEBUG1) { if (b) { std::cout << KBLU << nfo() << "maxViews=" << this->maxViews << ";viewsWithoutNewTrans=" << this->viewsWithoutNewTrans << ";pending-transactions=" << this->transactions.size() << KNRM << std::endl; } }
   return b;
@@ -7157,12 +7157,13 @@ void Handler::executeOP(OPprepare cert) {
   if (DEBUG0 && DEBUGE) std::cout << KRED << nfo() << "OP-EXECUTE(" << this->view << "/" << this->maxViews << ":" << time << ")" << stats.toString() << KNRM << std::endl;
 #endif
 
-  if (DEBUGD || DEBUG1) std::cout << KGRN << nfo() << "VIEW " << this->view << " COMPLETED SUCCESSFULLY" << KNRM << std::endl;
+  if (DEBUGD || DEBUG1) std::cout << KGRN << nfo() << "VIEW " << this->view << " COMPLETED SUCCESSFULLY (nr. " << stats.getExecViews() << ")" << KNRM << std::endl;
 
   // Reply
   replyHash(cert.getHash());
 
   if (timeToStop()) {
+    this->timer.del();
     recordStats();
   } else {
     bumpClock(cert.getView() + 1);

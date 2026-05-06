@@ -133,6 +133,8 @@ Times Stats::getTotalPCommTime(unsigned int quant)  { return getTotalTime(quant,
 
 std::vector<double> Stats::getViewTimes() { return this->viewTimes; }
 
+unsigned int Stats::getExecViews() { return this->execViews; }
+
 int Stats::getTimeouts()  { return this->timeouts;  }
 unsigned int Stats::getNumOnePBs() { return this->numonepbs; }
 unsigned int Stats::getNumOnePCs() { return this->numonepcs; }
