@@ -150,6 +150,7 @@ class Handler {
   RBstoreAuth lastRBstore;
   // Last executed view
   View lastRBexec = 0;
+  unsigned int consecutiveTimeouts = 0;
   // To keep track of the join requests that have been agreed upon
   Joins agreedJoins;
   // Joins that have been received but not yet agreed upon

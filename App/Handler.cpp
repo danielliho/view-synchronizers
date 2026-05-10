@@ -979,110 +979,6 @@ int Handler::initializeSGX() {
 #endif
 // ------------------------------------
 
-
-
-void Handler::startNewViewOnTimeout() {
-  // TODO: start a new-view
-#if defined(BASIC_BASELINE)
-  if (DEBUG0) std::cout << KMAG << nfo() << "starting a new view" << KNRM << std::endl;
-  startNewView();
-#elif defined (BASIC_CHEAP)
-  startNewView();
-#elif defined (BASIC_QUICK)
-  startNewViewAcc();
-#elif defined (BASIC_CHEAP_AND_QUICK)
-  startNewViewComb();
-#elif defined (BASIC_FREE) || defined (BASIC_DAMYSUS_PACEMAKER) || defined (BASIC_DAMYSUS_ACHILLES) || defined (BASIC_DAMYSUS3_PACEMAKER) || defined (BASIC_DAMYSUS_ROTE)
-  startNewViewFree();
-#elif defined (BASIC_ROLL)
-  //if (DEBUG1) std::cout << KRED << nfo() << "TODO-startNewViewOnTimeout" << KNRM << std::endl;
-  //exit(0);
-  if (!this->rejoining) { // only nodes that are not rejoining participate
-    if (this->synchronizing) {
-      if (this->syncAttempts < this->qsize) {
-        Session s = this->session+1;
-        PID firstLeader = getLeaderOf(s);
-        PID oldLeader   = (firstLeader + this->syncAttempts - 1) % this->total;
-        PID newLeader   = (firstLeader + this->syncAttempts) % this->total;
-        this->syncAttempts++;
-
-        //Joins joins = getPreparedJoins(this->lastRBstore.getStore().getSession(),this->lastRBstore.getStore().getView());
-
-        while (this->agreedJoins.in(newLeader) || this->receivedJoins.in(newLeader)) {
-          PID leader = (newLeader + 1) % this->total;
-          if (DEBUG1W) std::cout << KLRED << nfo() << "potential leader (" << newLeader << ")"
-                                 << " is restarting, moving on to the next one (" << leader << ")"
-                                 << KNRM << std::endl;
-          newLeader = leader;
-        }
-
-        if (DEBUG1W) std::cout << KRED << nfo() << "TODO - timed-out while synchronizing"
-                              << " (attempt=" << this->syncAttempts << ") with leaders:"
-                              << " first-leader?=" << firstLeader
-                              << " old-leader?="   << oldLeader
-                              << " new-leader="    << newLeader
-                              << KNRM
-                              << std::endl;
-
-        // if (this->agreedJoins.in(newLeader)) {
-        //   if (DEBUG1) { std::cout << KLGRN << nfo() << "new synchronization leader (" << newLeader << ")"
-        //                           << " is known to be restarting and can be skipped"
-        //                           << KNRM << std::endl; }
-
-        //   // TODO: while/for loop instead!
-        //   startNewViewOnTimeout();
-
-        // } else {
-
-        // TODO - This is a very simple case of timeouts for now.
-        std::set<Sync> syncs = this->log.getSync(s);
-        if (syncs.size() > 0) {
-          std::set<Sync>::iterator it=syncs.begin();
-          Sync someSync = (Sync)*it; // 1st one
-          wishToAdvanceOnSync(someSync,newLeader);
-        } else {
-          if (DEBUG0) std::cout << KRED << nfo() << "FAILED: timed-out while synchronizing -- no previous sync recorded" << KNRM << std::endl;
-          if (DEBUG0) std::cout << KRED << nfo() << "EXIT!(0)" << KNRM << std::endl;
-          exit(0);
-        }
-      } else {
-        if (DEBUG0) std::cout << KRED << nfo() << "FAILED: timed-out while synchronizing -- too many attempts: " << this->syncAttempts << KNRM << std::endl;
-        if (DEBUG0) std::cout << KRED << nfo() << "EXIT!(1)" << KNRM << std::endl;
-        exit(0);
-      }
-    } else {
-      // Not synchronizing
-      PID oldLeader = getLeaderOf(this->view);
-      PID newLeader = getLeaderOf(this->view+1);
-      if (DEBUG1W) std::cout << KRED << nfo() << "starting new view on timeout -- leaders: " << oldLeader << " -> " << newLeader << KNRM << std::endl;
-      // TODO: Check that this->lastRBstore is for the current session and prepv
-      // TODO: Remove this check. This is just to check that nodes do not timeout too much
-      if (oldLeader < this->numJoiners) {
-        // timed-out most likely due to the fact that the old leader was a rejoiner
-        startNewViewOrSyncRB(this->lastRBstore);
-      } else {
-        if (DEBUG0) std::cout << KRED << nfo() << "FAILURE? not sure why a timeout, old leader (" << oldLeader << ") is not a rejoiner"
-                              << KNRM << std::endl;
-        //if (DEBUG0) std::cout << KRED << nfo() << "EXIT!" << KNRM << std::endl;
-        //exit(0);
-        startNewViewOrSyncRB(this->lastRBstore);
-      }
-    }
-  }
-#elif defined (BASIC_ONEP) || defined (BASIC_ONEPB) || defined (BASIC_ONEPC) || defined (BASIC_ONEPD)
-//View synchronization stuff
-  if (DEBUGD) std::cout << KMAG << nfo() << "TIMEOUT, WISHING TO ADVANCE VIEW" << KNRM << std::endl;
-  //TODO with to avance view+2 if consecutive timeout
-  wishToAdvanceView(this->view+1);
-#elif defined (CHAINED_BASELINE)
-  startNewViewCh();
-#elif defined (CHAINED_CHEAP_AND_QUICK)
-  startNewViewChComb();
-#else
-  recordStats();
-#endif
-}
-
 //View synchronization messages
 void Handler::wishToAdvanceView(View v) {
   Sign sign = Ssign(this->priv, this->myid, "WISH" + std::to_string(v));
@@ -1107,7 +1003,7 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
     stats.addTotalHandleTime(handleTime);
   };
 
-  if (msg.view <= this->view) { recordHandle(); return; }
+  if (this->wishesToAdvanceView[msg.view].getSize() >= this->qsize) { recordHandle(); return; }
 
   if (this->wishesToAdvanceView[msg.view].hasSigned(sender)) {
     recordHandle();
@@ -1140,11 +1036,13 @@ void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
               << KNRM << std::endl;
   }
 
-  if (msg.view > this->view && numWishes >= this->qsize) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "STORING AND SENDING TC AND ADVANCING VIEW: " << msg.view << " > " << this->view << KNRM << std::endl;
+  if (numWishes >= this->qsize) {
     MsgTimeCertificate tc(msg.view, this->wishesToAdvanceView[msg.view]);
     sendMsgTimeCertificate(tc, this->peers);
-    startNewViewOP(tc.view);
+    if (msg.view > this->view) {
+      if (DEBUGD) std::cout << KBLU << nfo() << "STORING AND SENDING TC AND ADVANCING VIEW: " << msg.view << " > " << this->view << KNRM << std::endl;
+      startNewViewOP(tc.view);
+    }
   }
 
   recordHandle();
@@ -1326,6 +1224,8 @@ Handler::Handler(KeysFun k,
   this->skip         = skip;
   this->kf           = k;
 
+  this->consecutiveTimeouts = 0;
+
   // further initialization of variables
   this->agreedJoins.reset();
   this->receivedJoins = Joins();
@@ -1378,24 +1278,20 @@ Handler::Handler(KeysFun k,
                              });
 
   this->timer = salticidae::TimerEvent(pec, [this](salticidae::TimerEvent &) {
-    double newTimeout = this->timeoutMul*this->timeout;
-    PID oldLeader = getCurrentLeader();
-    PID newLeader = getLeaderOf(this->view+1);
-    if (DEBUG0) printNowTime(KLRED, "timer ran out (timeout:" + std::to_string(this->timeout) + "->" + std::to_string(newTimeout) + ") - leader=" + std::to_string(oldLeader) + "->" + std::to_string(newLeader));
     Time now = std::chrono::steady_clock::now();
     // time in seconds since the timer was last set
-    double time = std::chrono::duration_cast<std::chrono::microseconds>(now - timerTime).count() / (1000 * 1000);
+    double time = std::chrono::duration_cast<std::chrono::microseconds>(now - timerTime).count() / (1000.0 * 1000.0);
     if (time < this->timeout) {
-      if (DEBUG1W) printNowTime(KLRED, "not yet time to timeout:" + std::to_string(time) + " < " + std::to_string(this->timeout));
       double remTime = this->timeout - time;
       this->timer.del();
       this->timer.add(remTime);
     } else {
-      if (DEBUG1W) printNowTime(KLRED, "time to timeout:" + std::to_string(time) + " >= " + std::to_string(this->timeout));
       stats.incTimeouts();
-      startNewViewOnTimeout();
+      // this->consecutiveTimeouts++; // for gradual cogsworth only
+      if (DEBUGD) std::cout << KMAG << nfo() << "TIMEOUT, WISHING TO ADVANCE VIEW " << this->view + 1 + this->consecutiveTimeouts << " (" << time << ")" << KNRM << std::endl;
+      wishToAdvanceView(this->view + 1 + this->consecutiveTimeouts);
       this->timer.del();
-      this->timeout=newTimeout;
+      this->timeout = this->initTimeout * 2;
       this->timer.add(this->timeout);
       timerTime = std::chrono::steady_clock::now();
     }
@@ -3150,7 +3046,7 @@ void Handler::setTimer() {
   if (DEBUG1) printNowTime(KMAG, "deleting timer(timeout:" + std::to_string(this->timeout) + ")");
   this->timer.del();
   this->timeout = this->timeout / this->timeoutDiv;
-  if (this->timeout < this->initTimeout) { this->timeout = this->initTimeout; }
+  this->timeout = this->initTimeout * 3;
   if (DEBUG1) printNowTime(KMAG, "adding timer(timeout:" + std::to_string(this->timeout) + ")");
   this->timer.add(this->timeout);
   this->timerView = this->view;
@@ -5999,13 +5895,27 @@ MsgNewViewOPB Handler::genMsgNewViewOPB() {
     if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:no need to generate a new store, has one for " << (this->view-1) << KNRM << std::endl;
     store = OPstore(prep.getView(),prep.getHash(),prep.getV(),prep.getAuths().get(0));
   } else {
-    if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:generating a new store" << KNRM << std::endl;
-    //auto start2 = std::chrono::steady_clock::now();
-    store = callTEEstoreOP(prop);
-    //auto end2 = std::chrono::steady_clock::now();
-    //double time2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - start2).count();
-    //stats.addTotalGen2Time(time2);
-    this->log.storeStoreOp(store);
+    //View synchronization: protocol changes
+    if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:generating stores to catch up" << KNRM << std::endl;
+    View targetStoreView = (this->view == 0) ? 0 : this->view - 1;
+    unsigned int maxCatchupSteps = static_cast<unsigned int>(this->view + this->qsize + 1);
+
+    for (unsigned int i = 0; i < maxCatchupSteps && prep.getAuths().getSize() != 1; i++) {
+      OPstore generated = callTEEstoreOP(prop);
+      if (!generated.getAuth().getHash().getSet()) {
+        if (DEBUG1) std::cout << KBRED << nfo() << "genMsgNewViewOPB:failed to generate catch-up store at step " << i << KNRM << std::endl;
+        break;
+      }
+
+      store = generated;
+      this->log.storeStoreOp(store);
+      prep = this->log.getOPstores(targetStoreView,1);
+    }
+
+    if (prep.getAuths().getSize() == 1) {
+      store = OPstore(prep.getView(),prep.getHash(),prep.getV(),prep.getAuths().get(0));
+      if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:catch-up complete for " << targetStoreView << KNRM << std::endl;
+    }
   }
 
   OPnvblock nv(block,OPnvcert(store,cert));
@@ -6043,13 +5953,27 @@ MsgNewViewOPBB Handler::genMsgNewViewOPBB() {
     if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPBB:no need to generate a new store, has one for " << (this->view-1) << KNRM << std::endl;
     store = OPstore(prep.getView(),prep.getHash(),prep.getV(),prep.getAuths().get(0));
   } else {
-    if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPBB:generating a new store" << KNRM << std::endl;
-    //auto start2 = std::chrono::steady_clock::now();
-    store = callTEEstoreOP(prop);
-    //auto end2 = std::chrono::steady_clock::now();
-    //double time2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - start2).count();
-    //stats.addTotalGen2Time(time2);
-    this->log.storeStoreOp(store);
+    //View synchronization: protocol changes
+    if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:generating stores to catch up" << KNRM << std::endl;
+    View targetStoreView = (this->view == 0) ? 0 : this->view - 1;
+    unsigned int maxCatchupSteps = static_cast<unsigned int>(this->view + this->qsize + 1);
+
+    for (unsigned int i = 0; i < maxCatchupSteps && prep.getAuths().getSize() != 1; i++) {
+      OPstore generated = callTEEstoreOP(prop);
+      if (!generated.getAuth().getHash().getSet()) {
+        if (DEBUG1) std::cout << KBRED << nfo() << "genMsgNewViewOPB:failed to generate catch-up store at step " << i << KNRM << std::endl;
+        break;
+      }
+
+      store = generated;
+      this->log.storeStoreOp(store);
+      prep = this->log.getOPstores(targetStoreView,1);
+    }
+
+    if (prep.getAuths().getSize() == 1) {
+      store = OPstore(prep.getView(),prep.getHash(),prep.getV(),prep.getAuths().get(0));
+      if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:catch-up complete for " << targetStoreView << KNRM << std::endl;
+    }
   }
 
   auto start2 = std::chrono::steady_clock::now();
@@ -6175,6 +6099,7 @@ void Handler::startNewViewOP(int nextView) {
   this->view = targetView;
 
   // We start the timer
+  this->consecutiveTimeouts = 0;
   setTimer();
 
   // if the lastest justification we've generated is for what is now the current view (since we just incremented it)
