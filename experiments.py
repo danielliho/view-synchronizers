@@ -520,11 +520,16 @@ def getDas5Address(host):
 # End of getDas5Address
 
 
-def startDas5Processes(numReps,numClients):
-    print("running in DAS-5 mode, using SLURM nodes for", numReps, "replicas and", numClients, "clients")
+def startDas5Processes(numReps,numClients,numDeadNodes=0):
+    numLiveReps = numReps - numDeadNodes
+    if numLiveReps <= 0:
+        raise RuntimeError("DAS-5 run has no live replicas: replicas=" + str(numReps) + ", dead=" + str(numDeadNodes))
+
+    print("running in DAS-5 mode, using SLURM nodes for", numLiveReps, "live replicas,",
+          numDeadNodes, "dead replicas, and", numClients, "clients")
 
     nodes = readDas5Nodes()
-    needed = numReps + numClients
+    needed = numLiveReps + numClients
     if len(nodes) < needed:
         print("WARNING: DAS-5 allocation has", len(nodes), "node(s), but this run wants", needed,
               "processes; some nodes will host more than one process")
@@ -539,10 +544,10 @@ def startDas5Processes(numReps,numClients):
 
     instanceRepIds = []
     instanceClIds  = []
-    for i in range(numReps):
+    for i in range(numLiveReps):
         instanceRepIds.append((i, nodes[i % len(nodes)]))
     for i in range(numClients):
-        instanceClIds.append((i, nodes[(numReps + i) % len(nodes)]))
+        instanceClIds.append((i, nodes[(numLiveReps + i) % len(nodes)]))
 
     return (instanceRepIds, instanceClIds)
 # End of startDas5Processes
@@ -1828,7 +1833,7 @@ def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFa
     instanceRepIds = []
     instanceClIds  = []
     if runDas5:
-        (instanceRepIds, instanceClIds) = startDas5Processes(numReps,numClients)
+        (instanceRepIds, instanceClIds) = startDas5Processes(numReps,numClients,numDeadNodes)
     else:
         genLocalConf(numReps,addresses)
 
@@ -7806,7 +7811,7 @@ parser.add_argument("--throughput", type=int, default=1,   help="to not print de
 parser.add_argument("--nodisplay",  action="store_true",   help="do not open generated plots in an image viewer")
 parser.add_argument("--rate",       type=int, default=0,   help="bandwidth when using netem")
 parser.add_argument("--trans",      type=int, default=0,   help="number of transactions per block")
-parser.add_argument("--timeout",    type=int, default=0,   help="timeout before starting a new view (in seconds)")
+parser.add_argument("--timeout",    type=float, default=0,   help="timeout before starting a new view (in seconds)")
 parser.add_argument("--timeoutMul", type=int, default=0,   help="factor used to mulitply the timeout with when timeouts occur")
 parser.add_argument("--timeoutDiv", type=int, default=0,   help="factor used to divide the timeout with when making progress")
 parser.add_argument("--opdist",     type=int, default=0,   help="OP cases")
