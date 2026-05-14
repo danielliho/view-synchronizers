@@ -1056,14 +1056,6 @@ void Handler::handleTimeCertificate(MsgTimeCertificate msg, PID sender) {
     stats.addTotalHandleTime(handleTime);
   };
 
-  if (msg.view <= this->view) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING TIME CERTIFICATE FOR VIEW " << msg.view
-                          << ", NOT HIGHER (current view=" << this->view << ")"
-                          << KNRM << std::endl;
-    recordHandle();
-    return;
-  }
-
   if (msg.signs.getSize() < this->qsize || !Sverify(msg.signs, this->myid, this->nodes, "WISH" + std::to_string(msg.view))) {
      if (DEBUGD) std::cout << KRED << nfo() << "INVALID TIME CERTIFICATE FOR VIEW " << msg.view << KNRM << std::endl;
      recordHandle();
@@ -1637,14 +1629,6 @@ void Handler::handle_wishtoadvanceview(MsgWishToAdvanceView msg, const PeerNet::
     }
   }
 
-  if (DEBUGD) {
-    if (found) {
-      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM " << sender << KNRM << std::endl;
-    } else {
-      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM unknown-peer" << KNRM << std::endl;
-    }
-  }
-
   handleWishToAdvanceView(msg, sender);
 }
 
@@ -1655,6 +1639,10 @@ void Handler::sendMsgTimeCertificate(MsgTimeCertificate msg, Peers recipients) {
 }
 
 void Handler::handle_timecertificate(MsgTimeCertificate msg, const PeerNet::conn_t &conn) {
+  if (msg.view <= this->view) {
+    return;
+  }
+
   PID sender = this->myid;
   bool found = false;
   salticidae::PeerId senderPeerId = conn->get_peer_id();
@@ -1664,14 +1652,6 @@ void Handler::handle_timecertificate(MsgTimeCertificate msg, const PeerNet::conn
       sender = std::get<0>(peer);
       found = true;
       break;
-    }
-  }
-
-  if (DEBUGD) {
-    if (found) {
-      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM " << sender << KNRM << std::endl;
-    } else {
-      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM unknown-peer" << KNRM << std::endl;
     }
   }
 
