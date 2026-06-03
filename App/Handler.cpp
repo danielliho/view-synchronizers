@@ -1051,14 +1051,6 @@ void Handler::handleViewCertificate(MsgViewCertificate msg, PID sender) {
     stats.addTotalHandleTime(handleTime);
   };
 
-  if (msg.view <= this->view || msg.epoch != this->epoch) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING VIEW CERTIFICATE FOR VIEW " << msg.view
-                          << ", NOT HIGHER (current view=" << this->view << ")"
-                          << KNRM << std::endl;
-    recordHandle();
-    return;
-  }
-
   if (msg.signs.getSize() < this->qsize || !Sverify(msg.signs, this->myid, this->nodes, "WISHVIEW" + std::to_string(msg.view) + "-" + std::to_string(msg.epoch))) {
      if (DEBUGD) std::cout << KRED << nfo() << "INVALID VIEW CERTIFICATE FOR VIEW " << msg.view << KNRM << std::endl;
      recordHandle();
@@ -1130,14 +1122,6 @@ void Handler::handleEpochCertificate(MsgEpochCertificate msg, PID sender) {
     double handleTime = std::chrono::duration_cast<std::chrono::microseconds>(endHandle - startHandle).count();
     stats.addTotalHandleTime(handleTime);
   };
-
-  if (msg.epoch <= this->epoch) {
-    if (DEBUGD) std::cout << KBLU << nfo() << "IGNORING EPOCH CERTIFICATE FOR EPOCH " << msg.epoch
-                          << ", NOT HIGHER (current epoch=" << this->epoch << ")"
-                          << KNRM << std::endl;
-    recordHandle();
-    return;
-  }
 
   if (msg.signs.getSize() < this->qsize || !Sverify(msg.signs, this->myid, this->nodes, "WISHEPOCH" + std::to_string(msg.epoch))) {
      if (DEBUGD) std::cout << KRED << nfo() << "INVALID EPOCH CERTIFICATE FOR EPOCH " << msg.epoch << KNRM << std::endl;
@@ -1730,14 +1714,6 @@ void Handler::handle_wishtoadvanceview(MsgWishToAdvanceView msg, const PeerNet::
     }
   }
 
-  if (DEBUGD) {
-    if (found) {
-      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM " << sender << KNRM << std::endl;
-    } else {
-      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM unknown-peer" << KNRM << std::endl;
-    }
-  }
-
   handleWishToAdvanceView(msg, sender);
 }
 
@@ -1760,14 +1736,6 @@ void Handler::handle_wishtoadvanceepoch(MsgWishToAdvanceEpoch msg, const PeerNet
     }
   }
 
-  if (DEBUGD) {
-    if (found) {
-      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM " << sender << KNRM << std::endl;
-    } else {
-      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM unknown-peer" << KNRM << std::endl;
-    }
-  }
-
   handleWishToAdvanceEpoch(msg, sender);
 }
 
@@ -1778,6 +1746,10 @@ void Handler::sendMsgViewCertificate(MsgViewCertificate msg, Peers recipients) {
 }
 
 void Handler::handle_viewcertificate(MsgViewCertificate msg, const PeerNet::conn_t &conn) {
+  if (msg.view <= this->view || msg.epoch != this->epoch) {
+    return;
+  }
+
   PID sender = this->myid;
   bool found = false;
   salticidae::PeerId senderPeerId = conn->get_peer_id();
@@ -1787,14 +1759,6 @@ void Handler::handle_viewcertificate(MsgViewCertificate msg, const PeerNet::conn
       sender = std::get<0>(peer);
       found = true;
       break;
-    }
-  }
-
-  if (DEBUGD) {
-    if (found) {
-      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM " << sender << KNRM << std::endl;
-    } else {
-      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM unknown-peer" << KNRM << std::endl;
     }
   }
   
@@ -1808,6 +1772,10 @@ void Handler::sendMsgEpochCertificate(MsgEpochCertificate msg, Peers recipients)
 }
 
 void Handler::handle_epochcertificate(MsgEpochCertificate msg, const PeerNet::conn_t &conn) {
+  if (msg.epoch <= this->epoch) {
+    return;
+  }
+
   PID sender = this->myid;
   bool found = false;
   salticidae::PeerId senderPeerId = conn->get_peer_id();
@@ -1817,14 +1785,6 @@ void Handler::handle_epochcertificate(MsgEpochCertificate msg, const PeerNet::co
       sender = std::get<0>(peer);
       found = true;
       break;
-    }
-  }
-
-  if (DEBUGD) {
-    if (found) {
-      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM " << sender << KNRM << std::endl;
-    } else {
-      std::cout << KBLU << nfo() << "RECEIVED:" << msg.prettyPrint() << " FROM unknown-peer" << KNRM << std::endl;
     }
   }
 
