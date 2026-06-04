@@ -414,6 +414,13 @@ runDas5        = False
 das5Nodes      = []          # hostnames allocated by SLURM
 das5AddressCmd = "hostname -f"
 
+## RTT measurement mode
+
+runRTT         = False
+rttCmd         = "./rtt {id} {num_nodes} {config} {timeout}"
+rttTimeout     = 0
+rttNodes       = 0
+
 
 ## Code
 
@@ -1823,6 +1830,72 @@ def mkApp(protocol,constFactor,numFaults,numTrans,payloadSize):
         else:
             subprocess.check_call(["make","-j",str(ncores),"server","client"])
 # End of mkApp
+
+
+def runRTTMeasurement():
+    if rttNodes <= 0:
+        raise RuntimeError("--rtt requires --rtt-nodes > 0")
+
+    numReps = rttNodes
+    numFaults = faults[0] if len(faults) > 0 else 1
+    constFactor = 0
+
+    print(">> RTT measurement mode")
+    print(">> total nodes=", numReps)
+    print(">> RTT command template:", rttCmd)
+
+    instanceRepIds = []
+    if runDas5:
+        (instanceRepIds, _) = startDas5Processes(numReps,0)
+    else:
+        genLocalConf(numReps,addresses)
+
+    subs = []
+    for i in range(numReps):
+        try:
+            cmd = rttCmd.format(id=i,
+                                node_id=i,
+                                num_nodes=numReps,
+                                nodes=numReps,
+                                faults=numFaults,
+                                const_factor=constFactor,
+                                config=addresses,
+                                statsdir=statsdir,
+                                timeout=rttTimeout)
+        except KeyError as e:
+            raise RuntimeError("--rtt-cmd uses unknown placeholder: " + str(e))
+
+        cmd = "mkdir -p " + statsdir + "; " + statsEnv + " " + cmd
+        if runDas5:
+            host = instanceRepIds[i][1]
+            p = runOnDas5Node(host, cmd)
+        else:
+            p = Popen(cmd, shell=True)
+        subs.append((i, p))
+
+    print("started", len(subs), "RTT process(es)")
+
+    maxWait = rttTimeout if rttTimeout > 0 else cutOffBound
+    totalTime = 0
+    remaining = subs.copy()
+    while 0 < len(remaining) and totalTime < maxWait:
+        rem = remaining.copy()
+        for (i, p) in rem:
+            if p.poll() is not None:
+                remaining.remove((i, p))
+        if 0 < len(remaining):
+            print("remaining RTT processes at time", totalTime, ":", list(map(lambda x: x[0], remaining)))
+            time.sleep(1)
+            totalTime += 1
+
+    if 0 < len(remaining):
+        print("------ RTT measurement reached cutoff bound ------")
+        for (_, p) in remaining:
+            if p.poll() is None:
+                p.kill()
+    else:
+        print("all RTT processes completed")
+# End of runRTTMeasurement
 
 
 def execute(protocol,constFactor,numClTrans,sleepTime,numViews,cutOffBound,numFaults,numDeadNodes,numJoiners,instance):
@@ -7764,6 +7837,10 @@ parser.add_argument("--nocopy",     action="store_true",   help="does not copy t
 parser.add_argument("--docker",     action="store_true",   help="runs nodes locally in Docker containers")
 parser.add_argument("--das5",       action="store_true",   help="runs nodes natively on DAS-5 nodes allocated by SLURM")
 parser.add_argument("--das5-address-cmd", type=str, default="hostname -f", help="command run on each DAS-5 node to obtain the address written to config")
+parser.add_argument("--rtt",        action="store_true",   help="runs RTT-only measurement instead of protocol execution")
+parser.add_argument("--rtt-cmd",    type=str, default="./rtt {id} {num_nodes} {config} {timeout}", help="RTT command template, supports {id},{node_id},{num_nodes},{nodes},{faults},{const_factor},{config},{statsdir},{timeout}")
+parser.add_argument("--rtt-timeout",type=int, default=0,   help="timeout (seconds) for RTT-only run, defaults to --cutoff")
+parser.add_argument("--rtt-nodes",  type=int, default=0,   help="total number of nodes to launch in RTT-only mode")
 parser.add_argument("--randomize",  action="store_true",   help="randomizes AWS regions before allocating nodes to regions")
 parser.add_argument("--repeats",    type=int, default=0,   help="number of repeats per experiment")
 parser.add_argument("--repeats2",   type=int, default=0,   help="number of repeats per experiment (2nd level, i.e., regenerates AWS instances)")
@@ -7979,6 +8056,18 @@ if args.das5:
         print("WARNING: --das5 was selected, but SLURM_JOB_ID is not set; run through sbatch or salloc on DAS-5")
     print("SUCCESSFULLY PARSED ARGUMENT - running nodes natively on DAS-5 via SLURM")
     print("SUCCESSFULLY PARSED ARGUMENT - DAS-5 address command is:", das5AddressCmd)
+
+
+if args.rtt:
+    runRTT = True
+    rttCmd = args.rtt_cmd
+    rttTimeout = args.rtt_timeout
+    rttNodes = args.rtt_nodes
+    print("SUCCESSFULLY PARSED ARGUMENT - running RTT-only measurement mode")
+    print("SUCCESSFULLY PARSED ARGUMENT - RTT total nodes:", rttNodes)
+    print("SUCCESSFULLY PARSED ARGUMENT - RTT command is:", rttCmd)
+    if rttTimeout > 0:
+        print("SUCCESSFULLY PARSED ARGUMENT - RTT timeout is:", rttTimeout)
 
 
 if args.randomize:
@@ -8291,6 +8380,9 @@ elif args.stop:
 elif args.stopall:
     print("terminate all AWS instances in all regions")
     terminateAllInstancesAllRegs()
+elif args.rtt:
+    print("RTT-only measurement")
+    runRTTMeasurement()
 elif args.latest > 0:
     print("copies latest experiments to paper")
     debugPlot = False

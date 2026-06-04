@@ -105,7 +105,7 @@ endif
 
 # Non-SGX files
 Nsgx_App_Cpp_Files := $(wildcard App/*.cpp)
-Nsgx_App_Cpp_Files := $(filter-out App/test.cpp App/foo.cpp App/Start.cpp App/App.cpp App/Keys.cpp App/Client.cpp App/Server.cpp, $(Nsgx_App_Cpp_Files))
+Nsgx_App_Cpp_Files := $(filter-out App/test.cpp App/foo.cpp App/Start.cpp App/App.cpp App/Keys.cpp App/Client.cpp App/Server.cpp App/RTT.cpp, $(Nsgx_App_Cpp_Files))
 # Includes SGX files
 App_Cpp_Files :=  $(Nsgx_App_Cpp_Files) App/sgx_utils/sgx_utils.cpp
 App_Include_Paths := -IApp -I$(SGX_SDK)/include $(Salticidae_Include_Paths) # -I$(SGXSSL_INCLUDE_PATH)
@@ -197,7 +197,7 @@ endif
 .PHONY: all run
 
 ifeq ($(Build_Mode), HW_RELEASE)
-all: $(App_Name) sgxclient sgxkeys $(Enclave_Name)
+all: $(App_Name) sgxclient sgxkeys rtt $(Enclave_Name)
 	@echo "The project has been built in release hardware mode."
 	@echo "Please sign the $(Enclave_Name) first with your signing key before you run the $(App_Name) to launch and access the enclave."
 	@echo "To sign the enclave use the command:"
@@ -205,7 +205,7 @@ all: $(App_Name) sgxclient sgxkeys $(Enclave_Name)
 	@echo "You can also sign the enclave using an external signing tool. See User's Guide for more details."
 	@echo "To build the project in simulation mode set SGX_MODE=SIM. To build the project in prerelease mode set SGX_PRERELEASE=1 and SGX_MODE=HW."
 else
-all: $(App_Name) sgxclient sgxkeys $(Signed_Enclave_Name)
+all: $(App_Name) sgxclient sgxkeys rtt $(Signed_Enclave_Name)
 endif
 
 run: all
@@ -225,6 +225,10 @@ client: App/Client.o App/Stats.o App/Signs.o App/Sign.o App/Nodes.o App/NodeInfo
 	@echo "LINK <= $@"
 
 keys: App/Keys.o App/KeysFun.o # $(Nsgx_App_Cpp_Objects)
+	@$(CXX) $^ -o $@ $(LDLIBS) $(Salticidae_Lib_Paths) -lsalticidae $(Salticidae_Include_Paths)
+	@echo "LINK <= $@"
+
+rtt: App/RTT.o App/Nodes.o App/NodeInfo.o App/KeysFun.o
 	@$(CXX) $^ -o $@ $(LDLIBS) $(Salticidae_Lib_Paths) -lsalticidae $(Salticidae_Include_Paths)
 	@echo "LINK <= $@"
 
@@ -286,4 +290,4 @@ $(Signed_Enclave_Name): $(Enclave_Name)
 .PHONY: clean
 
 clean:
-	@rm -f $(App_Name) sgxclient sgxkeys $(Enclave_Name) $(Signed_Enclave_Name) $(App_Cpp_Objects) App/Keys.o App/Client.o App/Server.o App/Enclave_u.o $(Enclave_Cpp_Objects) Enclave/Enclave_t.o
+	@rm -f $(App_Name) sgxclient sgxkeys rtt $(Enclave_Name) $(Signed_Enclave_Name) $(App_Cpp_Objects) App/Keys.o App/Client.o App/Server.o App/RTT.o App/Enclave_u.o $(Enclave_Cpp_Objects) Enclave/Enclave_t.o
