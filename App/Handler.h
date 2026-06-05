@@ -221,6 +221,7 @@ class Handler {
   bool timeToStop();
   void recordStats();
   void setTimer();
+  void setShortTimer();
 
   Sign Ssign(KEY priv, PID signer, std::string text);
   bool Sverify(Signs signs, PID id, Nodes nodes, std::string s);

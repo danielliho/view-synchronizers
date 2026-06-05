@@ -983,14 +983,14 @@ int Handler::initializeSGX() {
 void Handler::wishToAdvanceView(View v) {
   Sign sign = Ssign(this->priv, this->myid, "WISH" + std::to_string(v));
   MsgWishToAdvanceView wish(v, sign);
-  // sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
-  // if (amLeaderOf(v)) {
-  //   handleWishToAdvanceView(wish, this->myid);
-  // }
-  sendMsgWishToAdvanceView(wish, getNextQsizeLeaders(v));
-  if (amNextQsizeLeader(v)) {
+  sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
+  if (amLeaderOf(v)) {
     handleWishToAdvanceView(wish, this->myid);
   }
+  // sendMsgWishToAdvanceView(wish, getNextQsizeLeaders(v));
+  // if (amNextQsizeLeader(v)) {
+  //   handleWishToAdvanceView(wish, this->myid);
+  // }
   // sendMsgWishToAdvanceView(wish, this->peers);
   // handleWishToAdvanceView(wish, this->myid);
 }
@@ -1279,12 +1279,10 @@ Handler::Handler(KeysFun k,
       this->timer.add(remTime);
     } else {
       stats.incTimeouts();
-      // this->consecutiveTimeouts++; // for gradual cogsworth only
+      this->consecutiveTimeouts++; // for gradual cogsworth only
       if (DEBUGD) std::cout << KMAG << nfo() << "TIMEOUT, WISHING TO ADVANCE VIEW " << this->view + 1 + this->consecutiveTimeouts << " (" << time << ")" << KNRM << std::endl;
       wishToAdvanceView(this->view + 1 + this->consecutiveTimeouts);
-      this->timer.del();
-      this->timeout = this->initTimeout * 2;
-      this->timer.add(this->timeout);
+      setShortTimer();
       timerTime = std::chrono::steady_clock::now();
     }
   });
@@ -3026,13 +3024,18 @@ void Handler::setTimer() {
   if (DEBUG1) printNowTime(KMAG, "deleting timer(timeout:" + std::to_string(this->timeout) + ")");
   this->timer.del();
   this->timeout = this->timeout / this->timeoutDiv;
-  this->timeout = this->initTimeout * 3;
+  this->timeout = this->initTimeout * 9;
   if (DEBUG1) printNowTime(KMAG, "adding timer(timeout:" + std::to_string(this->timeout) + ")");
   this->timer.add(this->timeout);
   this->timerView = this->view;
   timerTime = std::chrono::steady_clock::now();
 }
 
+void Handler::setShortTimer() {
+  this->timer.del();
+  this->timeout = this->initTimeout * 3;
+  this->timer.add(this->timeout);
+}
 
 void Handler::getStarted() {
   //if (DEBUG1) std::cout << KLRED << nfo() << "starting" << KNRM << std::endl;
@@ -6907,6 +6910,7 @@ void Handler::executeOP(OPprepare cert) {
     recordStats();
   } else {
     wishToAdvanceView(this->view+1);
+    setShortTimer();
   }
 }
 
