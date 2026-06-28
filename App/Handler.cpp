@@ -987,11 +987,7 @@ void Handler::wishToAdvanceView(View v) {
   if (amLeaderOf(v)) {
     handleWishToAdvanceView(wish, this->myid);
   }
-  // sendMsgWishToAdvanceView(wish, getNextQsizeLeaders(v));
-  // if (amNextQsizeLeader(v)) {
-  //   handleWishToAdvanceView(wish, this->myid);
-  // }
-  // sendMsgWishToAdvanceView(wish, this->peers);
+  // sendMsgWishToAdvanceView(wish, this->peers); //broadcast-based
   // handleWishToAdvanceView(wish, this->myid);
 }
 
@@ -1279,7 +1275,7 @@ Handler::Handler(KeysFun k,
       this->timer.add(remTime);
     } else {
       stats.incTimeouts();
-      this->consecutiveTimeouts++; // for gradual cogsworth only
+      this->consecutiveTimeouts++; // for babette only
       if (DEBUGD) std::cout << KMAG << nfo() << "TIMEOUT, WISHING TO ADVANCE VIEW " << this->view + 1 + this->consecutiveTimeouts << " (" << time << ")" << KNRM << std::endl;
       wishToAdvanceView(this->view + 1 + this->consecutiveTimeouts);
       setShortTimer();
@@ -3302,7 +3298,7 @@ void Handler::recordStats() {
   // onepcs
   unsigned int onepcs = stats.getNumOnePCs();
 
-    double viewSyncMsgs = (totv.n > 0) ? ((viewSyncMsgsSent * 1.0) / totv.n) : 0.0;
+  double viewSyncMsgs = (totv.n > 0) ? ((viewSyncMsgsSent * 1.0) / totv.n) : 0.0;
 
 
   // Crypto
