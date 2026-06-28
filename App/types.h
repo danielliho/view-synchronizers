@@ -120,7 +120,6 @@ typedef unsigned int Session;
 typedef unsigned int View;
 typedef unsigned int Value;
 
-
 typedef uint8_t OPphase;
 
 #define OPpa   true

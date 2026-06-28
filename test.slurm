@@ -250,7 +250,7 @@ echo "Python: ${PYTHON}"
 echo "Allocated nodes:"
 scontrol show hostnames "${SLURM_JOB_NODELIST}"
 
-echo "Starting Broadcast-based: x"
+echo "Starting OneShot Baseline"
 start_time=$(date +%s)
 echo "Start time: $(date)"
 
