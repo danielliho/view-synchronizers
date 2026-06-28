@@ -43,6 +43,8 @@ Time curTime;
 
 Stats stats;                   // To collect statistics
 
+unsigned int viewSyncMsgsSent = 0; // total Wish/TimeCertificate messages sent (fanout count)
+
 
 // To generate uniformly distributed numbers in [0,1]
 std::random_device                  rand_dev;
@@ -977,107 +979,95 @@ int Handler::initializeSGX() {
 #endif
 // ------------------------------------
 
-
-
-void Handler::startNewViewOnTimeout() {
-  // TODO: start a new-view
-#if defined(BASIC_BASELINE)
-  if (DEBUG0) std::cout << KMAG << nfo() << "starting a new view" << KNRM << std::endl;
-  startNewView();
-#elif defined (BASIC_CHEAP)
-  startNewView();
-#elif defined (BASIC_QUICK)
-  startNewViewAcc();
-#elif defined (BASIC_CHEAP_AND_QUICK)
-  startNewViewComb();
-#elif defined (BASIC_FREE) || defined (BASIC_DAMYSUS_PACEMAKER) || defined (BASIC_DAMYSUS_ACHILLES) || defined (BASIC_DAMYSUS3_PACEMAKER) || defined (BASIC_DAMYSUS_ROTE)
-  startNewViewFree();
-#elif defined (BASIC_ROLL)
-  //if (DEBUG1) std::cout << KRED << nfo() << "TODO-startNewViewOnTimeout" << KNRM << std::endl;
-  //exit(0);
-  if (!this->rejoining) { // only nodes that are not rejoining participate
-    if (this->synchronizing) {
-      if (this->syncAttempts < this->qsize) {
-        Session s = this->session+1;
-        PID firstLeader = getLeaderOf(s);
-        PID oldLeader   = (firstLeader + this->syncAttempts - 1) % this->total;
-        PID newLeader   = (firstLeader + this->syncAttempts) % this->total;
-        this->syncAttempts++;
-
-        //Joins joins = getPreparedJoins(this->lastRBstore.getStore().getSession(),this->lastRBstore.getStore().getView());
-
-        while (this->agreedJoins.in(newLeader) || this->receivedJoins.in(newLeader)) {
-          PID leader = (newLeader + 1) % this->total;
-          if (DEBUG1W) std::cout << KLRED << nfo() << "potential leader (" << newLeader << ")"
-                                 << " is restarting, moving on to the next one (" << leader << ")"
-                                 << KNRM << std::endl;
-          newLeader = leader;
-        }
-
-        if (DEBUG1W) std::cout << KRED << nfo() << "TODO - timed-out while synchronizing"
-                              << " (attempt=" << this->syncAttempts << ") with leaders:"
-                              << " first-leader?=" << firstLeader
-                              << " old-leader?="   << oldLeader
-                              << " new-leader="    << newLeader
-                              << KNRM
-                              << std::endl;
-
-        // if (this->agreedJoins.in(newLeader)) {
-        //   if (DEBUG1) { std::cout << KLGRN << nfo() << "new synchronization leader (" << newLeader << ")"
-        //                           << " is known to be restarting and can be skipped"
-        //                           << KNRM << std::endl; }
-
-        //   // TODO: while/for loop instead!
-        //   startNewViewOnTimeout();
-
-        // } else {
-
-        // TODO - This is a very simple case of timeouts for now.
-        std::set<Sync> syncs = this->log.getSync(s);
-        if (syncs.size() > 0) {
-          std::set<Sync>::iterator it=syncs.begin();
-          Sync someSync = (Sync)*it; // 1st one
-          wishToAdvanceOnSync(someSync,newLeader);
-        } else {
-          if (DEBUG0) std::cout << KRED << nfo() << "FAILED: timed-out while synchronizing -- no previous sync recorded" << KNRM << std::endl;
-          if (DEBUG0) std::cout << KRED << nfo() << "EXIT!(0)" << KNRM << std::endl;
-          exit(0);
-        }
-      } else {
-        if (DEBUG0) std::cout << KRED << nfo() << "FAILED: timed-out while synchronizing -- too many attempts: " << this->syncAttempts << KNRM << std::endl;
-        if (DEBUG0) std::cout << KRED << nfo() << "EXIT!(1)" << KNRM << std::endl;
-        exit(0);
-      }
-    } else {
-      // Not synchronizing
-      PID oldLeader = getLeaderOf(this->view);
-      PID newLeader = getLeaderOf(this->view+1);
-      if (DEBUG1W) std::cout << KRED << nfo() << "starting new view on timeout -- leaders: " << oldLeader << " -> " << newLeader << KNRM << std::endl;
-      // TODO: Check that this->lastRBstore is for the current session and prepv
-      // TODO: Remove this check. This is just to check that nodes do not timeout too much
-      if (oldLeader < this->numJoiners) {
-        // timed-out most likely due to the fact that the old leader was a rejoiner
-        startNewViewOrSyncRB(this->lastRBstore);
-      } else {
-        if (DEBUG0) std::cout << KRED << nfo() << "FAILURE? not sure why a timeout, old leader (" << oldLeader << ") is not a rejoiner"
-                              << KNRM << std::endl;
-        //if (DEBUG0) std::cout << KRED << nfo() << "EXIT!" << KNRM << std::endl;
-        //exit(0);
-        startNewViewOrSyncRB(this->lastRBstore);
-      }
-    }
+//View synchronization messages
+void Handler::wishToAdvanceView(View v) {
+  Sign sign = Ssign(this->priv, this->myid, "WISH" + std::to_string(v));
+  MsgWishToAdvanceView wish(v, sign);
+  sendMsgWishToAdvanceView(wish, keep_from_peers(getLeaderOf(v)));
+  if (amLeaderOf(v)) {
+    handleWishToAdvanceView(wish, this->myid);
   }
-#elif defined (BASIC_ONEP) || defined (BASIC_ONEPB) || defined (BASIC_ONEPC) || defined (BASIC_ONEPD)
-  startNewViewOP();
-#elif defined (CHAINED_BASELINE)
-  startNewViewCh();
-#elif defined (CHAINED_CHEAP_AND_QUICK)
-  startNewViewChComb();
-#else
-  recordStats();
-#endif
+  // sendMsgWishToAdvanceView(wish, this->peers); //broadcast-based
+  // handleWishToAdvanceView(wish, this->myid);
 }
 
+void Handler::handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender) {
+  auto startHandle = std::chrono::steady_clock::now();
+  auto recordHandle = [&]() {
+    auto endHandle = std::chrono::steady_clock::now();
+    double handleTime = std::chrono::duration_cast<std::chrono::microseconds>(endHandle - startHandle).count();
+    stats.addTotalHandleTime(handleTime);
+  };
+
+  if (this->wishesToAdvanceView[msg.view].getSize() >= this->qsize) { recordHandle(); return; }
+
+  if (this->wishesToAdvanceView[msg.view].hasSigned(sender)) {
+    recordHandle();
+    return;
+  }
+
+  NodeInfo *senderInfo = this->nodes.find(sender);
+  if (!senderInfo) { recordHandle(); return; }
+
+  auto start = std::chrono::steady_clock::now();
+  bool b = msg.sign.verify(senderInfo->getPub(), "WISH" + std::to_string(msg.view));
+  auto end = std::chrono::steady_clock::now();
+  double time = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+  stats.addCryptoVerifTime(time);
+
+  if (!b) {
+    if (DEBUGD) std::cout << KRED << nfo() << "INVALID WISH SIGNATURE FROM " << sender << KNRM << std::endl;
+    recordHandle();
+    return;
+  }
+
+  this->wishesToAdvanceView[msg.view].add(msg.sign);
+  unsigned int numWishes = this->wishesToAdvanceView[msg.view].getSize();
+
+  if (DEBUGD) {
+    std::cout << KBLU << nfo()
+              << "WISH-COUNT(view=" << msg.view << ")=" << numWishes
+              << "/" << this->qsize
+              << " (from=" << sender << ")"
+              << KNRM << std::endl;
+  }
+
+  if (numWishes >= this->qsize) {
+    MsgTimeCertificate tc(msg.view, this->wishesToAdvanceView[msg.view]);
+    sendMsgTimeCertificate(tc, this->peers);
+    if (msg.view > this->view) {
+      if (DEBUGD) std::cout << KBLU << nfo() << "STORING AND SENDING TC AND ADVANCING VIEW: " << msg.view << " > " << this->view << KNRM << std::endl;
+      startNewViewOP(tc.view);
+    }
+  }
+
+  recordHandle();
+}
+
+void Handler::handleTimeCertificate(MsgTimeCertificate msg, PID sender) {
+  auto startHandle = std::chrono::steady_clock::now();
+  auto recordHandle = [&]() {
+    auto endHandle = std::chrono::steady_clock::now();
+    double handleTime = std::chrono::duration_cast<std::chrono::microseconds>(endHandle - startHandle).count();
+    stats.addTotalHandleTime(handleTime);
+  };
+
+  if (msg.signs.getSize() < this->qsize || !Sverify(msg.signs, this->myid, this->nodes, "WISH" + std::to_string(msg.view))) {
+     if (DEBUGD) std::cout << KRED << nfo() << "INVALID TIME CERTIFICATE FOR VIEW " << msg.view << KNRM << std::endl;
+     recordHandle();
+     return;
+  }
+  
+  if (DEBUGD) std::cout << KBLU << nfo() << "STORING RECEIVED TIME CERTIFICATE FOR VIEW " << msg.view
+  << " (from=" << sender << ") AND ADVANCING"
+  << KNRM << std::endl;
+  
+  MsgTimeCertificate tc(msg.view, msg.signs);
+  sendMsgTimeCertificate(tc, remove_from_peers(sender));
+  startNewViewOP(msg.view);
+
+  recordHandle();
+}
 
 
 #if defined(BASIC_FREE)
@@ -1111,6 +1101,8 @@ const uint8_t MsgBckPrepareOP::opcode;
 const uint8_t MsgPreCommitOP::opcode;
 const uint8_t MsgLdrAddOP::opcode;
 const uint8_t MsgBckAddOP::opcode;
+const uint8_t MsgWishToAdvanceView::opcode;
+const uint8_t MsgTimeCertificate::opcode;
 #elif defined(BASIC_CHEAP_AND_QUICK)
 const uint8_t MsgNewViewComb::opcode;
 const uint8_t MsgLdrPrepareComb::opcode;
@@ -1220,6 +1212,8 @@ Handler::Handler(KeysFun k,
   this->skip         = skip;
   this->kf           = k;
 
+  this->consecutiveTimeouts = 0;
+
   // further initialization of variables
   this->agreedJoins.reset();
   this->receivedJoins = Joins();
@@ -1272,25 +1266,19 @@ Handler::Handler(KeysFun k,
                              });
 
   this->timer = salticidae::TimerEvent(pec, [this](salticidae::TimerEvent &) {
-    double newTimeout = this->timeoutMul*this->timeout;
-    PID oldLeader = getCurrentLeader();
-    PID newLeader = getLeaderOf(this->view+1);
-    if (DEBUG0) printNowTime(KLRED, "timer ran out (timeout:" + std::to_string(this->timeout) + "->" + std::to_string(newTimeout) + ") - leader=" + std::to_string(oldLeader) + "->" + std::to_string(newLeader));
     Time now = std::chrono::steady_clock::now();
     // time in seconds since the timer was last set
-    double time = std::chrono::duration_cast<std::chrono::microseconds>(now - timerTime).count() / (1000 * 1000);
+    double time = std::chrono::duration_cast<std::chrono::microseconds>(now - timerTime).count() / (1000.0 * 1000.0);
     if (time < this->timeout) {
-      if (DEBUG1W) printNowTime(KLRED, "not yet time to timeout:" + std::to_string(time) + " < " + std::to_string(this->timeout));
       double remTime = this->timeout - time;
       this->timer.del();
       this->timer.add(remTime);
     } else {
-      if (DEBUG1W) printNowTime(KLRED, "time to timeout:" + std::to_string(time) + " >= " + std::to_string(this->timeout));
       stats.incTimeouts();
-      startNewViewOnTimeout();
-      this->timer.del();
-      this->timeout=newTimeout;
-      this->timer.add(this->timeout);
+      this->consecutiveTimeouts++; // for babette only
+      if (DEBUGD) std::cout << KMAG << nfo() << "TIMEOUT, WISHING TO ADVANCE VIEW " << this->view + 1 + this->consecutiveTimeouts << " (" << time << ")" << KNRM << std::endl;
+      wishToAdvanceView(this->view + 1 + this->consecutiveTimeouts);
+      setShortTimer();
       timerTime = std::chrono::steady_clock::now();
     }
   });
@@ -1364,6 +1352,10 @@ Handler::Handler(KeysFun k,
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_bckaddop,      this, _1, _2));
   /*this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_preparefree, this, _1, _2));
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_precommitfree, this, _1, _2));*/
+
+  //View synchronization stuff
+  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_wishtoadvanceview, this, _1, _2));
+  this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_timecertificate, this, _1, _2));
 #elif defined(BASIC_CHEAP_AND_QUICK)
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_newviewcomb,    this, _1, _2));
   this->pnet.reg_handler(salticidae::generic_bind(&Handler::handle_ldrpreparecomb, this, _1, _2));
@@ -1579,6 +1571,28 @@ Peers Handler::keep_from_peers(PID id) {
   return ret;
 }
 
+Peers Handler::getNextQsizeLeaders(View v) {
+  Peers ret;
+  std::set<PID> leaders;
+  for (unsigned int i = 0; i < this->qsize; i++) {
+    PID leader = getLeaderOf(v + i);
+    if (leaders.find(leader) == leaders.end()) {
+      leaders.insert(leader);
+      Peers leaderPeers = keep_from_peers(leader);
+      ret.insert(ret.end(), leaderPeers.begin(), leaderPeers.end());
+    }
+  }
+  return ret;
+}
+
+bool Handler::amNextQsizeLeader(View v) {
+  for (unsigned int i = 0; i < this->qsize; i++) {
+    if (this->myid == getLeaderOf(v + i)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 std::vector<salticidae::PeerId> getPeerids(Peers recipients) {
   std::vector<salticidae::PeerId> ret;
@@ -1589,6 +1603,54 @@ std::vector<salticidae::PeerId> getPeerids(Peers recipients) {
   return ret;
 }
 
+//View synchronization messages
+void Handler::sendMsgWishToAdvanceView(MsgWishToAdvanceView msg, Peers recipients) {
+  if (DEBUGD) std::cout << KBLU << nfo() << "SENDING:" << msg.prettyPrint() << "->" << recipients2string(recipients) << KNRM << std::endl;
+  viewSyncMsgsSent += recipients.size();
+  this->pnet.multicast_msg(msg, getPeerids(recipients));
+}
+
+void Handler::handle_wishtoadvanceview(MsgWishToAdvanceView msg, const PeerNet::conn_t &conn) {
+  PID sender = this->myid;
+  bool found = false;
+  salticidae::PeerId senderPeerId = conn->get_peer_id();
+  for (Peers::iterator it = this->peers.begin(); it != this->peers.end(); ++it) {
+    Peer peer = *it;
+    if (std::get<1>(peer) == senderPeerId) {
+      sender = std::get<0>(peer);
+      found = true;
+      break;
+    }
+  }
+
+  handleWishToAdvanceView(msg, sender);
+}
+
+void Handler::sendMsgTimeCertificate(MsgTimeCertificate msg, Peers recipients) {
+  if (DEBUGD) std::cout << KBLU << nfo() << "SENDING:" << msg.prettyPrint() << "->" << recipients2string(recipients) << KNRM << std::endl;
+  viewSyncMsgsSent += recipients.size();
+  this->pnet.multicast_msg(msg, getPeerids(recipients));
+}
+
+void Handler::handle_timecertificate(MsgTimeCertificate msg, const PeerNet::conn_t &conn) {
+  if (msg.view <= this->view) {
+    return;
+  }
+
+  PID sender = this->myid;
+  bool found = false;
+  salticidae::PeerId senderPeerId = conn->get_peer_id();
+  for (Peers::iterator it = this->peers.begin(); it != this->peers.end(); ++it) {
+    Peer peer = *it;
+    if (std::get<1>(peer) == senderPeerId) {
+      sender = std::get<0>(peer);
+      found = true;
+      break;
+    }
+  }
+
+  handleTimeCertificate(msg, sender);
+}
 
 void Handler::sendMsgNewView(MsgNewView msg, Peers recipients) {
   if (DEBUG1) std::cout << KBLU << nfo() << "sending:" << msg.prettyPrint() << "->" << recipients2string(recipients) << KNRM << std::endl;
@@ -2958,13 +3020,18 @@ void Handler::setTimer() {
   if (DEBUG1) printNowTime(KMAG, "deleting timer(timeout:" + std::to_string(this->timeout) + ")");
   this->timer.del();
   this->timeout = this->timeout / this->timeoutDiv;
-  if (this->timeout < this->initTimeout) { this->timeout = this->initTimeout; }
+  this->timeout = this->initTimeout * 9;
   if (DEBUG1) printNowTime(KMAG, "adding timer(timeout:" + std::to_string(this->timeout) + ")");
   this->timer.add(this->timeout);
   this->timerView = this->view;
   timerTime = std::chrono::steady_clock::now();
 }
 
+void Handler::setShortTimer() {
+  this->timer.del();
+  this->timeout = this->initTimeout * 3;
+  this->timer.add(this->timeout);
+}
 
 void Handler::getStarted() {
   //if (DEBUG1) std::cout << KLRED << nfo() << "starting" << KNRM << std::endl;
@@ -3231,6 +3298,9 @@ void Handler::recordStats() {
   // onepcs
   unsigned int onepcs = stats.getNumOnePCs();
 
+  double viewSyncMsgs = (totv.n > 0) ? ((viewSyncMsgsSent * 1.0) / totv.n) : 0.0;
+
+
   // Crypto
   double ctimeS  = stats.getCryptoSignTime();
   double cryptoS = (ctimeS / 1000); /* milli-seconds spent on crypto */
@@ -3248,6 +3318,7 @@ void Handler::recordStats() {
              << " " << std::to_string(timeouts)
              << " " << std::to_string(onepbs)
              << " " << std::to_string(onepcs)
+             << " " << std::to_string(viewSyncMsgs)
              << " " << std::to_string(stats.getCryptoSignNum())
              << " " << std::to_string(cryptoS)
              << " " << std::to_string(stats.getCryptoVerifNum())
@@ -3328,7 +3399,7 @@ void Handler::replyHash(Hash hash) {
 
 bool Handler::timeToStop() {
   //bool b = this->maxViews > 0 && this->maxViews <= this->viewsWithoutNewTrans;
-  bool b = this->maxViews > 0 && this->maxViews <= this->view+1;
+  bool b = this->maxViews > 0 && stats.getExecViews() >= this->maxViews;
   if (DEBUG) { std::cout << KBLU << nfo() << "timeToStop=" << b << ";maxViews=" << this->maxViews << ";viewsWithoutNewTrans=" << this->viewsWithoutNewTrans << ";pending-transactions=" << this->transactions.size() << KNRM << std::endl; }
   if (DEBUG1) { if (b) { std::cout << KBLU << nfo() << "maxViews=" << this->maxViews << ";viewsWithoutNewTrans=" << this->viewsWithoutNewTrans << ";pending-transactions=" << this->transactions.size() << KNRM << std::endl; } }
   return b;
@@ -5803,13 +5874,27 @@ MsgNewViewOPB Handler::genMsgNewViewOPB() {
     if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:no need to generate a new store, has one for " << (this->view-1) << KNRM << std::endl;
     store = OPstore(prep.getView(),prep.getHash(),prep.getV(),prep.getAuths().get(0));
   } else {
-    if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:generating a new store" << KNRM << std::endl;
-    //auto start2 = std::chrono::steady_clock::now();
-    store = callTEEstoreOP(prop);
-    //auto end2 = std::chrono::steady_clock::now();
-    //double time2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - start2).count();
-    //stats.addTotalGen2Time(time2);
-    this->log.storeStoreOp(store);
+    //View synchronization: protocol changes
+    if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:generating stores to catch up" << KNRM << std::endl;
+    View targetStoreView = (this->view == 0) ? 0 : this->view - 1;
+    unsigned int maxCatchupSteps = static_cast<unsigned int>(this->view + this->qsize + 1);
+
+    for (unsigned int i = 0; i < maxCatchupSteps && prep.getAuths().getSize() != 1; i++) {
+      OPstore generated = callTEEstoreOP(prop);
+      if (!generated.getAuth().getHash().getSet()) {
+        if (DEBUG1) std::cout << KBRED << nfo() << "genMsgNewViewOPB:failed to generate catch-up store at step " << i << KNRM << std::endl;
+        break;
+      }
+
+      store = generated;
+      this->log.storeStoreOp(store);
+      prep = this->log.getOPstores(targetStoreView,1);
+    }
+
+    if (prep.getAuths().getSize() == 1) {
+      store = OPstore(prep.getView(),prep.getHash(),prep.getV(),prep.getAuths().get(0));
+      if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:catch-up complete for " << targetStoreView << KNRM << std::endl;
+    }
   }
 
   OPnvblock nv(block,OPnvcert(store,cert));
@@ -5847,13 +5932,27 @@ MsgNewViewOPBB Handler::genMsgNewViewOPBB() {
     if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPBB:no need to generate a new store, has one for " << (this->view-1) << KNRM << std::endl;
     store = OPstore(prep.getView(),prep.getHash(),prep.getV(),prep.getAuths().get(0));
   } else {
-    if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPBB:generating a new store" << KNRM << std::endl;
-    //auto start2 = std::chrono::steady_clock::now();
-    store = callTEEstoreOP(prop);
-    //auto end2 = std::chrono::steady_clock::now();
-    //double time2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - start2).count();
-    //stats.addTotalGen2Time(time2);
-    this->log.storeStoreOp(store);
+    //View synchronization: protocol changes
+    if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:generating stores to catch up" << KNRM << std::endl;
+    View targetStoreView = (this->view == 0) ? 0 : this->view - 1;
+    unsigned int maxCatchupSteps = static_cast<unsigned int>(this->view + this->qsize + 1);
+
+    for (unsigned int i = 0; i < maxCatchupSteps && prep.getAuths().getSize() != 1; i++) {
+      OPstore generated = callTEEstoreOP(prop);
+      if (!generated.getAuth().getHash().getSet()) {
+        if (DEBUG1) std::cout << KBRED << nfo() << "genMsgNewViewOPB:failed to generate catch-up store at step " << i << KNRM << std::endl;
+        break;
+      }
+
+      store = generated;
+      this->log.storeStoreOp(store);
+      prep = this->log.getOPstores(targetStoreView,1);
+    }
+
+    if (prep.getAuths().getSize() == 1) {
+      store = OPstore(prep.getView(),prep.getHash(),prep.getV(),prep.getAuths().get(0));
+      if (DEBUG1) std::cout << KBLU << nfo() << "genMsgNewViewOPB:catch-up complete for " << targetStoreView << KNRM << std::endl;
+    }
   }
 
   auto start2 = std::chrono::steady_clock::now();
@@ -5959,8 +6058,9 @@ void Handler::startNewViewOnTimeoutOP() {
 }
 
 
-void Handler::startNewViewOP() {
-  if (DEBUG1) std::cout << KBLU << nfo() << "starting a new view" << "(current=" << this->view << "; moving to=" << this->view+1 << ")" << KNRM << std::endl;
+void Handler::startNewViewOP(int nextView) {
+  View targetView = (nextView >= 0) ? static_cast<View>(nextView) : (this->view + 1);
+  if (DEBUG1) std::cout << KBLU << nfo() << "starting a new view" << "(current=" << this->view << "; moving to=" << targetView << ")" << KNRM << std::endl;
 
   OPprepare prep = this->opprep;
   if (DEBUG1) std::cout << KBLU << nfo() << "new-view cert (" << prep.getView() << "," << this->view << ")" << KNRM << std::endl;
@@ -5973,11 +6073,12 @@ void Handler::startNewViewOP() {
   //    just = FJust(j.isSet(),j.getData(),j.getAuth2());
   //    this->nvjust = just;*/
   //  }
-  // increment the view
+  // Increment the view unless explicitly requested to jump to a specific view.
   // *** THE NODE HAS NOW MOVED TO THE NEW-VIEW ***
-  this->view++;
+  this->view = targetView;
 
   // We start the timer
+  this->consecutiveTimeouts = 0;
   setTimer();
 
   // if the lastest justification we've generated is for what is now the current view (since we just incremented it)
@@ -6795,13 +6896,17 @@ void Handler::executeOP(OPprepare cert) {
   if (DEBUG0 && DEBUGE) std::cout << KRED << nfo() << "OP-EXECUTE(" << this->view << "/" << this->maxViews << ":" << time << ")" << stats.toString() << KNRM << std::endl;
 #endif
 
+  if (DEBUGD || DEBUG1) std::cout << KGRN << nfo() << "VIEW " << this->view << " COMPLETED SUCCESSFULLY (nr. " << stats.getExecViews() << ")" << KNRM << std::endl;
+
   // Reply
   replyHash(cert.getHash());
 
   if (timeToStop()) {
+    this->timer.del();
     recordStats();
   } else {
-    startNewViewOP();
+    wishToAdvanceView(this->view+1);
+    setShortTimer();
   }
 }
 

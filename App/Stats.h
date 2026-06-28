@@ -162,6 +162,8 @@ public:
 
   std::vector<double> getViewTimes();
 
+  unsigned int getExecViews();
+
   unsigned int getTimeouts();
   unsigned int getNumOnePBs();
   unsigned int getNumOnePCs();

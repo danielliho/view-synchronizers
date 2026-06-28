@@ -128,6 +128,9 @@ class Handler {
 
   std::map<PID,View> latestRoteCounters; // latest counters/views receveid in MsgCounterRote messages
 
+  // Tracks which replicas requested a jump to a given view.
+  std::map<View,Signs> wishesToAdvanceView;
+
   std::set<Hash> acceptedNoncesAchilles; // set of nonces that led to a successful restart
 
   // Used in the 'OP' version - the latest prepare certificate
@@ -147,6 +150,7 @@ class Handler {
   RBstoreAuth lastRBstore;
   // Last executed view
   View lastRBexec = 0;
+  unsigned int consecutiveTimeouts = 0;
   // To keep track of the join requests that have been agreed upon
   Joins agreedJoins;
   // Joins that have been received but not yet agreed upon
@@ -217,6 +221,7 @@ class Handler {
   bool timeToStop();
   void recordStats();
   void setTimer();
+  void setShortTimer();
 
   Sign Ssign(KEY priv, PID signer, std::string text);
   bool Sverify(Signs signs, PID id, Nodes nodes, std::string s);
@@ -307,8 +312,21 @@ class Handler {
   Peers from_to_peers(PID id1, PID id2);
   Peers remove_from_peers(PID id);
   Peers keep_from_peers(PID id);
+  Peers getNextQsizeLeaders(View v);
+  bool amNextQsizeLeader(View v);
 
   void startNewViewOnTimeout();
+
+  //View synchronization stuff
+  void wishToAdvanceView(View v);
+  
+  void handleWishToAdvanceView(MsgWishToAdvanceView msg, PID sender);
+  void handle_wishtoadvanceview(MsgWishToAdvanceView msg, const PeerNet::conn_t &conn);
+  void sendMsgWishToAdvanceView(MsgWishToAdvanceView msg, Peers recipients);
+
+  void handleTimeCertificate(MsgTimeCertificate msg, PID sender);
+  void handle_timecertificate(MsgTimeCertificate msg, const PeerNet::conn_t &conn);
+  void sendMsgTimeCertificate(MsgTimeCertificate msg, Peers recipients);
 
 
   // ------------------------------------------------------------
@@ -541,7 +559,7 @@ class Handler {
 
   void startNewViewOPA(OPprepare prep);
   void startNewViewOPB();
-  void startNewViewOP();
+  void startNewViewOP(int nextView = -1);
 
   void executeOP(OPprepare cert);
   void preCommitOP(View v);
